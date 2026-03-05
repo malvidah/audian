@@ -1,0 +1,9 @@
+{
+  "name": "Audian",
+  "short_name": "Audian",
+  "description": "Social intelligence for thoughtful brands.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#141412",
+  "theme_color": "#141412"
+}
