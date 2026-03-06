@@ -6,92 +6,108 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-async function refreshXToken(refreshToken) {
-  const creds = Buffer.from(`${process.env.X_CLIENT_ID}:${process.env.X_CLIENT_SECRET}`).toString('base64');
-  const res = await fetch('https://api.twitter.com/2/oauth2/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded', Authorization: `Basic ${creds}` },
-    body: new URLSearchParams({ refresh_token: refreshToken, grant_type: 'refresh_token' }),
-  });
-  return res.json();
-}
-
 export async function POST() {
   try {
-    const { data: conn, error } = await supabase
-      .from('platform_connections').select('*').eq('platform', 'x').single();
+    const bearerToken = process.env.X_BEARER_TOKEN;
+    if (!bearerToken) {
+      return NextResponse.json({ error: 'X_BEARER_TOKEN not set' }, { status: 400 });
+    }
 
-    if (error || !conn) return NextResponse.json({ error: 'X not connected' }, { status: 400 });
+    const headers = { Authorization: `Bearer ${bearerToken}` };
+    const query = encodeURIComponent('(@bigthink OR #bigthink) -is:retweet lang:en');
+    const fields = 'tweet.fields=public_metrics,created_at,author_id,text';
+    const expansions = 'expansions=author_id';
+    const userFields = 'user.fields=public_metrics,description,verified,profile_image_url,name,username';
 
-    let accessToken = conn.access_token;
-    if (conn.expires_at && new Date(conn.expires_at) < new Date()) {
-      const refreshed = await refreshXToken(conn.refresh_token);
-      if (refreshed.access_token) {
-        accessToken = refreshed.access_token;
-        await supabase.from('platform_connections').update({
-          access_token: accessToken,
-          refresh_token: refreshed.refresh_token || conn.refresh_token,
-          expires_at: refreshed.expires_in ? new Date(Date.now() + refreshed.expires_in * 1000).toISOString() : null,
-        }).eq('platform', 'x');
+    const searchRes = await fetch(
+      `https://api.twitter.com/2/tweets/search/recent?` +
+      `query=${query}&max_results=20&${fields}&${expansions}&${userFields}`,
+      { headers }
+    );
+
+    const searchData = await searchRes.json();
+
+    if (searchData.errors || searchData.error) {
+      console.error('X search error:', searchData);
+      return NextResponse.json({ error: searchData.errors?.[0]?.message || searchData.error }, { status: 400 });
+    }
+
+    const tweets = searchData.data || [];
+    const users  = Object.fromEntries(
+      (searchData.includes?.users || []).map(u => [u.id, u])
+    );
+
+    let interactionsSaved = 0;
+    let commentsSaved = 0;
+
+    for (const tweet of tweets) {
+      const author    = users[tweet.author_id];
+      if (!author) continue;
+
+      const followers   = author.public_metrics?.followers_count || 0;
+      const likes       = tweet.public_metrics?.like_count || 0;
+      const replies     = tweet.public_metrics?.reply_count || 0;
+      const impressions = tweet.public_metrics?.impression_count || 0;
+
+      const influenceScore = followers > 0
+        ? Math.min(100, Math.floor((Math.log10(followers + 1) / Math.log10(1000000)) * 100))
+        : 0;
+
+      const zone = influenceScore >= 70 ? 'GOLD' : influenceScore >= 40 ? 'CORE' : 'WATCH';
+
+      if (followers >= 1000) {
+        await supabase.from('platform_interactions').upsert({
+          platform:         'x',
+          handle:           author.username,
+          name:             author.name,
+          followers,
+          bio:              author.description,
+          avatar_url:       author.profile_image_url,
+          verified:         author.verified || false,
+          interaction_type: 'mention',
+          content:          tweet.text,
+          influence_score:  influenceScore,
+          zone,
+          interacted_at:    tweet.created_at,
+          synced_at:        new Date().toISOString(),
+        }, { onConflict: 'platform,handle,content' });
+        interactionsSaved++;
+      }
+
+      if (likes >= 2 || replies >= 1) {
+        await supabase.from('platform_comments').upsert({
+          platform:      'x',
+          author_name:   author.name,
+          author_handle: author.username,
+          content:       tweet.text,
+          likes,
+          reply_count:   replies,
+          quality_tag:   likes >= 10 ? 'THOUGHTFUL' : 'ENGAGED',
+          published_at:  tweet.created_at,
+          synced_at:     new Date().toISOString(),
+        }, { onConflict: 'platform,author_name,content' });
+        commentsSaved++;
       }
     }
 
-    const headers = { Authorization: `Bearer ${accessToken}` };
-
-    const userRes = await fetch(
-      `https://api.twitter.com/2/users/${conn.channel_id}?user.fields=public_metrics,description`,
-      { headers }
-    );
-    const userData = await userRes.json();
-    const user     = userData.data;
-
-    const tweetsRes = await fetch(
-      `https://api.twitter.com/2/users/${conn.channel_id}/tweets?max_results=20&tweet.fields=public_metrics,created_at`,
-      { headers }
-    );
-    const tweetsData = await tweetsRes.json();
-    const tweets     = tweetsData.data || [];
+    const totalImpressions = tweets.reduce((s, t) => s + (t.public_metrics?.impression_count || 0), 0);
+    const totalLikes       = tweets.reduce((s, t) => s + (t.public_metrics?.like_count || 0), 0);
 
     await supabase.from('platform_metrics').insert({
       platform:    'x',
       snapshot_at: new Date().toISOString(),
-      followers:   user?.public_metrics?.followers_count,
-      total_views: tweets.reduce((s, t) => s + (t.public_metrics?.impression_count || 0), 0),
+      total_views: totalImpressions,
+      likes:       totalLikes,
     });
 
-    const mentionsRes = await fetch(
-      `https://api.twitter.com/2/users/${conn.channel_id}/mentions?max_results=20&tweet.fields=public_metrics,created_at&expansions=author_id&user.fields=public_metrics,description,verified`,
-      { headers }
-    );
-    const mentionsData = await mentionsRes.json();
-    const mentions     = mentionsData.data || [];
-    const mentionUsers = Object.fromEntries((mentionsData.includes?.users || []).map(u => [u.id, u]));
+    return NextResponse.json({
+      success:            true,
+      tweets_found:       tweets.length,
+      interactions_saved: interactionsSaved,
+      comments_synced:    commentsSaved,
+      note:               'Searching public mentions of @bigthink',
+    });
 
-    let interactionsSaved = 0;
-    for (const mention of mentions) {
-      const author    = mentionUsers[mention.author_id];
-      if (!author) continue;
-      const followers = author.public_metrics?.followers_count || 0;
-      if (followers < 1000) continue;
-      const influenceScore = Math.min(100, Math.floor((Math.log10(followers + 1) / Math.log10(1000000)) * 100));
-      await supabase.from('platform_interactions').upsert({
-        platform:         'x',
-        handle:           author.username,
-        name:             author.name,
-        followers,
-        bio:              author.description,
-        verified:         author.verified || false,
-        interaction_type: 'mention',
-        content:          mention.text,
-        influence_score:  influenceScore,
-        zone:             influenceScore >= 70 ? 'GOLD' : influenceScore >= 40 ? 'CORE' : 'WATCH',
-        interacted_at:    mention.created_at,
-        synced_at:        new Date().toISOString(),
-      }, { onConflict: 'platform,handle,content' });
-      interactionsSaved++;
-    }
-
-    return NextResponse.json({ success: true, followers: user?.public_metrics?.followers_count, tweets_synced: tweets.length, comments_synced: interactionsSaved });
   } catch (err) {
     console.error('X sync error:', err);
     return NextResponse.json({ error: err.message }, { status: 500 });
