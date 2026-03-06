@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 export async function GET() {
-  const appId      = process.env.INSTAGRAM_APP_ID;
+  const appId       = process.env.INSTAGRAM_APP_ID;
   const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/instagram/callback`;
 
   const scope = [
