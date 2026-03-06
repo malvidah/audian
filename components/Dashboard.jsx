@@ -103,7 +103,9 @@ export default function Dashboard() {
   const [syncMsg, setSyncMsg]         = useState("");
   const [lastSynced, setLastSynced]   = useState(null);
   const [urlMsg, setUrlMsg]           = useState("");
-  const [open, setOpen]               = useState({ channels:true, metrics:true, videos:false, interactions:true, comments:true });
+  const [open, setOpen]               = useState({ insights:true, channels:true, metrics:true, videos:false, interactions:true, comments:true });
+  const [insights, setInsights]       = useState(null);
+  const [insightsLoading, setInsightsLoading] = useState(false);
   const [platform, setPlatform]       = useState("All");
   const col = { fontFamily:mono, fontSize:F.sm, color:C.muted, letterSpacing:"0.06em" };
 
@@ -162,6 +164,19 @@ export default function Dashboard() {
 
   const tog = (k) => setOpen(s => ({ ...s, [k]:!s[k] }));
 
+  async function generateInsights() {
+    setInsightsLoading(true);
+    try {
+      const res  = await fetch('/api/insights', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+      const data = await res.json();
+      if (data.insights) setInsights(data.insights);
+      else setInsights({ headline: data.error || 'Could not generate insights', stories: [], recommendation: '' });
+    } catch(e) {
+      setInsights({ headline: e.message, stories: [], recommendation: '' });
+    }
+    setInsightsLoading(false);
+  }
+
   // Latest metric per platform
   const latest = {};
   metrics.forEach(m => { if (!latest[m.platform]) latest[m.platform] = m; });
@@ -203,6 +218,54 @@ export default function Dashboard() {
       {syncMsg && <div style={{ background:syncMsg.startsWith("✓")?C.green+"18":C.red+"18", border:`1px solid ${syncMsg.startsWith("✓")?C.green+"44":C.red+"44"}`, borderRadius:6, padding:"10px 24px", margin:"8px 24px 0", fontFamily:mono, fontSize:F.sm, color:syncMsg.startsWith("✓")?C.green:C.red }}>{syncMsg}</div>}
 
       <div style={{ maxWidth:960, margin:"0 auto", padding:"24px 24px 64px" }}>
+
+        {/* ── AI Insights ── */}
+        <section style={{ marginBottom:28 }}>
+          <div style={{ display:"flex", alignItems:"center", borderBottom:`1px solid ${C.border}`, paddingBottom:10, marginBottom:12 }}>
+            <button onClick={()=>tog("insights")} style={{ flex:1, display:"flex", alignItems:"center", gap:10, background:"none", border:"none", cursor:"pointer", padding:"14px 0 0" }}>
+              <span style={{ fontFamily:mono, fontSize:F.sm, letterSpacing:"0.12em", color:C.accent, textTransform:"uppercase", fontWeight:600 }}>AI Insights</span>
+              <span style={{ fontFamily:mono, fontSize:F.sm, color:C.muted, transform:open.insights?"rotate(180deg)":"none", transition:"transform 0.2s" }}>▾</span>
+            </button>
+            <button onClick={generateInsights} disabled={insightsLoading} style={{ marginTop:10, fontFamily:mono, fontSize:F.sm, padding:"4px 14px", borderRadius:3, border:`1px solid ${C.accent}66`, background:C.accent+"18", color:C.accent, cursor:insightsLoading?"default":"pointer", letterSpacing:"0.06em" }}>
+              {insightsLoading ? "Analyzing..." : insights ? "↻ Refresh" : "✦ Generate Insights"}
+            </button>
+          </div>
+          {open.insights && (
+            <div style={{ paddingTop:4 }}>
+              {!insights && !insightsLoading && (
+                <div style={{ fontFamily:mono, fontSize:F.sm, color:C.muted, padding:"16px 0" }}>
+                  Click Generate Insights to get an AI-written narrative of your social data.
+                </div>
+              )}
+              {insightsLoading && (
+                <div style={{ fontFamily:mono, fontSize:F.sm, color:C.muted, padding:"16px 0" }}>
+                  Analyzing your data...
+                </div>
+              )}
+              {insights && !insightsLoading && (
+                <div>
+                  {insights.headline && (
+                    <div style={{ fontFamily:serif, fontSize:22, color:C.text, lineHeight:1.4, marginBottom:20, paddingBottom:16, borderBottom:`1px solid ${C.border}` }}>
+                      {insights.headline}
+                    </div>
+                  )}
+                  {insights.stories?.map((s, i) => (
+                    <div key={i} style={{ marginBottom:16, paddingBottom:16, borderBottom:`1px solid ${C.border}` }}>
+                      <div style={{ fontFamily:mono, fontSize:F.sm, color:C.accent, letterSpacing:"0.08em", fontWeight:600, marginBottom:6 }}>{s.title?.toUpperCase()}</div>
+                      <div style={{ fontFamily:serif, fontSize:F.md, color:C.text, lineHeight:1.65 }}>{s.insight}</div>
+                    </div>
+                  ))}
+                  {insights.recommendation && (
+                    <div style={{ background:C.well, border:`1px solid ${C.border2}`, borderRadius:4, padding:"12px 14px" }}>
+                      <span style={{ fontFamily:mono, fontSize:F.sm, color:C.muted, letterSpacing:"0.08em" }}>RECOMMENDATION  </span>
+                      <span style={{ fontFamily:serif, fontSize:F.md, color:C.text }}>{insights.recommendation}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </section>
 
         {/* ── Channels ── */}
         <section style={{ marginBottom:28 }}>
