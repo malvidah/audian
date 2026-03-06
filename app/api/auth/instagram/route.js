@@ -5,14 +5,13 @@ export async function GET() {
   const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/instagram/callback`;
 
   const scope = [
-    'instagram_basic',
+    'instagram_business_basic',
     'instagram_manage_comments',
-    'instagram_manage_insights',
-    'pages_show_list',
-    'pages_read_engagement',
+    'instagram_business_manage_messages',
   ].join(',');
 
-  const url = `https://www.facebook.com/v19.0/dialog/oauth?` +
+  // Use Instagram's OAuth endpoint, not Facebook's
+  const url = `https://api.instagram.com/oauth/authorize?` +
     `client_id=${appId}` +
     `&redirect_uri=${encodeURIComponent(redirectUri)}` +
     `&scope=${encodeURIComponent(scope)}` +
