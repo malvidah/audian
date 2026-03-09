@@ -2,58 +2,67 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 export const dynamic = 'force-dynamic';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+function getClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) throw new Error(`Missing env: url=${!!url} key=${!!key}`);
+  return createClient(url, key);
+}
 
 export async function GET() {
-  const { data: handles, error } = await supabase
-    .from('handles')
-    .select('*')
-    .order('updated_at', { ascending: false })
-    .limit(1000);
+  try {
+    const supabase = getClient();
 
-  // Surface the real error but don't 500 — return empty handles so the page still loads
-  if (error) {
-    return NextResponse.json({
-      handles: [],
-      _error: error.message,
-      _hint: 'Run in Supabase SQL Editor: NOTIFY pgrst, \'reload schema\'; — then refresh'
-    });
-  }
+    const { data: handles, error } = await supabase
+      .from('handles')
+      .select('*')
+      .order('updated_at', { ascending: false })
+      .limit(1000);
 
-  const ids = (handles || []).map(h => h.id).filter(Boolean);
-  let interactionMap = {};
-
-  if (ids.length > 0) {
-    const { data: counts } = await supabase
-      .from('platform_interactions')
-      .select('handle_id, interacted_at')
-      .in('handle_id', ids)
-      .order('interacted_at', { ascending: false });
-
-    if (counts) {
-      counts.forEach(r => {
-        if (!interactionMap[r.handle_id]) {
-          interactionMap[r.handle_id] = { count: 0, last: r.interacted_at };
-        }
-        interactionMap[r.handle_id].count++;
-      });
+    if (error) {
+      console.error('[handles GET] supabase error:', error.message, error.code, error.details);
+      return NextResponse.json({ handles: [], _error: error.message, _code: error.code });
     }
+
+    const ids = (handles || []).map(h => h.id).filter(Boolean);
+    let interactionMap = {};
+
+    if (ids.length > 0) {
+      const { data: counts, error: cErr } = await supabase
+        .from('platform_interactions')
+        .select('handle_id, interacted_at')
+        .in('handle_id', ids)
+        .order('interacted_at', { ascending: false });
+
+      if (cErr) {
+        console.error('[handles GET] interaction count error:', cErr.message);
+      } else if (counts) {
+        counts.forEach(r => {
+          if (!interactionMap[r.handle_id]) {
+            interactionMap[r.handle_id] = { count: 0, last: r.interacted_at };
+          }
+          interactionMap[r.handle_id].count++;
+        });
+      }
+    }
+
+    const enriched = (handles || []).map(h => ({
+      ...h,
+      interaction_count: interactionMap[h.id]?.count || 0,
+      last_interaction: interactionMap[h.id]?.last || null,
+    }));
+
+    return NextResponse.json({ handles: enriched });
+
+  } catch (err) {
+    console.error('[handles GET] caught exception:', err.message, err.stack);
+    return NextResponse.json({ handles: [], _error: err.message }, { status: 200 });
   }
-
-  const enriched = (handles || []).map(h => ({
-    ...h,
-    interaction_count: interactionMap[h.id]?.count || 0,
-    last_interaction:  interactionMap[h.id]?.last  || null,
-  }));
-
-  return NextResponse.json({ handles: enriched });
 }
 
 export async function PATCH(req) {
   try {
+    const supabase = getClient();
     const { id, updates } = await req.json();
     if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
 
@@ -73,6 +82,7 @@ export async function PATCH(req) {
 
 export async function DELETE(req) {
   try {
+    const supabase = getClient();
     const { id } = await req.json();
     if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
     const { error } = await supabase.from('handles').delete().eq('id', id);
