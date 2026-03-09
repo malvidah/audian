@@ -10,40 +10,11 @@ const supabase = createClient(
 
 function mapZone(label, sourceList, fallback) {
   const raw = (label || sourceList || '').toLowerCase().trim();
-  if (raw.includes('elite'))        return 'ELITE';
-  if (raw.includes('influential'))  return 'INFLUENTIAL';
-  if (raw.includes('ignore'))       return 'IGNORE';
-  if (raw.includes('signal'))       return 'SIGNAL';
+  if (raw.includes('elite'))       return 'ELITE';
+  if (raw.includes('influential')) return 'INFLUENTIAL';
+  if (raw.includes('ignore'))      return 'IGNORE';
+  if (raw.includes('signal'))      return 'SIGNAL';
   return fallback;
-}
-
-async function upsertRow(row) {
-  // Find the primary platform handle for this row
-  const matchCol = row.handle_x ? 'handle_x'
-    : row.handle_instagram ? 'handle_instagram'
-    : row.handle_youtube   ? 'handle_youtube'
-    : 'handle_linkedin';
-  const matchVal = row[matchCol];
-
-  // Try to find existing record
-  const { data: existing } = await supabase
-    .from('handles')
-    .select('id, zone')
-    .eq(matchCol, matchVal)
-    .maybeSingle();
-
-  if (existing) {
-    // Don't downgrade from ELITE
-    const zone = existing.zone === 'ELITE' ? 'ELITE' : row.zone;
-    const { error } = await supabase
-      .from('handles')
-      .update({ ...row, zone, updated_at: new Date().toISOString() })
-      .eq('id', existing.id);
-    return error ? error.message : null;
-  }
-
-  const { error } = await supabase.from('handles').insert(row);
-  return error ? error.message : null;
 }
 
 export async function POST(req) {
@@ -77,7 +48,8 @@ export async function POST(req) {
     const iSource = col('source list');
     const iBio    = col('bio', 'description');
 
-    const rows = [];
+    // Parse all rows into clean objects
+    const xRows = [], igRows = [], ytRows = [], liRows = [];
     let skipped = 0;
 
     for (let i = 1; i < rawLines.length; i++) {
@@ -95,7 +67,6 @@ export async function POST(req) {
       let ytH = get(iYt)?.replace(/^@/, '').toLowerCase() || null;
       let liH = get(iLi)?.replace(/^@/, '').toLowerCase() || null;
 
-      // Fallback: generic handle + platform columns
       if (!xH && !igH && !ytH && !liH) {
         const h = get(iHandle)?.replace(/^@/, '').toLowerCase();
         const p = (get(iPlat) || 'instagram').toLowerCase().replace('twitter', 'x');
@@ -109,9 +80,9 @@ export async function POST(req) {
 
       if (!xH && !igH && !ytH && !liH) { skipped++; continue; }
 
-      rows.push({
-        name:             name || xH || igH || ytH || liH,
-        bio:              bio  || null,
+      const row = {
+        name: name || xH || igH || ytH || liH,
+        bio:  bio  || null,
         zone,
         handle_x:         xH  || null,
         handle_instagram: igH || null,
@@ -119,23 +90,44 @@ export async function POST(req) {
         handle_linkedin:  liH || null,
         added_at:   now,
         updated_at: now,
-      });
+      };
+
+      // Bucket by primary handle to use the right conflict column
+      if (xH)  xRows.push(row);
+      else if (igH) igRows.push(row);
+      else if (ytH) ytRows.push(row);
+      else liRows.push(row);
     }
 
-    if (!rows.length) return NextResponse.json({ imported: 0, skipped, errors: 0 });
+    const total = xRows.length + igRows.length + ytRows.length + liRows.length;
+    if (!total) return NextResponse.json({ imported: 0, skipped, errors: 0 });
 
-    // Run in parallel batches of 25
-    const BATCH = 25;
+    // Bulk upsert each bucket by its conflict column — 500 rows per call
+    const CHUNK = 500;
     let imported = 0;
     const errors = [];
 
-    for (let i = 0; i < rows.length; i += BATCH) {
-      const results = await Promise.all(rows.slice(i, i + BATCH).map(upsertRow));
-      results.forEach(err => {
-        if (err) errors.push(err);
-        else imported++;
-      });
+    async function bulkUpsert(rows, conflictCol) {
+      for (let i = 0; i < rows.length; i += CHUNK) {
+        const chunk = rows.slice(i, i + CHUNK);
+        const { error, count } = await supabase
+          .from('handles')
+          .upsert(chunk, { onConflict: conflictCol, ignoreDuplicates: false, count: 'exact' });
+        if (error) {
+          console.error(`[csv] upsert error (${conflictCol}):`, error.message, error.details);
+          errors.push(`${conflictCol}: ${error.message}`);
+        } else {
+          imported += count ?? chunk.length;
+        }
+      }
     }
+
+    await Promise.all([
+      xRows.length  && bulkUpsert(xRows,  'handle_x'),
+      igRows.length && bulkUpsert(igRows, 'handle_instagram'),
+      ytRows.length && bulkUpsert(ytRows, 'handle_youtube'),
+      liRows.length && bulkUpsert(liRows, 'handle_linkedin'),
+    ].filter(Boolean));
 
     return NextResponse.json({
       imported,
