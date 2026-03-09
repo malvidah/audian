@@ -606,12 +606,11 @@ export default function ImportPage() {
 
       const newHandles = new Set(newInteractions.map(i =>
         `${(i.platform || detectedPlatform)}:${i.handle?.toLowerCase()}`).filter(Boolean));
-      let freshList = [];
-      setAllInteractions(prev => {
-        // Deduplicate by platform:handle
+
+      // Build merged list synchronously so autoEnrich gets the real data immediately
+      const buildMergedList = (prev) => {
         const map = new Map(prev.map(i => [`${i.platform||"instagram"}:${i.handle?.toLowerCase()}`, i]));
         for (const rawItem of newInteractions) {
-          // Ensure platform set from detection if not explicit
           const withPlat = { ...rawItem, platform: rawItem.platform || detectedPlatform };
           const item = autofillKnown(withPlat);
           const key = `${item.platform||"instagram"}:${item.handle?.toLowerCase()}`;
@@ -619,7 +618,6 @@ export default function ImportPage() {
           if (!map.has(key)) {
             map.set(key, { ...item, zone: computeZone(item) });
           } else {
-            // Merge: keep higher follower count, merge interaction types
             const existing = map.get(key);
             const existTypes = existing.interaction_type ? [existing.interaction_type] : [];
             const newTypes = item.interaction_type ? [item.interaction_type] : [];
@@ -630,7 +628,6 @@ export default function ImportPage() {
               verified: item.verified || existing.verified,
               interaction_type: allTypes,
             };
-            // Zone: elite list wins, then follower threshold
             merged.zone = computeZone({ ...merged,
               on_watchlist: item.on_watchlist || existing.on_watchlist });
             merged.ignored = item.ignored || false;
@@ -639,10 +636,21 @@ export default function ImportPage() {
             map.set(key, merged);
           }
         }
-        freshList = Array.from(map.values());
+        return Array.from(map.values());
+      };
+
+      // Use functional update to get current state, build new list, set it
+      let freshList = [];
+      setAllInteractions(prev => {
+        freshList = buildMergedList(prev);
         return freshList;
       });
-      autoEnrich(freshList.filter(i => newHandles.has(`${i.platform||"instagram"}:${i.handle?.toLowerCase()}`)));
+
+      // Wait one tick for setState to flush, then enrich only the newly added items
+      await new Promise(r => setTimeout(r, 50));
+      const toEnrich = freshList.filter(i =>
+        newHandles.has(`${i.platform||"instagram"}:${i.handle?.toLowerCase()}`));
+      if (toEnrich.length) autoEnrich(toEnrich);
 
       // Store compressed thumbnails for each successfully-parsed screenshot
       for (const img of images) {

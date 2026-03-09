@@ -41,17 +41,18 @@ export async function POST(req) {
           },
           body: JSON.stringify({
             model: 'claude-haiku-4-5-20251001',
-            max_tokens: 256,
+            max_tokens: 1024,
             tools: [{ type: 'web_search_20250305', name: 'web_search' }],
-            system: `You are a data extraction assistant. Search for the ${platform} follower count for the given account and return ONLY a JSON object like: {"followers": 125000, "found": true, "confidence": "high"} or {"found": false}. No other text. Numbers only (no K/M — convert to integers). Confidence: "high" if the search result clearly matches the handle, "low" if uncertain.`,
+            system: `You are a data extraction assistant. Use web_search to find the ${platform} follower count for the given account. After searching, respond with ONLY a raw JSON object (no markdown, no explanation): {"followers": 125000, "found": true} or {"found": false}. Convert K/M to integers. Only return found:true if you are confident the result matches the handle.`,
             messages: [{
               role: 'user',
-              content: `Find the ${platform} follower count for: name="${name}", handle="@${handle}". Search for "@${handle} ${platform} followers" or "${name} ${platform} followers".`
+              content: `Search for the ${platform} follower count for handle "@${handle}"${name && name !== handle ? ` (name: ${name})` : ''}. Return JSON only.`
             }],
           }),
         });
 
         const data = await response.json();
+        console.log(`[followers] ${handle} status=${response.status} content_blocks=${data.content?.length}`);
         if (!response.ok) throw new Error(data.error?.message || `API error ${response.status}`);
 
         // Extract the text response
@@ -59,6 +60,7 @@ export async function POST(req) {
         const text = textBlock?.text?.trim() || '';
 
         // Parse JSON from response
+        console.log(`[followers] ${handle} raw_text=${JSON.stringify(text?.slice(0,200))}`);
         const jsonMatch = text.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
           const parsed = JSON.parse(jsonMatch[0]);
