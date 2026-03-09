@@ -177,9 +177,13 @@ function Toggle({ on, onClick }) {
   );
 }
 
-function ProfileMenu({ session, supabase, connections, onDisconnect }) {
+function ProfileMenu({ session, supabase, connections, onDisconnect, watchlist = [], onWatchlistUpdate }) {
   const [open, setOpen] = useState(false);
   const [disconnecting, setDisconnecting] = useState(null);
+  const [watchlistOpen, setWatchlistOpen] = useState(false);
+  const [uploading, setUploading]         = useState(false);
+  const [uploadMsg, setUploadMsg]         = useState("");
+  const fileRef = useRef(null);
   const menuRef = useRef(null);
   const email = session?.user?.email || "";
   const initial = email[0]?.toUpperCase() || "?";
@@ -202,6 +206,32 @@ function ProfileMenu({ session, supabase, connections, onDisconnect }) {
       console.error("Disconnect error:", e);
     }
     setDisconnecting(null);
+  }
+
+  async function handleCSV(file) {
+    if (!file) return;
+    setUploading(true); setUploadMsg("");
+    const text = await file.text();
+    const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
+    const entries = [];
+    for (const line of lines.slice(0, 5000)) {
+      // Support: handle, platform,handle, handle,label, platform,handle,label
+      const parts = line.split(",").map(p => p.trim().replace(/^@/, "").toLowerCase());
+      if (parts.length === 1)      entries.push({ platform: "instagram", handle: parts[0] });
+      else if (parts.length === 2) {
+        const knownPlat = ["instagram","youtube","x","twitter","linkedin"].includes(parts[0]);
+        if (knownPlat) entries.push({ platform: parts[0] === "twitter" ? "x" : parts[0], handle: parts[1] });
+        else           entries.push({ platform: "instagram", handle: parts[0], label: parts[1] });
+      }
+      else if (parts.length >= 3)  entries.push({ platform: parts[0] === "twitter" ? "x" : parts[0], handle: parts[1], label: parts[2] });
+    }
+    try {
+      const res = await fetch("/api/watchlist", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ entries }) });
+      const data = await res.json();
+      if (data.error) setUploadMsg("✗ " + data.error);
+      else { setUploadMsg(`✓ ${data.added || entries.length} accounts added`); onWatchlistUpdate?.(); }
+    } catch { setUploadMsg("✗ Upload failed"); }
+    setUploading(false);
   }
 
   return (
@@ -287,6 +317,47 @@ function ProfileMenu({ session, supabase, connections, onDisconnect }) {
                 </div>
               );
             })}
+          </div>
+
+          {/* Watchlist */}
+          <div style={{ borderTop: `1px solid ${T.border}` }}>
+            <button onClick={() => setWatchlistOpen(o => !o)}
+              style={{ width: "100%", padding: "11px 18px", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 8, textAlign: "left" }}>
+              <span style={{ fontFamily: sans, fontSize: F.sm, color: T.text, fontWeight: 500 }}>👁 Listen for accounts</span>
+              <span style={{ marginLeft: "auto", fontFamily: sans, fontSize: F.xs, color: T.dim }}>{watchlist.length > 0 ? `${watchlist.length} watching` : "Upload CSV"}</span>
+              <span style={{ color: T.dim, fontSize: F.xs, transform: watchlistOpen ? "rotate(180deg)" : "none", display: "inline-block", transition: "transform 0.15s" }}>▾</span>
+            </button>
+            {watchlistOpen && (
+              <div style={{ padding: "0 18px 14px" }}>
+                <div style={{ fontFamily: sans, fontSize: F.xs, color: T.sub, marginBottom: 10, lineHeight: 1.5 }}>
+                  Upload a CSV of influential accounts to watch. When they interact with your content they'll be marked <strong>INFLUENTIAL</strong>. Others with high follower counts are <strong>FLAGGED</strong>.
+                </div>
+                <div style={{ fontFamily: sans, fontSize: 10, color: T.dim, marginBottom: 8 }}>
+                  CSV format: <code style={{ background: T.well, padding: "1px 4px", borderRadius: 3 }}>handle</code> or <code style={{ background: T.well, padding: "1px 4px", borderRadius: 3 }}>platform,handle</code> or <code style={{ background: T.well, padding: "1px 4px", borderRadius: 3 }}>platform,handle,label</code>
+                </div>
+                <input ref={fileRef} type="file" accept=".csv,.txt" style={{ display: "none" }} onChange={e => handleCSV(e.target.files[0])} />
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <Btn variant="orange" size="sm" onClick={() => fileRef.current?.click()} disabled={uploading}>
+                    {uploading ? "Uploading…" : "↑ Upload CSV"}
+                  </Btn>
+                  {uploadMsg && <span style={{ fontFamily: sans, fontSize: F.xs, color: uploadMsg.startsWith("✓") ? T.green : T.red }}>{uploadMsg}</span>}
+                </div>
+                {watchlist.length > 0 && (
+                  <div style={{ marginTop: 10, maxHeight: 120, overflowY: "auto", display: "flex", flexDirection: "column", gap: 4 }}>
+                    {watchlist.slice(0, 20).map((w, i) => (
+                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, padding: "3px 0" }}>
+                        <PlatDot platform={w.platform} size={6} />
+                        <span style={{ fontFamily: sans, fontSize: F.xs, color: T.sub, flex: 1 }}>@{w.handle}</span>
+                        {w.label && <span style={{ fontFamily: sans, fontSize: 10, color: T.dim }}>{w.label}</span>}
+                        <button onClick={async () => { await fetch("/api/watchlist", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ platform: w.platform, handle: w.handle }) }); onWatchlistUpdate?.(); }}
+                          style={{ background: "none", border: "none", cursor: "pointer", color: T.dim, fontSize: 12, padding: "0 2px", lineHeight: 1 }}>×</button>
+                      </div>
+                    ))}
+                    {watchlist.length > 20 && <div style={{ fontFamily: sans, fontSize: 10, color: T.dim }}>+{watchlist.length - 20} more</div>}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Footer */}
@@ -686,6 +757,7 @@ export default function Dashboard() {
   const [interactions, setInteractions] = useState([]);
   const [syncing, setSyncing]       = useState(null);
   const [scoring, setScoring]       = useState(false);
+  const [watchlist, setWatchlist]   = useState([]);
   const [syncMsg, setSyncMsg]       = useState("");
   const [lastSynced, setLastSynced] = useState(null);
   const [urlMsg, setUrlMsg]         = useState("");
@@ -709,18 +781,20 @@ export default function Dashboard() {
 
   const loadData = useCallback(async () => {
     if (!session) return;
-    const [a, b, b2, c, d] = await Promise.all([
+    const [a, b, b2, c, d, wl] = await Promise.all([
       supabase.from("platform_connections").select("*"),
       supabase.from("platform_metrics").select("*").order("snapshot_at", { ascending: false }).limit(10),
       supabase.from("platform_metrics").select("*").order("snapshot_at", { ascending: true }).limit(200),
       supabase.from("platform_comments").select("*").order("published_at", { ascending: false }).limit(100),
       supabase.from("platform_interactions").select("*").order("interacted_at", { ascending: false }).limit(50),
+      fetch("/api/watchlist").then(r => r.json()).catch(() => ({ entries: [] })),
     ]);
     if (a.data) setConnections(a.data);
     if (b.data) { setMetrics(b.data); if (b.data[0]) setLastSynced(b.data[0].snapshot_at); }
     if (b2.data) setAllMetrics(b2.data);
     if (c.data) setComments(c.data);
     if (d.data) setInteractions(d.data);
+    if (wl?.entries) setWatchlist(wl.entries);
   }, [session, supabase]);
 
   useEffect(() => { loadData(); }, [loadData]);
@@ -832,12 +906,15 @@ export default function Dashboard() {
         {/* Right side */}
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
           {lastSynced && <span style={{ fontSize: F.xs, color: T.dim }}>synced {timeAgo(lastSynced)}</span>}
-          <ProfileMenu session={session} supabase={supabase} connections={connections} onDisconnect={async (platformId) => {
-            const res = await fetch(`/api/disconnect/${platformId}`, { method: "DELETE" });
-            const data = await res.json();
-            if (!res.ok) console.error("Disconnect error:", data.error);
-            await loadData();
-          }} />
+          <ProfileMenu session={session} supabase={supabase} connections={connections}
+            watchlist={watchlist}
+            onWatchlistUpdate={loadData}
+            onDisconnect={async (platformId) => {
+              const res = await fetch(`/api/disconnect/${platformId}`, { method: "DELETE" });
+              const data = await res.json();
+              if (!res.ok) console.error("Disconnect error:", data.error);
+              await loadData();
+            }} />
         </div>
       </div>
 
@@ -963,7 +1040,7 @@ export default function Dashboard() {
                 ) : (
                   <>
                     <div style={{ padding: "10px 20px 6px", display: "flex", gap: 16, alignItems: "center" }}>
-                      {[["GOLD", "#F59E0B", "#FFFBEB"], ["CORE", T.blue, T.blueBg], ["RADAR", T.sub, T.well]].map(([zone, color, bg]) => (
+                      {[["INFLUENTIAL", T.accent, T.accentBg], ["FLAGGED", "#F59E0B", "#FFFBEB"], ["CORE", T.blue, T.blueBg], ["RADAR", T.sub, T.well]].map(([zone, color, bg]) => (
                         <div key={zone} style={{ display: "flex", alignItems: "center", gap: 5 }}>
                           <span style={{ background: bg, color, border: `1px solid ${color}30`, borderRadius: 4, padding: "1px 6px", fontFamily: sans, fontSize: 10, fontWeight: 700 }}>{zone}</span>
                           <span style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>{filteredInteractions.filter(i => i.zone === zone).length}</span>
@@ -975,8 +1052,8 @@ export default function Dashboard() {
                     {filteredInteractions
                       .sort((a, b) => (b.influence_score || 0) - (a.influence_score || 0))
                       .map(item => {
-                        const zoneColor = item.zone === "GOLD" ? "#F59E0B" : item.zone === "CORE" ? T.blue : T.sub;
-                        const zoneBg    = item.zone === "GOLD" ? "#FFFBEB"  : item.zone === "CORE" ? T.blueBg : T.well;
+                        const zoneColor = item.zone === "INFLUENTIAL" ? T.accent : item.zone === "FLAGGED" ? "#F59E0B" : item.zone === "CORE" ? T.blue : T.sub;
+                        const zoneBg    = item.zone === "INFLUENTIAL" ? T.accentBg : item.zone === "FLAGGED" ? "#FFFBEB" : item.zone === "CORE" ? T.blueBg : T.well;
                         return (
                           <div key={item.id} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "13px 20px", borderBottom: `1px solid ${T.border}` }}>
                             <div style={{ width: 36, height: 36, borderRadius: "50%", background: zoneBg, border: `1.5px solid ${zoneColor}40`, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: sans, fontSize: F.sm, color: zoneColor, fontWeight: 700, flexShrink: 0 }}>

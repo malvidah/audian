@@ -8,7 +8,6 @@ const supabase = createClient(
 
 export const dynamic = 'force-dynamic';
 
-// Niche keywords that signal a curious/science/culture audience
 const NICHE_SIGNALS = [
   'neuroscience','psychology','science','research','study','brain','cognitive',
   'fascinating','curious','interesting','mind','theory','philosophy','evolution',
@@ -21,8 +20,7 @@ function nicheScore(text = '', handle = '') {
   return NICHE_SIGNALS.filter(k => lower.includes(k)).length;
 }
 
-function computeScore({ commentLikes = 0, replyCount = 0, commentCount = 1, contentLength = 0, niche = 0, ytSubscribers = 0 }) {
-  // YouTube subscribers if available (0–50 pts)
+function computeScore({ commentLikes=0, replyCount=0, commentCount=1, contentLength=0, niche=0, ytSubscribers=0 }) {
   let subScore = 0;
   if (ytSubscribers >= 1000000)     subScore = 50;
   else if (ytSubscribers >= 100000) subScore = 40;
@@ -30,30 +28,35 @@ function computeScore({ commentLikes = 0, replyCount = 0, commentCount = 1, cont
   else if (ytSubscribers >= 1000)   subScore = 16;
   else if (ytSubscribers >= 100)    subScore = 8;
 
-  // Comment engagement (0–25 pts)
-  const engScore = Math.min(25, (commentLikes * 4) + (replyCount * 6));
-
-  // Repeat commenter signal — engaged audience member (0–10 pts)
+  const engScore    = Math.min(25, (commentLikes * 4) + (replyCount * 6));
   const repeatScore = Math.min(10, (commentCount - 1) * 4);
+  const qualScore   = Math.min(10, Math.floor(contentLength / 25));
+  const nicheBonus  = Math.min(15, niche * 5);
 
-  // Comment quality proxy: length (0–10 pts)
-  const qualityScore = Math.min(10, Math.floor(contentLength / 25));
-
-  // Niche alignment (0–15 pts)
-  const nicheBonus = Math.min(15, niche * 5);
-
-  return Math.min(100, subScore + engScore + repeatScore + qualityScore + nicheBonus);
+  return Math.min(100, subScore + engScore + repeatScore + qualScore + nicheBonus);
 }
 
-function getZone(score) {
-  if (score >= 60) return 'GOLD';
-  if (score >= 30) return 'CORE';
+function getZone(score, onWatchlist, ytSubscribers = 0) {
+  if (onWatchlist)                          return 'INFLUENTIAL';
+  if (!onWatchlist && ytSubscribers >= 5000) return 'FLAGGED';
+  if (score >= 60)                           return 'FLAGGED'; // high score but unknown
+  if (score >= 30)                           return 'CORE';
   return 'RADAR';
 }
 
 export async function POST() {
   try {
     const results = { youtube: 0, instagram: 0, total: 0 };
+
+    // Load watchlist — normalize to sets per platform for O(1) lookup
+    const { data: watchlistRows } = await supabase.from('watchlist').select('platform,handle');
+    const watchlistSets = {};
+    for (const row of (watchlistRows || [])) {
+      if (!watchlistSets[row.platform]) watchlistSets[row.platform] = new Set();
+      watchlistSets[row.platform].add(row.handle.toLowerCase());
+    }
+    const onWatchlist = (platform, handle) =>
+      watchlistSets[platform]?.has(handle?.toLowerCase()?.replace(/^@/, '')) || false;
 
     // ── YOUTUBE ───────────────────────────────────────────────────────────────
     const { data: ytComments } = await supabase
@@ -64,14 +67,12 @@ export async function POST() {
       .limit(100);
 
     if (ytComments?.length > 0) {
-      // Group by author
       const byAuthor = {};
       ytComments.forEach(c => {
         if (!byAuthor[c.author_name]) byAuthor[c.author_name] = [];
         byAuthor[c.author_name].push(c);
       });
 
-      // Extract channel IDs
       const channelMap = {};
       ytComments.forEach(c => {
         if (!c.author_channel_url) return;
@@ -79,18 +80,16 @@ export async function POST() {
         if (match) channelMap[c.author_name] = match[1];
       });
 
-      // Fetch subscriber counts for known channel IDs
       const subCounts = {};
       const channelIds = Object.values(channelMap).filter(Boolean);
       if (channelIds.length > 0) {
-        const { data: ytConn } = await supabase
+        const { data: ytConns } = await supabase
           .from('platform_connections')
           .select('access_token, refresh_token, expires_at')
           .eq('platform', 'youtube')
           .order('connected_at', { ascending: false })
           .limit(1);
-
-        const conn = ytConn?.[0];
+        const conn = ytConns?.[0];
         if (conn) {
           let token = conn.access_token;
           if (new Date(conn.expires_at) < new Date()) {
@@ -105,7 +104,6 @@ export async function POST() {
               await supabase.from('platform_connections').update({ access_token: token, expires_at: new Date(Date.now() + rd.expires_in * 1000).toISOString() }).eq('platform', 'youtube');
             }
           }
-
           for (let i = 0; i < channelIds.length; i += 50) {
             const batch = channelIds.slice(i, i + 50);
             const res = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=statistics,snippet&id=${batch.join(',')}&maxResults=50`, { headers: { Authorization: `Bearer ${token}` } });
@@ -118,39 +116,31 @@ export async function POST() {
         }
       }
 
-      // Score each unique commenter
       for (const [authorName, comments] of Object.entries(byAuthor)) {
-        const best = comments.sort((a, b) => (b.likes || 0) - (a.likes || 0))[0];
-        const allText = comments.map(c => c.content || '').join(' ');
-        const niche = nicheScore(allText, authorName);
+        const best     = comments.sort((a, b) => (b.likes || 0) - (a.likes || 0))[0];
+        const allText  = comments.map(c => c.content || '').join(' ');
+        const niche    = nicheScore(allText, authorName);
+        const subs     = subCounts[authorName] || 0;
+        const watched  = onWatchlist('youtube', authorName);
+        const score    = computeScore({ commentLikes: best.likes || 0, replyCount: best.reply_count || 0, commentCount: comments.length, contentLength: best.content?.length || 0, niche, ytSubscribers: subs });
 
-        const score = computeScore({
-          commentLikes: best.likes || 0,
-          replyCount: best.reply_count || 0,
-          commentCount: comments.length,
-          contentLength: best.content?.length || 0,
-          niche,
-          ytSubscribers: subCounts[authorName] || 0,
-        });
+        if (score < 5 && !watched) continue;
 
-        if (score < 8) continue;
-
-        const channelUrl = best.author_channel_url;
         await supabase.from('platform_interactions').upsert({
           platform:         'youtube',
           handle:           authorName,
           name:             authorName,
-          followers:        subCounts[authorName] || null,
+          followers:        subs || null,
           interaction_type: 'comment',
           content:          best.content?.slice(0, 500),
-          influence_score:  score,
-          zone:             getZone(score),
-          profile_url:      channelUrl || null,
+          influence_score:  watched ? Math.max(score, 80) : score,
+          zone:             getZone(score, watched, subs),
+          profile_url:      best.author_channel_url || null,
           comment_count:    comments.length,
+          on_watchlist:     watched,
           interacted_at:    best.published_at,
           synced_at:        new Date().toISOString(),
         }, { onConflict: 'platform,handle,content' });
-
         results.youtube++;
       }
     }
@@ -171,34 +161,29 @@ export async function POST() {
       });
 
       for (const [handle, comments] of Object.entries(byAuthor)) {
-        const best = comments.sort((a, b) => (b.content?.length || 0) - (a.content?.length || 0))[0];
+        const best    = comments.sort((a, b) => (b.content?.length || 0) - (a.content?.length || 0))[0];
         const allText = comments.map(c => c.content || '').join(' ');
-        const niche = nicheScore(allText, handle);
+        const niche   = nicheScore(allText, handle);
+        const watched = onWatchlist('instagram', handle);
+        const score   = computeScore({ commentCount: comments.length, contentLength: best.content?.length || 0, niche });
 
-        const score = computeScore({
-          commentLikes: 0,  // IG API doesn't return comment likes
-          commentCount: comments.length,
-          contentLength: best.content?.length || 0,
-          niche,
-        });
-
-        if (score < 5) continue;
+        if (score < 5 && !watched) continue;
 
         await supabase.from('platform_interactions').upsert({
           platform:         'instagram',
           handle,
           name:             handle,
-          followers:        null,  // Not available via API — user vets manually
+          followers:        null,
           interaction_type: 'comment',
           content:          best.content?.slice(0, 500),
-          influence_score:  score,
-          zone:             getZone(score),
+          influence_score:  watched ? Math.max(score, 80) : score,
+          zone:             getZone(score, watched, 0),
           profile_url:      `https://instagram.com/${handle}`,
           comment_count:    comments.length,
+          on_watchlist:     watched,
           interacted_at:    best.published_at,
           synced_at:        new Date().toISOString(),
         }, { onConflict: 'platform,handle,content' });
-
         results.instagram++;
       }
     }
