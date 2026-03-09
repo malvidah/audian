@@ -1321,14 +1321,25 @@ export default function Dashboard() {
   const updateInteraction = async (id, updates) => {
     setSavingInt(true);
     try {
-      await fetch('/api/interactions/update', {
+      const res  = await fetch('/api/interactions/update', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, updates }),
       });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        console.error('[updateInteraction] API error:', data.error);
+        alert(`Save failed: ${data.error || res.status}`);
+        setSavingInt(false);
+        return;
+      }
+      // Optimistic update — merge saved fields into local state
       setInteractions(prev => prev.map(i => i.id === id ? { ...i, ...updates } : i));
       setEditIntId(null);
-    } catch (e) { console.error('Update failed', e); }
+    } catch (e) {
+      console.error('[updateInteraction] exception:', e);
+      alert(`Save failed: ${e.message}`);
+    }
     setSavingInt(false);
   };
 
