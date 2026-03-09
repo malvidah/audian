@@ -214,16 +214,40 @@ function ProfileMenu({ session, supabase, connections, onDisconnect, watchlist =
     const text = await file.text();
     const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
     const entries = [];
-    for (const line of lines.slice(0, 5000)) {
-      // Support: handle, platform,handle, handle,label, platform,handle,label
-      const parts = line.split(",").map(p => p.trim().replace(/^@/, "").toLowerCase());
-      if (parts.length === 1)      entries.push({ platform: "instagram", handle: parts[0] });
-      else if (parts.length === 2) {
-        const knownPlat = ["instagram","youtube","x","twitter","linkedin"].includes(parts[0]);
-        if (knownPlat) entries.push({ platform: parts[0] === "twitter" ? "x" : parts[0], handle: parts[1] });
-        else           entries.push({ platform: "instagram", handle: parts[0], label: parts[1] });
+
+    // Detect header row and skip it
+    const firstLine = lines[0]?.toLowerCase() || "";
+    const startIdx = (firstLine.includes("handle") || firstLine.includes("name") || firstLine.includes("platform")) ? 1 : 0;
+
+    for (const line of lines.slice(startIdx, 5000)) {
+      // Handle quoted CSV fields
+      const parts = line.match(/("([^"]*)"|[^,]+|(?<=,)(?=,)|^(?=,))/g)
+        ?.map(p => p.replace(/^"|"$/g, "").trim()) || line.split(",").map(p => p.trim());
+
+      if (parts.length === 0 || !parts.some(p => p)) continue;
+
+      // Format: Name, @handle, Source List, Status, ..., Label  (Big Think export)
+      // Detect by: has @ in one of the first 3 columns
+      const handleIdx = parts.findIndex((p, i) => i < 4 && p.startsWith("@"));
+      if (handleIdx >= 0) {
+        const handle = parts[handleIdx].replace(/^@/, "").toLowerCase().trim();
+        const label  = parts[parts.length - 1] || parts[2] || null;
+        const platform = "x"; // Big Think list is X handles
+        if (handle) entries.push({ platform, handle, label });
+        continue;
       }
-      else if (parts.length >= 3)  entries.push({ platform: parts[0] === "twitter" ? "x" : parts[0], handle: parts[1], label: parts[2] });
+
+      // Generic formats: handle | platform,handle | platform,handle,label
+      const knownPlat = ["instagram","youtube","x","twitter","linkedin"].includes(parts[0]?.toLowerCase());
+      if (parts.length === 1) {
+        entries.push({ platform: "instagram", handle: parts[0].replace(/^@/, "").toLowerCase() });
+      } else if (parts.length === 2) {
+        if (knownPlat) entries.push({ platform: parts[0] === "twitter" ? "x" : parts[0].toLowerCase(), handle: parts[1].replace(/^@/, "").toLowerCase() });
+        else           entries.push({ platform: "instagram", handle: parts[0].replace(/^@/, "").toLowerCase(), label: parts[1] });
+      } else if (parts.length >= 3) {
+        if (knownPlat) entries.push({ platform: parts[0] === "twitter" ? "x" : parts[0].toLowerCase(), handle: parts[1].replace(/^@/, "").toLowerCase(), label: parts[2] });
+        else           entries.push({ platform: "instagram", handle: parts[0].replace(/^@/, "").toLowerCase(), label: parts[parts.length - 1] });
+      }
     }
     try {
       const sess = await supabase.auth.getSession();
