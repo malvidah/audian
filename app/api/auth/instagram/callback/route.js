@@ -107,13 +107,8 @@ export async function GET(request) {
       channel_thumbnail: profile.profile_picture_url || null,
       subscriber_count:  profile.followers_count || 0,
       access_token:      pageToken,
-      metadata: {
-        media_count:         profile.media_count,
-        ig_business_id:      igAccount.id,
-        page_name:           pageName,
-        user_access_token:   userAccessToken,
-      },
-      updated_at: new Date().toISOString(),
+      connected_at:      new Date().toISOString(),
+      updated_at:        new Date().toISOString(),
     }, { onConflict: 'platform' });
 
     if (dbError) {
