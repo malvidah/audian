@@ -729,42 +729,14 @@ export default function ImportPage() {
 
   const autoEnrich = async (targets) => {
     if (!targets?.length) return;
-    const BATCH = 5;
+    const WIKI_BATCH = 8;    // Wikipedia is fast, free, sequential is fine
+    const FOLLOW_BATCH = 3;  // Each does a web search — run in parallel batches of 3
 
-    // --- Follower counts ---
-    const noFollowers = targets.filter(i => !(parseInt(i.followers) > 0));
-    for (let i = 0; i < noFollowers.length; i += BATCH) {
-      const batch = noFollowers.slice(i, i + BATCH);
-      setAutoEnrichStatus(`Followers: ${i + 1}–${Math.min(i + BATCH, noFollowers.length)} of ${noFollowers.length}…`);
-      try {
-        const res = await fetch("/api/enrich/followers", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ accounts: batch.map(t => ({ handle: t.handle, name: t.name || t.handle, platform: t.platform || "instagram" })) }),
-        });
-        const data = await res.json();
-        if (data.results) {
-          setAllInteractions(prev => {
-            const updated = [...prev];
-            data.results.forEach(r => {
-              if (!r.found || !r.followers) return;
-              const idx = updated.findIndex(u => u.handle?.toLowerCase() === r.handle?.toLowerCase());
-              if (idx >= 0 && !(parseInt(updated[idx].followers) > 0)) {
-                updated[idx] = { ...updated[idx], followers: r.followers, _followerSource: "web" };
-                if (updated[idx].zone !== "ELITE") updated[idx].zone = computeZone(updated[idx]);
-              }
-            });
-            return updated;
-          });
-        }
-      } catch (_) {}
-    }
-
-    // --- Wiki bios ---
+    // --- Wiki bios FIRST (fast, no AI cost) ---
     const noBio = targets.filter(i => i.name && i.name !== i.handle && !i.bio?.trim());
-    for (let i = 0; i < noBio.length; i += BATCH) {
-      const batch = noBio.slice(i, i + BATCH);
-      setAutoEnrichStatus(`Bios: ${i + 1}–${Math.min(i + BATCH, noBio.length)} of ${noBio.length}…`);
+    for (let i = 0; i < noBio.length; i += WIKI_BATCH) {
+      const batch = noBio.slice(i, i + WIKI_BATCH);
+      setAutoEnrichStatus(`Bios: ${i + 1}–${Math.min(i + WIKI_BATCH, noBio.length)} of ${noBio.length}…`);
       try {
         const res = await fetch("/api/enrich/wikipedia", {
           method: "POST",
@@ -787,6 +759,35 @@ export default function ImportPage() {
           });
         }
       } catch (_) {}
+    }
+
+    // --- Follower counts (AI web search, parallel per batch) ---
+    const noFollowers = targets.filter(i => !(parseInt(i.followers) > 0));
+    for (let i = 0; i < noFollowers.length; i += FOLLOW_BATCH) {
+      const batch = noFollowers.slice(i, i + FOLLOW_BATCH);
+      setAutoEnrichStatus(`Followers: ${i + 1}–${Math.min(i + FOLLOW_BATCH, noFollowers.length)} of ${noFollowers.length}…`);
+      try {
+        const res = await fetch("/api/enrich/followers", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ accounts: batch.map(t => ({ handle: t.handle, name: t.name || t.handle, platform: t.platform || "instagram" })) }),
+        });
+        const data = await res.json();
+        if (data.results) {
+          setAllInteractions(prev => {
+            const updated = [...prev];
+            data.results.forEach(r => {
+              if (!r.found || !r.followers) return;
+              const idx = updated.findIndex(u => u.handle?.toLowerCase() === r.handle?.toLowerCase());
+              if (idx >= 0 && !(parseInt(updated[idx].followers) > 0)) {
+                updated[idx] = { ...updated[idx], followers: r.followers, _followerSource: "web" };
+                if (updated[idx].zone !== "ELITE") updated[idx].zone = computeZone(updated[idx]);
+              }
+            });
+            return updated;
+          });
+        }
+      } catch (e) { console.error("followers batch error", e); }
     }
 
     setAutoEnrichStatus(null);
