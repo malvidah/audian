@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 
@@ -384,8 +384,16 @@ function KPICard({ label, value, prev, color, icon, selected, onClick }) {
       <div style={{ fontFamily: sans, fontSize: F.xl, fontWeight: 700, color: selected ? color : T.text, letterSpacing: "-0.03em", lineHeight: 1 }}>{fmt(value)}</div>
       {d !== null && (
         <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 4 }}>
-          <span style={{ fontSize: F.xs, fontWeight: 600, color: d >= 0 ? T.green : T.red }}>{d >= 0 ? "↑" : "↓"} {Math.abs(d).toFixed(1)}%</span>
-          <span style={{ fontSize: F.xs, color: T.dim }}>vs prev</span>
+          <span style={{
+            fontSize: F.xs, fontWeight: 700,
+            color: d >= 0 ? T.green : T.red,
+            display: "inline-flex", alignItems: "center", gap: 2,
+          }}>
+            {/* Diagonal arrow via rotated unicode arrow */}
+            <span style={{ display: "inline-block", transform: `rotate(${d >= 0 ? -45 : 45}deg)`, lineHeight: 1, fontSize: 13 }}>↑</span>
+            {Math.abs(d).toFixed(1)}%
+          </span>
+          <span style={{ fontSize: F.xs, color: T.dim }}>30D</span>
         </div>
       )}
     </button>
@@ -1217,7 +1225,7 @@ export default function Dashboard() {
     const [a, b, b2, c, d] = await Promise.all([
       supabase.from("platform_connections").select("*"),
       supabase.from("platform_metrics").select("*").order("snapshot_at", { ascending: false }).limit(10),
-      supabase.from("platform_metrics").select("*").order("snapshot_at", { ascending: true }).limit(200),
+      supabase.from("platform_metrics").select("*").order("snapshot_at", { ascending: true }).limit(500),
       supabase.from("platform_comments").select("*").order("published_at", { ascending: false }).limit(100),
       supabase.from("platform_interactions").select("*").order("interacted_at", { ascending: false }).limit(50),
     ]);
@@ -1261,16 +1269,25 @@ export default function Dashboard() {
 
   const tog = k => setOpen(s => ({ ...s, [k]: !s[k] }));
 
+  // Latest snapshot per platform (from descending query, limit 10)
   const latestPerPlatform = {};
   metrics.forEach(m => { if (!latestPerPlatform[m.platform]) latestPerPlatform[m.platform] = m; });
-  const prevPerPlatform = {};
-  const seen = {};
-  metrics.forEach(m => { if (!seen[m.platform]) { seen[m.platform] = true; return; } if (!prevPerPlatform[m.platform]) prevPerPlatform[m.platform] = m; });
+
+  // 30D-ago snapshot: from allMetrics (ascending), find the entry closest to 30 days ago per platform
+  const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  const prev30PerPlatform = {};
+  // allMetrics is ascending — find the last entry that is <= 30D ago per platform
+  allMetrics.forEach(m => {
+    const t = new Date(m.snapshot_at).getTime();
+    if (t <= thirtyDaysAgo + 3 * 24 * 60 * 60 * 1000) { // within 33 days (3-day buffer)
+      prev30PerPlatform[m.platform] = m; // keeps overwriting → last one closest to 30D ago
+    }
+  });
 
   const kpis = { followers: { v: 0, p: 0 }, impressions: { v: 0, p: 0 }, reach: { v: 0, p: 0 }, likes: { v: 0, p: 0 }, comments: { v: 0, p: 0 } };
   const toAgg = platform === "All" ? Object.keys(latestPerPlatform) : [platform].filter(p => latestPerPlatform[p]);
   toAgg.forEach(p => {
-    const m = latestPerPlatform[p], prev = prevPerPlatform[p];
+    const m = latestPerPlatform[p], prev = prev30PerPlatform[p];
     if (!m) return;
     kpis.followers.v += m.followers || 0;     kpis.followers.p += prev?.followers || 0;
     kpis.impressions.v += m.impressions || m.total_views || 0; kpis.impressions.p += prev?.impressions || prev?.total_views || 0;
