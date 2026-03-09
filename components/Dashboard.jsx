@@ -157,7 +157,7 @@ export default function Dashboard() {
       const res  = await fetch(`/api/sync/${p}`, { method:"POST" });
       const data = await res.json();
       if (data.error) setSyncMsg(`✗ ${data.error}`);
-      else { setSyncMsg(`✓ ${p} synced — ${data.videos_synced||data.tweets_synced||0} posts, ${data.comments_synced||0} comments`); await loadData(); }
+      else { setSyncMsg(`✓ ${p} synced — ${data.videos_synced||data.tweets_synced||data.posts||0} posts, ${data.comments_synced||data.comments||0} comments`); await loadData(); }
     } catch(e) { setSyncMsg(`✗ ${e.message}`); }
     setSyncing(false);
   }
@@ -288,7 +288,7 @@ export default function Dashboard() {
                       {(conn.channel_name || conn.username) && <div style={{ fontFamily:mono, fontSize:F.sm, color:C.muted, marginBottom:6, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{conn.channel_name || `@${conn.username}`}</div>}
                       {/* Follower count: subscriber_count for YouTube, metadata.followers_count for Instagram */}
                       {(conn.subscriber_count > 0 || conn.metadata?.followers_count > 0) && <div style={{ fontFamily:mono, fontSize:F.sm, color:C.text, marginBottom:10 }}>{fmt(conn.subscriber_count || conn.metadata?.followers_count)} followers</div>}
-                      {(id==="youtube"||id==="x") && (
+                      {(id==="youtube"||id==="x"||id==="instagram") && (
                         <button onClick={()=>triggerSync(id)} disabled={syncing} style={{ fontFamily:mono, fontSize:F.sm, padding:"4px 12px", borderRadius:3, border:`1px solid ${C.accent}66`, background:C.accent+"18", color:C.accent, cursor:syncing?"default":"pointer", letterSpacing:"0.06em" }}>
                           {syncing?"Syncing...":"↻ Sync Now"}
                         </button>
