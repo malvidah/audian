@@ -883,12 +883,20 @@ export default function Dashboard() {
   }
 
   async function triggerScore() {
-    setScoring(true); setSyncMsg("");
+    setScoring(true); setSyncMsg("Checking for new interactions…");
     try {
+      // First poll Apify for any completed runs (fallback if webhooks didn't fire)
+      const pollRes = await fetch("/api/apify/poll");
+      const pollData = await pollRes.json().catch(() => ({}));
+      const pollMsg = pollData.results?.length > 0
+        ? `Imported ${pollData.results.length} scraper run(s) · `
+        : '';
+
+      // Then rescore everything
       const res = await fetch("/api/score", { method: "POST" });
       const data = await res.json();
       if (data.error) setSyncMsg(`✗ ${data.error}`);
-      else { setSyncMsg(`✓ ${data.message}`); await loadData(); }
+      else { setSyncMsg(`✓ ${pollMsg}${data.message}`); await loadData(); }
     } catch (e) { setSyncMsg(`✗ ${e.message}`); }
     setScoring(false);
   }

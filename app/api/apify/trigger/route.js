@@ -16,23 +16,24 @@ const ACTORS = {
 };
 
 async function runActor(actorId, input, webhookData, apiKey, appUrl) {
+  // Webhooks must be passed as a base64-encoded query param — NOT inside the actor input
+  const webhookConfig = [{
+    eventTypes: ['ACTOR.RUN.SUCCEEDED', 'ACTOR.RUN.FAILED'],
+    requestUrl: `${appUrl}/api/apify/webhook`,
+    payloadTemplate: JSON.stringify({
+      eventType:   '{{eventType}}',
+      resource:    '{{resource}}',
+      webhookData,
+    }),
+  }];
+  const webhooksB64 = Buffer.from(JSON.stringify(webhookConfig)).toString('base64');
+
   const res = await fetch(
-    `https://api.apify.com/v2/acts/${encodeURIComponent(actorId)}/runs?token=${apiKey}`,
+    `https://api.apify.com/v2/acts/${encodeURIComponent(actorId)}/runs?token=${apiKey}&webhooks=${webhooksB64}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...input,
-        webhooks: [{
-          eventTypes: ['ACTOR.RUN.SUCCEEDED', 'ACTOR.RUN.FAILED'],
-          requestUrl: `${appUrl}/api/apify/webhook`,
-          payloadTemplate: JSON.stringify({
-            eventType:   '{{eventType}}',
-            resource:    '{{resource}}',
-            webhookData,
-          }),
-        }],
-      }),
+      body: JSON.stringify(input),  // ONLY actor input, no webhooks here
     }
   );
   const data = await res.json();
