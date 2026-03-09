@@ -44,7 +44,7 @@ export async function GET() {
       while (true) {
         const { data: counts } = await supabase
           .from('interactions')
-          .select('handle_id, interacted_at')
+          .select('handle_id, interacted_at, interaction_type')
           .in('handle_id', ids)
           .order('interacted_at', { ascending: false })
           .range(cFrom, cFrom + 999);
@@ -55,7 +55,7 @@ export async function GET() {
       }
       allCounts.forEach(r => {
         if (!interactionMap[r.handle_id]) {
-          interactionMap[r.handle_id] = { count: 0, last: r.interacted_at };
+          interactionMap[r.handle_id] = { count: 0, last: r.interacted_at, type: r.interaction_type };
         }
         interactionMap[r.handle_id].count++;
       });
@@ -63,8 +63,9 @@ export async function GET() {
 
     const enriched = handles.map(h => ({
       ...h,
-      interaction_count: interactionMap[h.id]?.count || 0,
-      last_interaction:  interactionMap[h.id]?.last  || null,
+      interaction_count:     interactionMap[h.id]?.count || 0,
+      last_interaction:      interactionMap[h.id]?.last  || null,
+      last_interaction_type: interactionMap[h.id]?.type  || null,
     }));
 
     return NextResponse.json({ handles: enriched });

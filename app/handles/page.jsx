@@ -319,22 +319,7 @@ export default function HandlesPage() {
               <div key={h.id} style={{ borderBottom: `1px solid ${T.border}` }}>
                 {/* Main row */}
                 <div
-                  onClick={() => {
-                    if (isEditing) { setEditId(null); return; }
-                    setEditId(h.id);
-                    setEditVals({
-                      name: h.name || "", bio: h.bio || "", zone: h.zone,
-                      followed_by: h.followed_by || "",
-                      handle_instagram: h.handle_instagram || "",
-                      handle_x: h.handle_x || "",
-                      handle_youtube: h.handle_youtube || "",
-                      handle_linkedin: h.handle_linkedin || "",
-                      followers_instagram: h.followers_instagram || "",
-                      followers_x: h.followers_x || "",
-                      followers_youtube: h.followers_youtube || "",
-                      followers_linkedin: h.followers_linkedin || "",
-                    });
-                  }}
+                  onClick={() => toggleInteractions(h.id)}
                   style={{ display: "grid",
                     gridTemplateColumns: "200px 70px 1fr 200px 90px 80px 28px",
                     padding: "11px 20px", alignItems: "center", cursor: "pointer",
@@ -406,18 +391,17 @@ export default function HandlesPage() {
                     )}
                   </div>
 
-                  {/* Interaction count + expand */}
-                  <div>
+                  {/* Interaction count + last type */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                     {h.interaction_count > 0 ? (
-                      <button onClick={e => { e.stopPropagation(); toggleInteractions(h.id); }}
-                        style={{ background: "none", border: `1px solid ${T.border}`, borderRadius: 6,
-                          cursor: "pointer", padding: "3px 8px", display: "flex", alignItems: "center", gap: 4 }}>
-                        <span style={{ fontSize: F.xs, color: T.sub, fontWeight: 500 }}>
-                          {h.interaction_count}
+                      <>
+                        <span style={{ fontSize: F.xs, color: T.sub, fontWeight: 500, textTransform: "capitalize" }}>
+                          {h.last_interaction_type || "interaction"}
                         </span>
-                        <span style={{ fontSize: 9, color: T.dim,
-                          transform: showInt ? "rotate(180deg)" : "none", display: "inline-block", transition: "0.15s" }}>▾</span>
-                      </button>
+                        <span style={{ fontSize: 10, color: T.dim }}>
+                          {h.interaction_count} total
+                        </span>
+                      </>
                     ) : (
                       <span style={{ fontSize: F.xs, color: T.dim }}>—</span>
                     )}
@@ -428,12 +412,35 @@ export default function HandlesPage() {
                     {timeAgo(h.last_interaction) || timeAgo(h.updated_at) || "—"}
                   </div>
 
-                  {/* Delete */}
-                  <button onClick={e => { e.stopPropagation(); deleteHandle(h.id); }}
-                    style={{ background: "none", border: "none", color: T.dim,
-                      cursor: "pointer", fontSize: 15, padding: 0 }}
-                    onMouseEnter={e => e.currentTarget.style.color = T.red}
-                    onMouseLeave={e => e.currentTarget.style.color = T.dim}>×</button>
+                  {/* Edit + Delete */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    <button onClick={e => {
+                      e.stopPropagation();
+                      if (isEditing) { setEditId(null); return; }
+                      setEditId(h.id);
+                      setEditVals({
+                        name: h.name || "", bio: h.bio || "", zone: h.zone,
+                        followed_by: h.followed_by || "",
+                        handle_instagram: h.handle_instagram || "",
+                        handle_x: h.handle_x || "",
+                        handle_youtube: h.handle_youtube || "",
+                        handle_linkedin: h.handle_linkedin || "",
+                        followers_instagram: h.followers_instagram || "",
+                        followers_x: h.followers_x || "",
+                        followers_youtube: h.followers_youtube || "",
+                        followers_linkedin: h.followers_linkedin || "",
+                      });
+                    }}
+                      style={{ background: "none", border: "none", color: isEditing ? T.accent : T.dim,
+                        cursor: "pointer", fontSize: 12, padding: 0, lineHeight: 1 }}
+                      onMouseEnter={e => e.currentTarget.style.color = T.accent}
+                      onMouseLeave={e => e.currentTarget.style.color = isEditing ? T.accent : T.dim}>✎</button>
+                    <button onClick={e => { e.stopPropagation(); deleteHandle(h.id); }}
+                      style={{ background: "none", border: "none", color: T.dim,
+                        cursor: "pointer", fontSize: 14, padding: 0, lineHeight: 1 }}
+                      onMouseEnter={e => e.currentTarget.style.color = T.red}
+                      onMouseLeave={e => e.currentTarget.style.color = T.dim}>×</button>
+                  </div>
                 </div>
 
                 {/* Interaction timeline */}
