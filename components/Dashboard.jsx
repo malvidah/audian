@@ -1196,6 +1196,9 @@ export default function Dashboard() {
   const [editIntId, setEditIntId]       = useState(null);
   const [editIntVals, setEditIntVals]   = useState({});
   const [savingInt, setSavingInt]       = useState(false);
+  const [selectedInts, setSelectedInts]  = useState(new Set());
+  const [inlineEdit, setInlineEdit]      = useState(null); // {id, field}
+  const [inlineVal, setInlineVal]        = useState("");
   const [syncing, setSyncing]       = useState(null);
   const [watchlist, setWatchlist]     = useState([]);
   const [watchlistTotal, setWatchlistTotal] = useState(0);
@@ -1473,164 +1476,285 @@ export default function Dashboard() {
           {open.interactions && (
             <>
               <Divider />
-              <div style={{ padding: filteredInteractions.length === 0 ? "24px 20px" : "0" }}>
-                {filteredInteractions.length === 0 ? (
-                  <div style={{ textAlign: "center" }}>
-                    <div style={{ fontSize: 28, marginBottom: 8 }}>📸</div>
-                    <div style={{ fontFamily: sans, fontSize: F.sm, color: T.dim, marginBottom: 4 }}>Import screenshots to track who's engaging with your content.</div>
-                    <div style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>Drop Instagram notifications, likers, followers, or comment sections into the Import tool.</div>
-                  </div>
-                ) : (
-                  <>
-                    {/* Zone summary */}
-                    <div style={{ padding: "10px 20px 8px", display: "flex", gap: 14, alignItems: "center", borderBottom: `1px solid ${T.border}` }}>
-                      {[["ELITE", T.accent, T.accentBg], ["INFLUENTIAL", "#F59E0B", "#FFFBEB20"], ["SIGNAL", T.sub, T.well]].map(([zone, color, bg]) => (
-                        <div key={zone} style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                          <span style={{ background: bg, color, border: `1px solid ${color}30`, borderRadius: 4, padding: "1px 6px", fontFamily: sans, fontSize: 10, fontWeight: 700 }}>{zone}</span>
-                          <span style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>{filteredInteractions.filter(i => i.zone === zone).length}</span>
-                        </div>
-                      ))}
+              {filteredInteractions.length === 0 ? (
+                <div style={{ padding: "32px 20px", textAlign: "center" }}>
+                  <div style={{ fontSize: 28, marginBottom: 8 }}>💬</div>
+                  <div style={{ fontFamily: sans, fontSize: F.sm, color: T.dim }}>Import screenshots to track who's engaging with your content.</div>
+                </div>
+              ) : (() => {
+                const sorted = [...filteredInteractions].sort((a, b) => new Date(b.interacted_at) - new Date(a.interacted_at));
+                const allSelected = selectedInts.size === sorted.length && sorted.length > 0;
+                const anySelected = selectedInts.size > 0;
+
+                const toggleSelect = (id) => setSelectedInts(prev => {
+                  const next = new Set(prev);
+                  next.has(id) ? next.delete(id) : next.add(id);
+                  return next;
+                });
+
+                const startInline = (id, field, val) => {
+                  setInlineEdit({ id, field });
+                  setInlineVal(val ?? "");
+                };
+
+                const commitInline = async () => {
+                  if (!inlineEdit) return;
+                  const { id, field } = inlineEdit;
+                  const updates = { [field]: field === "followers" ? (inlineVal ? parseInt(inlineVal) : null) : inlineVal };
+                  setInlineEdit(null);
+                  setInlineVal("");
+                  await updateInteraction(id, updates);
+                };
+
+                const cancelInline = () => { setInlineEdit(null); setInlineVal(""); };
+
+                const bulkDelete = async () => {
+                  if (!confirm(`Delete ${selectedInts.size} interaction${selectedInts.size !== 1 ? "s" : ""}?`)) return;
+                  const ids = [...selectedInts];
+                  await fetch("/api/interactions/delete", {
+                    method: "DELETE", headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ ids }),
+                  });
+                  setInteractions(prev => prev.filter(i => !ids.includes(i.id)));
+                  setSelectedInts(new Set());
+                };
+
+                const ZC_DB = {
+                  ELITE:       { color: T.accent,   bg: T.accentBg,  border: T.accentBorder },
+                  INFLUENTIAL: { color: "#F59E0B",   bg: "#FFFBEB",   border: "#FDE68A" },
+                  SIGNAL:      { color: T.sub,       bg: T.well,      border: T.border },
+                  IGNORE:      { color: T.dim,       bg: T.well,      border: T.border },
+                };
+
+                const TrashIcon = () => (
+                  <svg width="13" height="14" viewBox="0 0 13 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M1 3.5h11M4.5 3.5V2.5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1M5.5 6.5v4M7.5 6.5v4M2 3.5l.75 7.5a1 1 0 0 0 1 .9h5.5a1 1 0 0 0 1-.9L11 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                );
+
+                const EditableCell = ({ item, field, display, type = "text", placeholder = "—", style = {} }) => {
+                  const isActive = inlineEdit?.id === item.id && inlineEdit?.field === field;
+                  const rawVal = item[field];
+                  const isEmpty = rawVal === null || rawVal === undefined || rawVal === "";
+                  if (isActive) return (
+                    <input
+                      autoFocus type={type} value={inlineVal}
+                      onChange={e => setInlineVal(e.target.value)}
+                      onBlur={commitInline}
+                      onKeyDown={e => { if (e.key === "Enter") commitInline(); if (e.key === "Escape") cancelInline(); }}
+                      onClick={e => e.stopPropagation()}
+                      style={{ width: "100%", background: T.surface, border: `1.5px solid ${T.accent}`,
+                        borderRadius: 5, padding: "3px 7px", fontFamily: sans, fontSize: F.xs,
+                        color: T.text, outline: "none", ...style }}
+                    />
+                  );
+                  return (
+                    <div
+                      onClick={e => { e.stopPropagation(); startInline(item.id, field, rawVal ?? ""); }}
+                      title="Click to edit"
+                      style={{ cursor: "text", fontFamily: sans, fontSize: F.xs,
+                        color: isEmpty ? T.dim : T.sub,
+                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                        padding: "3px 7px", borderRadius: 5, border: "1.5px solid transparent",
+                        transition: "border-color 0.12s, background 0.12s",
+                        ...style }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = T.border2; e.currentTarget.style.background = T.well; }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = "transparent"; e.currentTarget.style.background = "transparent"; }}>
+                      {display ?? (isEmpty ? placeholder : rawVal)}
                     </div>
-                    {/* Table header — 5 cols: Handle | Category | Bio | Followers | Followed by */}
-                    <div style={{ display: "grid", gridTemplateColumns: "1.4fr 90px 1.6fr 80px 1fr 28px", gap: 0, padding: "6px 20px", borderBottom: `1px solid ${T.border}`, alignItems: "center" }}>
-                      {["Handle", "Category", "Bio", "Followers", "Followed by", ""].map(h => (
-                        <div key={h} style={{ fontFamily: sans, fontSize: 10, fontWeight: 700, color: T.dim, textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</div>
-                      ))}
-                    </div>
-                    {filteredInteractions
-                      .sort((a, b) => new Date(b.interacted_at) - new Date(a.interacted_at))
-                      .map(item => {
-                        const zoneColor = item.zone === "ELITE" ? T.accent : item.zone === "INFLUENTIAL" ? "#F59E0B" : "#6B7280";
-                        const zoneBg    = item.zone === "ELITE" ? T.accentBg : item.zone === "INFLUENTIAL" ? "#FFFBEB20" : T.well;
-                        const profileUrl = item.profile_url || (item.platform === "instagram" ? `https://instagram.com/${item.handle}` : item.platform === "x" ? `https://x.com/${item.handle}` : null);
-                        const typeParts = (item.interaction_type || "").split(",").map(t => t.trim()).filter(Boolean);
-                        const isEditing = editIntId === item.id;
-                        const followedByArr = (item.followed_by || "").split(",").map(s => s.trim()).filter(Boolean);
-                        return (
-                          <React.Fragment key={item.id}>
-                            {/* Main row */}
-                            <div
-                              onClick={() => {
-                                if (isEditing) { setEditIntId(null); return; }
-                                setEditIntId(item.id);
-                                setEditIntVals({ bio: item.bio || "", followers: item.followers || "", followed_by: item.followed_by || "" });
-                              }}
-                              style={{ display: "grid", gridTemplateColumns: "1.4fr 90px 1.6fr 80px 1fr 28px", gap: 0, padding: "10px 20px",
-                                borderBottom: `1px solid ${T.border}`, alignItems: "center", cursor: "pointer",
-                                background: isEditing ? `${T.accent}08` : "transparent", transition: "background 0.1s" }}
-                              onMouseEnter={e => { if (!isEditing) e.currentTarget.style.background = T.well; }}
-                              onMouseLeave={e => { if (!isEditing) e.currentTarget.style.background = "transparent"; }}>
+                  );
+                };
 
-                              {/* Handle + name */}
-                              <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
-                                <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                                  {profileUrl ? (
-                                    <a href={profileUrl} target="_blank" rel="noreferrer"
-                                      onClick={e => e.stopPropagation()}
-                                      style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text, textDecoration: "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                                      onMouseEnter={e => e.currentTarget.style.color = T.accent}
-                                      onMouseLeave={e => e.currentTarget.style.color = T.text}>
-                                      @{item.handle}
-                                    </a>
-                                  ) : (
-                                    <span style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text }}>@{item.handle}</span>
-                                  )}
-                                  {item.verified && <span style={{ color: "#1D9BF0", fontSize: 11 }}>✓</span>}
-                                  {platform === "All" && item.platform && (
-                                    <span style={{ fontFamily: sans, fontSize: 9, color: T.dim, background: T.well, border: `1px solid ${T.border}`, borderRadius: 3, padding: "1px 4px" }}>
-                                      {{"instagram":"📸","x":"𝕏","youtube":"▶","linkedin":"in"}[item.platform] || item.platform}
-                                    </span>
-                                  )}
-                                </div>
-                                {item.name && item.name !== item.handle && (
-                                  <div style={{ fontFamily: sans, fontSize: F.xs, color: T.dim, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</div>
-                                )}
-                                {item.screenshot_thumbnail && (
-                                  <div style={{ position: "relative", display: "inline-block" }}
-                                    onMouseEnter={e => { const t = e.currentTarget.querySelector(".db-thumb"); if(t) t.style.display="block"; }}
-                                    onMouseLeave={e => { const t = e.currentTarget.querySelector(".db-thumb"); if(t) t.style.display="none"; }}>
-                                    <span style={{ background: T.well, border: `1px solid ${T.border}`, borderRadius: 3, padding: "1px 4px", fontSize: 9, color: T.dim, cursor: "default" }}>📸</span>
-                                    <div className="db-thumb" style={{ display: "none", position: "absolute", zIndex: 100, bottom: "calc(100% + 6px)", left: 0, background: T.card, border: `1px solid ${T.border2}`, borderRadius: 8, padding: 6, boxShadow: "0 8px 24px rgba(0,0,0,0.18)", width: 180 }}>
-                                      <img src={item.screenshot_thumbnail} alt="source" style={{ width: "100%", borderRadius: 4, display: "block" }} />
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-
-                              {/* Category */}
-                              <div>
-                                <span style={{ background: zoneBg, color: zoneColor, border: `1px solid ${zoneColor}30`, borderRadius: 4, padding: "2px 7px", fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: "0.04em" }}>
-                                  {item.zone || "—"}
-                                </span>
-                              </div>
-
-                              {/* Bio */}
-                              <div style={{ fontFamily: sans, fontSize: F.xs, color: T.sub, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", paddingRight: 8 }}>
-                                {item.bio || <span style={{ color: T.dim }}>—</span>}
-                              </div>
-
-                              {/* Followers */}
-                              <div style={{ fontFamily: sans, fontSize: F.sm, color: item.followers ? T.text : T.dim, fontWeight: item.followers ? 500 : 400 }}>
-                                {item.followers ? fmt(item.followers) : "—"}
-                              </div>
-
-                              {/* Followed by */}
-                              <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
-                                {followedByArr.slice(0, 2).map(h => (
-                                  <span key={h} style={{ fontSize: 9, padding: "1px 5px", borderRadius: 4, background: T.well, border: `1px solid ${T.border}`, color: T.sub }}>@{h.replace(/^@/,"")}</span>
-                                ))}
-                                {followedByArr.length > 2 && <span style={{ fontSize: 9, color: T.dim }}>+{followedByArr.length - 2}</span>}
-                                {followedByArr.length === 0 && <span style={{ color: T.dim, fontSize: F.xs }}>—</span>}
-                              </div>
-
-                              {/* Delete */}
-                              <button onClick={e => { e.stopPropagation(); deleteInteraction(item.id); }}
-                                style={{ background: "none", border: "none", color: T.dim, cursor: "pointer", fontSize: 15, padding: 0, display: "flex", alignItems: "center", justifyContent: "center" }}
-                                onMouseEnter={e => e.currentTarget.style.color = "#EF4444"}
-                                onMouseLeave={e => e.currentTarget.style.color = T.dim}>×</button>
-                            </div>
-
-                            {/* Expand edit panel */}
-                            {isEditing && (
-                              <div style={{ background: T.well, borderBottom: `1px solid ${T.border}`, padding: "14px 20px", display: "flex", gap: 14, flexWrap: "wrap", alignItems: "flex-start" }}>
-                                {/* Bio */}
-                                <div style={{ flex: "2 1 200px" }}>
-                                  <label style={{ display: "block", fontSize: 10, fontWeight: 600, color: T.dim, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 5 }}>Bio</label>
-                                  <textarea value={editIntVals.bio} onChange={e => setEditIntVals(v => ({ ...v, bio: e.target.value }))}
-                                    placeholder="Short bio…" rows={2}
-                                    style={{ width: "100%", background: T.card, border: `1px solid ${T.border2}`, borderRadius: 7, padding: "6px 10px", fontFamily: sans, fontSize: F.xs, color: T.text, resize: "vertical", outline: "none", boxSizing: "border-box" }} />
-                                </div>
-                                {/* Followers */}
-                                <div style={{ flex: "0 0 110px" }}>
-                                  <label style={{ display: "block", fontSize: 10, fontWeight: 600, color: T.dim, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 5 }}>Followers</label>
-                                  <input type="number" value={editIntVals.followers} onChange={e => setEditIntVals(v => ({ ...v, followers: e.target.value }))}
-                                    placeholder="0"
-                                    style={{ width: "100%", background: T.card, border: `1px solid ${T.border2}`, borderRadius: 7, padding: "6px 10px", fontFamily: sans, fontSize: F.xs, color: T.text, outline: "none", boxSizing: "border-box" }} />
-                                </div>
-                                {/* Followed by */}
-                                <div style={{ flex: "1 1 180px" }}>
-                                  <label style={{ display: "block", fontSize: 10, fontWeight: 600, color: T.dim, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 5 }}>Followed by <span style={{ textTransform: "none", fontWeight: 400, letterSpacing: 0 }}>(@handles, comma-sep)</span></label>
-                                  <input value={editIntVals.followed_by} onChange={e => setEditIntVals(v => ({ ...v, followed_by: e.target.value }))}
-                                    placeholder="@handle1, @handle2…"
-                                    style={{ width: "100%", background: T.card, border: `1px solid ${T.border2}`, borderRadius: 7, padding: "6px 10px", fontFamily: sans, fontSize: F.xs, color: T.text, outline: "none", boxSizing: "border-box" }} />
-                                </div>
-                                {/* Actions */}
-                                <div style={{ flex: "0 0 auto", paddingTop: 18, display: "flex", gap: 8, alignItems: "center" }}>
-                                  <button onClick={() => updateInteraction(item.id, { bio: editIntVals.bio, followers: editIntVals.followers ? parseInt(editIntVals.followers) : null, followed_by: editIntVals.followed_by })} disabled={savingInt}
-                                    style={{ background: T.accent, color: "#fff", border: "none", borderRadius: 7, padding: "6px 16px", fontSize: F.xs, fontWeight: 600, cursor: "pointer" }}>
-                                    {savingInt ? "Saving…" : "Save"}
-                                  </button>
-                                  <button onClick={() => setEditIntId(null)}
-                                    style={{ background: "none", border: "none", color: T.dim, cursor: "pointer", fontSize: F.xs }}>Cancel</button>
-                                </div>
-                              </div>
-                            )}
-                          </React.Fragment>
-                        );
+                return (
+                  <div style={{ position: "relative" }}>
+                    {/* Zone summary strip */}
+                    <div style={{ padding: "8px 20px", display: "flex", gap: 16, alignItems: "center",
+                      borderBottom: `1px solid ${T.border}` }}>
+                      {["ELITE","INFLUENTIAL","SIGNAL"].map(z => {
+                        const zc = ZC_DB[z]; const n = sorted.filter(i => i.zone === z).length;
+                        return n > 0 ? (
+                          <div key={z} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                            <span style={{ background: zc.bg, color: zc.color, border: `1px solid ${zc.border}`,
+                              borderRadius: 4, padding: "1px 7px", fontFamily: sans, fontSize: 10, fontWeight: 700 }}>{z}</span>
+                            <span style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>{n}</span>
+                          </div>
+                        ) : null;
                       })}
-                  </>
-                )}
-              </div>
+                      {anySelected && (
+                        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+                          <span style={{ fontFamily: sans, fontSize: F.xs, color: T.sub }}>
+                            {selectedInts.size} selected
+                          </span>
+                          <button onClick={bulkDelete}
+                            style={{ display: "flex", alignItems: "center", gap: 5,
+                              background: T.redBg, color: T.red, border: `1px solid ${T.red}30`,
+                              borderRadius: 6, padding: "4px 10px", fontFamily: sans,
+                              fontSize: F.xs, fontWeight: 600, cursor: "pointer" }}>
+                            <svg width="11" height="12" viewBox="0 0 13 14" fill="none">
+                              <path d="M1 3.5h11M4.5 3.5V2.5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1M5.5 6.5v4M7.5 6.5v4M2 3.5l.75 7.5a1 1 0 0 0 1 .9h5.5a1 1 0 0 0 1-.9L11 3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                            Delete {selectedInts.size}
+                          </button>
+                          <button onClick={() => setSelectedInts(new Set())}
+                            style={{ background: "none", border: "none", color: T.dim,
+                              cursor: "pointer", fontSize: F.xs, fontFamily: sans }}>Clear</button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Table header */}
+                    <div style={{ display: "grid",
+                      gridTemplateColumns: "32px 1.3fr 80px 1.4fr 90px 1fr 36px",
+                      padding: "5px 16px 5px 8px", borderBottom: `1px solid ${T.border}` }}>
+                      {/* Select all checkbox */}
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        <input type="checkbox" checked={allSelected}
+                          onChange={() => setSelectedInts(allSelected ? new Set() : new Set(sorted.map(i => i.id)))}
+                          style={{ width: 13, height: 13, cursor: "pointer", accentColor: T.accent }} />
+                      </div>
+                      {["Handle","List","Bio","Followers","Followed by",""].map((h,i) => (
+                        <div key={i} style={{ fontFamily: sans, fontSize: 10, fontWeight: 700,
+                          color: T.dim, textTransform: "uppercase", letterSpacing: "0.06em",
+                          padding: "0 7px" }}>{h}</div>
+                      ))}
+                    </div>
+
+                    {/* Rows */}
+                    {sorted.map(item => {
+                      const sel = selectedInts.has(item.id);
+                      const zc  = ZC_DB[item.zone] || ZC_DB.SIGNAL;
+                      const profileUrl = item.platform === "instagram" ? `https://instagram.com/${item.handle}`
+                        : item.platform === "x" ? `https://x.com/${item.handle}`
+                        : item.platform === "youtube" ? `https://youtube.com/@${item.handle}`
+                        : item.platform === "linkedin" ? `https://linkedin.com/in/${item.handle}` : null;
+                      const followedByArr = (item.followed_by || "").split(",").map(s => s.trim()).filter(Boolean);
+
+                      return (
+                        <div key={item.id}
+                          style={{ display: "grid",
+                            gridTemplateColumns: "32px 1.3fr 80px 1.4fr 90px 1fr 36px",
+                            padding: "0 16px 0 8px", borderBottom: `1px solid ${T.border}`,
+                            alignItems: "center", minHeight: 42,
+                            background: sel ? `${T.accent}08` : "transparent",
+                            transition: "background 0.1s" }}
+                          onMouseEnter={e => { if (!sel) e.currentTarget.style.background = T.well; }}
+                          onMouseLeave={e => { if (!sel) e.currentTarget.style.background = "transparent"; }}>
+
+                          {/* Checkbox */}
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            <input type="checkbox" checked={sel}
+                              onChange={() => toggleSelect(item.id)}
+                              onClick={e => e.stopPropagation()}
+                              style={{ width: 13, height: 13, cursor: "pointer", accentColor: T.accent }} />
+                          </div>
+
+                          {/* Handle */}
+                          <div style={{ display: "flex", flexDirection: "column", gap: 1,
+                            padding: "9px 7px", minWidth: 0 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                              {profileUrl ? (
+                                <a href={profileUrl} target="_blank" rel="noreferrer"
+                                  onClick={e => e.stopPropagation()}
+                                  style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600,
+                                    color: T.text, textDecoration: "none",
+                                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                                  onMouseEnter={e => e.currentTarget.style.color = T.accent}
+                                  onMouseLeave={e => e.currentTarget.style.color = T.text}>
+                                  @{item.handle}
+                                </a>
+                              ) : (
+                                <span style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text }}>@{item.handle}</span>
+                              )}
+                              {item.verified && <span style={{ color: "#1D9BF0", fontSize: 10 }}>✓</span>}
+                              {platform === "All" && item.platform && (
+                                <span style={{ fontFamily: sans, fontSize: 9, color: T.dim,
+                                  background: T.well, border: `1px solid ${T.border}`, borderRadius: 3, padding: "1px 4px" }}>
+                                  {{"instagram":"📸","x":"𝕏","youtube":"▶","linkedin":"in"}[item.platform] || item.platform}
+                                </span>
+                              )}
+                            </div>
+                            {item.name && item.name !== item.handle && (
+                              <div style={{ fontFamily: sans, fontSize: F.xs, color: T.dim,
+                                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</div>
+                            )}
+                          </div>
+
+                          {/* Zone badge (click to cycle) */}
+                          <div style={{ padding: "0 7px" }}>
+                            <span
+                              onClick={e => {
+                                e.stopPropagation();
+                                const order = ["ELITE","INFLUENTIAL","SIGNAL","IGNORE"];
+                                const next = order[(order.indexOf(item.zone) + 1) % order.length];
+                                updateInteraction(item.id, { zone: next });
+                              }}
+                              title="Click to change list"
+                              style={{ background: zc.bg, color: zc.color, border: `1px solid ${zc.border}`,
+                                borderRadius: 4, padding: "2px 7px", fontFamily: sans,
+                                fontSize: 10, fontWeight: 700, cursor: "pointer",
+                                display: "inline-block", transition: "opacity 0.1s",
+                                userSelect: "none" }}
+                              onMouseEnter={e => e.currentTarget.style.opacity = "0.7"}
+                              onMouseLeave={e => e.currentTarget.style.opacity = "1"}>
+                              {item.zone || "—"}
+                            </span>
+                          </div>
+
+                          {/* Bio — inline edit */}
+                          <EditableCell item={item} field="bio" placeholder="Add bio…"
+                            display={item.bio
+                              ? <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", display:"block" }}>{item.bio}</span>
+                              : undefined} />
+
+                          {/* Followers — inline edit */}
+                          <EditableCell item={item} field="followers" type="number" placeholder="—"
+                            display={item.followers ? <span style={{ fontWeight: 500, color: T.text }}>{fmt(item.followers)}</span> : undefined} />
+
+                          {/* Followed by — inline edit */}
+                          <EditableCell item={item} field="followed_by" placeholder="@handle1, @handle2"
+                            display={followedByArr.length > 0 ? (
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: 3, overflow: "hidden" }}>
+                                {followedByArr.slice(0,2).map(h => (
+                                  <span key={h} style={{ fontSize: 9, padding: "1px 5px", borderRadius: 4,
+                                    background: T.well, border: `1px solid ${T.border}`, color: T.sub }}>
+                                    @{h.replace(/^@/,"")}
+                                  </span>
+                                ))}
+                                {followedByArr.length > 2 && <span style={{ fontSize: 9, color: T.dim }}>+{followedByArr.length-2}</span>}
+                              </div>
+                            ) : undefined} />
+
+                          {/* Trash */}
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            <button
+                              onClick={e => { e.stopPropagation(); deleteInteraction(item.id); }}
+                              title="Delete"
+                              style={{ background: "none", border: "none", color: T.dim,
+                                cursor: "pointer", padding: 4, borderRadius: 5,
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                                opacity: 0, transition: "opacity 0.15s, color 0.1s" }}
+                              onMouseEnter={e => { e.currentTarget.style.color = T.red; e.currentTarget.style.opacity = "1"; }}
+                              onMouseLeave={e => { e.currentTarget.style.color = T.dim; e.currentTarget.style.opacity = "0"; }}
+                              ref={el => {
+                                if (el) {
+                                  const row = el.closest("[data-row]");
+                                  if (row) {
+                                    row.addEventListener("mouseenter", () => el.style.opacity = "0.4");
+                                    row.addEventListener("mouseleave", () => el.style.opacity = "0");
+                                  }
+                                }
+                              }}>
+                              <svg width="13" height="14" viewBox="0 0 13 14" fill="none">
+                                <path d="M1 3.5h11M4.5 3.5V2.5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1M5.5 6.5v4M7.5 6.5v4M2 3.5l.75 7.5a1 1 0 0 0 1 .9h5.5a1 1 0 0 0 1-.9L11 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
             </>
           )}
         </Card>
