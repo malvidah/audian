@@ -1140,7 +1140,7 @@ function OrbitSection({ interactions, open, onToggle }) {
       <div style={{ display: "flex", alignItems: "center", padding: "0 20px", height: 44, borderBottom: open ? "1px solid #1E2028" : "none" }}>
         <button onClick={onToggle}
           style={{ flex: 1, background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 8, textAlign: "left", padding: 0 }}>
-          <span style={{ fontFamily: sans, fontSize: 11, fontWeight: 700, color: "#9095A8", textTransform: "uppercase", letterSpacing: "0.06em" }}>Orbit</span>
+          <span style={{ fontFamily: sans, fontSize: 11, fontWeight: 700, color: "#9095A8", textTransform: "uppercase", letterSpacing: "0.06em" }}>Handles</span>
           <span style={{ color: "#555B6E", fontSize: 11, transform: open ? "rotate(180deg)" : "none", display: "inline-block", transition: "transform 0.15s" }}>▾</span>
         </button>
         <a href="/handles"
@@ -1226,44 +1226,34 @@ export default function Dashboard() {
       supabase.from("platform_connections").select("*"),
       supabase.from("platform_metrics").select("*").order("snapshot_at", { ascending: false }).limit(10),
       supabase.from("platform_metrics").select("*").order("snapshot_at", { ascending: true }).limit(500),
-      supabase.from("interactions").select("*, handles(*)").eq("interaction_type", "comment").order("interacted_at", { ascending: false }).limit(100),
-      supabase.from("interactions").select("*, handles(*)").order("interacted_at", { ascending: false }).limit(100),
+      fetch("/api/interactions/list").then(r=>r.json()),
+      fetch("/api/interactions/list").then(r=>r.json()),
     ]);
     if (a.data) setConnections(a.data);
     if (b.data) { setMetrics(b.data); if (b.data[0]) setLastSynced(b.data[0].snapshot_at); }
     if (b2.data) setAllMetrics(b2.data);
-    // Flatten interactions+handles join for comments
-    if (c.data) setComments(c.data.map(i => {
-      const h = i.handles || {};
-      const plat = i.platform;
-      return {
-        id: i.id, platform: plat, content: i.content,
-        content_title: i.content_title, likes: i.likes, published_at: i.interacted_at,
-        author_name: h.name || h[`handle_${plat}`] || h.handle_instagram || h.handle_x || h.handle_youtube || '?',
-        author_handle: h[`handle_${plat}`] || h.handle_instagram || h.handle_x,
-        video_title: i.content_title,
-        quality_tag: i.likes >= 10 ? 'THOUGHTFUL' : 'ENGAGED',
-      };
-    }));
-    // Flatten interactions+handles join for interaction rows
-    if (d.data) setInteractions(d.data.map(i => {
-      const h = i.handles || {};
-      const plat = i.platform;
-      return {
-        id: i.id, handle_id: i.handle_id, platform: plat,
-        interaction_type: i.interaction_type, type: i.interaction_type,
-        content: i.content, interacted_at: i.interacted_at, screenshot_id: i.screenshot_id,
-        name: h.name, bio: h.bio, avatar_url: h.avatar_url, zone: h.zone,
-        followed_by: h.followed_by,
-        handle: h[`handle_${plat}`] || h.handle_instagram || h.handle_x || h.handle_youtube || h.handle_linkedin,
-        followers: h[`followers_${plat}`] ?? h.followers_instagram ?? h.followers_x ?? h.followers_youtube ?? h.followers_linkedin,
-        verified: h[`verified_${plat}`] || false,
-        profile_url: plat === 'instagram' ? `https://instagram.com/${h.handle_instagram}`
-                   : plat === 'x'         ? `https://x.com/${h.handle_x}`
-                   : plat === 'youtube'   ? `https://youtube.com/@${h.handle_youtube}`
-                   : plat === 'linkedin'  ? `https://linkedin.com/in/${h.handle_linkedin}` : null,
-      };
-    }));
+    // API returns {interactions:[...]} already flattened
+    const cInteractions = (c.interactions || []).filter(i => i.interaction_type === 'comment');
+    setComments(cInteractions.map(i => ({
+      id: i.id, platform: i.platform, content: i.content,
+      content_title: null, likes: 0, published_at: i.interacted_at,
+      author_name: i.name || i.handle || '?',
+      author_handle: i.handle,
+      video_title: null,
+      quality_tag: 'ENGAGED',
+    })));
+    if (d.interactions) setInteractions(d.interactions.map(i => ({
+      id: i.id, handle_id: i.handle_id, platform: i.platform,
+      interaction_type: i.interaction_type, type: i.interaction_type,
+      content: i.content, interacted_at: i.interacted_at, screenshot_id: i.screenshot_id,
+      name: i.name, bio: i.bio, avatar_url: i.avatar_url, zone: i.zone,
+      followed_by: i.followed_by,
+      handle: i.handle, followers: i.followers, verified: i.verified,
+      profile_url: i.platform === 'instagram' ? `https://instagram.com/${i.handle}`
+                 : i.platform === 'x'         ? `https://x.com/${i.handle}`
+                 : i.platform === 'youtube'   ? `https://youtube.com/@${i.handle}`
+                 : i.platform === 'linkedin'  ? `https://linkedin.com/in/${i.handle}` : null,
+    })));
   }, [session, supabase]);
 
   // Watchlist fetched separately — only on mount and after explicit changes
@@ -1467,7 +1457,7 @@ export default function Dashboard() {
         {/* ── Interactions ─────────────────────────────────────── */}
         <Card style={{ marginBottom: 12, overflow: "hidden" }}>
           <SectionHeader label="Interactions" count={filteredInteractions.length} open={open.interactions} onToggle={() => tog("interactions")} action={
-              <Btn variant="ghost" onClick={() => window.location.href = "/interactions"} style={{ fontSize: F.xs }}>📸 Import</Btn>
+              <Btn variant="ghost" onClick={() => window.location.href = "/interactions"} style={{ fontSize: F.xs }}>All interactions ↗</Btn>
             } />
           {open.interactions && (
             <>
