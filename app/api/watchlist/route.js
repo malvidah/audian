@@ -26,12 +26,15 @@ export async function GET(req) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   // Get total count + first 30 for preview display
-  const [{ count }, { data: preview }] = await Promise.all([
+  const [countResult, previewResult] = await Promise.all([
     adminClient().from('watchlist').select('*', { count: 'exact', head: true }),
     adminClient().from('watchlist').select('platform,handle,label').order('added_at', { ascending: false }).limit(30),
   ]);
 
-  return NextResponse.json({ entries: preview || [], total: count || 0 });
+  return NextResponse.json({
+    entries: previewResult.data || [],
+    total: countResult.count || 0,
+  });
 }
 
 export async function POST(req) {

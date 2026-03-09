@@ -839,7 +839,7 @@ export default function Dashboard() {
       supabase.from("platform_metrics").select("*").order("snapshot_at", { ascending: true }).limit(200),
       supabase.from("platform_comments").select("*").order("published_at", { ascending: false }).limit(100),
       supabase.from("platform_interactions").select("*").order("interacted_at", { ascending: false }).limit(50),
-      supabase.auth.getSession().then(({ data: { session } }) => fetch("/api/watchlist", { headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {} }).then(r => r.json())).catch(() => ({ entries: [] })),
+      supabase.auth.getSession().then(({ data: { session } }) => fetch("/api/watchlist", { headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {} }).then(r => r.json())).catch(() => ({ entries: [], total: 0 })),
     ]);
     if (a.data) setConnections(a.data);
     if (b.data) { setMetrics(b.data); if (b.data[0]) setLastSynced(b.data[0].snapshot_at); }
