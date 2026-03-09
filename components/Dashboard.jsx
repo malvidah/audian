@@ -263,7 +263,7 @@ function ProfileMenu({ session, supabase, connections, onDisconnect, watchlist =
       const res = await fetch("/api/watchlist", { method: "POST", headers: { "Content-Type": "application/json", ...(tok ? { Authorization: `Bearer ${tok}` } : {}) }, body: JSON.stringify({ entries: deduped }) });
       const data = await res.json();
       if (data.error) setUploadMsg("✗ " + data.error);
-      else { setUploadMsg(`✓ ${data.added || deduped.length} accounts added`); onWatchlistUpdate?.(); }
+      else { setUploadMsg(`✓ ${(data.added || deduped.length).toLocaleString()} accounts added`); onWatchlistUpdate?.(); }
     } catch { setUploadMsg("✗ Upload failed"); }
     setUploading(false);
   }
@@ -358,7 +358,7 @@ function ProfileMenu({ session, supabase, connections, onDisconnect, watchlist =
             <button onClick={() => setWatchlistOpen(o => !o)}
               style={{ width: "100%", padding: "11px 18px", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 8, textAlign: "left" }}>
               <span style={{ fontFamily: sans, fontSize: F.sm, color: T.text, fontWeight: 500 }}>👁 Watch core accounts</span>
-              <span style={{ marginLeft: "auto", fontFamily: sans, fontSize: F.xs, color: T.dim }}>{watchlist.length > 0 ? `${watchlist.length} watching` : "Upload CSV"}</span>
+              <span style={{ marginLeft: "auto", fontFamily: sans, fontSize: F.xs, color: T.dim }}>{watchlistTotal > 0 ? `${watchlistTotal.toLocaleString()} accounts` : "Upload CSV"}</span>
               <span style={{ color: T.dim, fontSize: F.xs, transform: watchlistOpen ? "rotate(180deg)" : "none", display: "inline-block", transition: "transform 0.15s" }}>▾</span>
             </button>
             {watchlistOpen && (
@@ -374,9 +374,9 @@ function ProfileMenu({ session, supabase, connections, onDisconnect, watchlist =
                   <Btn variant="orange" size="sm" onClick={() => fileRef.current?.click()} disabled={uploading}>
                     {uploading ? "Uploading…" : "↑ Upload CSV"}
                   </Btn>
-                  {watchlist.length > 0 && (
+                  {watchlistTotal > 0 && (
                     <Btn variant="ghost" size="sm" onClick={async () => {
-                      if (!confirm(`Remove all ${watchlist.length} accounts from watchlist?`)) return;
+                      if (!confirm(`Remove all ${watchlistTotal.toLocaleString()} accounts from watchlist?`)) return;
                       const sess = await supabase.auth.getSession();
                       const tok = sess.data?.session?.access_token;
                       await fetch("/api/watchlist", { method: "DELETE", headers: { "Content-Type": "application/json", ...(tok ? { Authorization: `Bearer ${tok}` } : {}) } });
@@ -808,7 +808,8 @@ export default function Dashboard() {
   const [interactions, setInteractions] = useState([]);
   const [syncing, setSyncing]       = useState(null);
   const [scoring, setScoring]       = useState(false);
-  const [watchlist, setWatchlist]   = useState([]);
+  const [watchlist, setWatchlist]     = useState([]);
+  const [watchlistTotal, setWatchlistTotal] = useState(0);
   const [syncMsg, setSyncMsg]       = useState("");
   const [lastSynced, setLastSynced] = useState(null);
   const [urlMsg, setUrlMsg]         = useState("");
@@ -846,6 +847,7 @@ export default function Dashboard() {
     if (c.data) setComments(c.data);
     if (d.data) setInteractions(d.data);
     if (wl?.entries) setWatchlist(wl.entries);
+    if (wl?.total !== undefined) setWatchlistTotal(wl.total);
   }, [session, supabase]);
 
   useEffect(() => { loadData(); }, [loadData]);

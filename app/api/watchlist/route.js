@@ -25,13 +25,13 @@ export async function GET(req) {
   const user = await getUser(req);
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { data, error } = await adminClient()
-    .from('watchlist')
-    .select('*')
-    .order('added_at', { ascending: false });
+  // Get total count + first 30 for preview display
+  const [{ count }, { data: preview }] = await Promise.all([
+    adminClient().from('watchlist').select('*', { count: 'exact', head: true }),
+    adminClient().from('watchlist').select('platform,handle,label').order('added_at', { ascending: false }).limit(30),
+  ]);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ entries: data });
+  return NextResponse.json({ entries: preview || [], total: count || 0 });
 }
 
 export async function POST(req) {
