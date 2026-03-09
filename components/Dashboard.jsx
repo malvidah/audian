@@ -1226,43 +1226,42 @@ export default function Dashboard() {
       supabase.from("platform_connections").select("*"),
       supabase.from("platform_metrics").select("*").order("snapshot_at", { ascending: false }).limit(10),
       supabase.from("platform_metrics").select("*").order("snapshot_at", { ascending: true }).limit(500),
-      supabase.from("interactions").select("*, people(*)").eq("type", "comment").order("interacted_at", { ascending: false }).limit(100),
-      supabase.from("interactions").select("*, people(*)").order("interacted_at", { ascending: false }).limit(100),
+      supabase.from("interactions").select("*, handles(*)").eq("interaction_type", "comment").order("interacted_at", { ascending: false }).limit(100),
+      supabase.from("interactions").select("*, handles(*)").order("interacted_at", { ascending: false }).limit(100),
     ]);
     if (a.data) setConnections(a.data);
     if (b.data) { setMetrics(b.data); if (b.data[0]) setLastSynced(b.data[0].snapshot_at); }
     if (b2.data) setAllMetrics(b2.data);
-    // Flatten interactions+people join for comments
+    // Flatten interactions+handles join for comments
     if (c.data) setComments(c.data.map(i => {
-      const p = i.people || {};
+      const h = i.handles || {};
       const plat = i.platform;
       return {
         id: i.id, platform: plat, content: i.content,
         content_title: i.content_title, likes: i.likes, published_at: i.interacted_at,
-        author_name: p.name || p[`handle_${plat}`] || p.handle_instagram || p.handle_x || p.handle_youtube || '?',
-        author_handle: p[`handle_${plat}`] || p.handle_instagram || p.handle_x,
+        author_name: h.name || h[`handle_${plat}`] || h.handle_instagram || h.handle_x || h.handle_youtube || '?',
+        author_handle: h[`handle_${plat}`] || h.handle_instagram || h.handle_x,
         video_title: i.content_title,
         quality_tag: i.likes >= 10 ? 'THOUGHTFUL' : 'ENGAGED',
       };
     }));
-    // Flatten interactions+people join for interaction rows
+    // Flatten interactions+handles join for interaction rows
     if (d.data) setInteractions(d.data.map(i => {
-      const p = i.people || {};
+      const h = i.handles || {};
       const plat = i.platform;
       return {
-        id: i.id, person_id: i.person_id, platform: plat,
-        interaction_type: i.type, type: i.type,
-        content: i.content, content_title: i.content_title, likes: i.likes,
-        interacted_at: i.interacted_at, screenshot_id: i.screenshot_id,
-        name: p.name, bio: p.bio, avatar_url: p.avatar_url, zone: p.category,
-        followed_by: p.followed_by, notes: p.notes,
-        handle: p[`handle_${plat}`] || p.handle_instagram || p.handle_x || p.handle_youtube || p.handle_linkedin,
-        followers: p[`followers_${plat}`] ?? p.followers_instagram ?? p.followers_x ?? p.followers_youtube ?? p.followers_linkedin,
-        verified: p[`verified_${plat}`] || false,
-        profile_url: plat === 'instagram' ? `https://instagram.com/${p.handle_instagram}`
-                   : plat === 'x'         ? `https://x.com/${p.handle_x}`
-                   : plat === 'youtube'   ? `https://youtube.com/@${p.handle_youtube}`
-                   : plat === 'linkedin'  ? `https://linkedin.com/in/${p.handle_linkedin}` : null,
+        id: i.id, handle_id: i.handle_id, platform: plat,
+        interaction_type: i.interaction_type, type: i.interaction_type,
+        content: i.content, interacted_at: i.interacted_at, screenshot_id: i.screenshot_id,
+        name: h.name, bio: h.bio, avatar_url: h.avatar_url, zone: h.zone,
+        followed_by: h.followed_by,
+        handle: h[`handle_${plat}`] || h.handle_instagram || h.handle_x || h.handle_youtube || h.handle_linkedin,
+        followers: h[`followers_${plat}`] ?? h.followers_instagram ?? h.followers_x ?? h.followers_youtube ?? h.followers_linkedin,
+        verified: h[`verified_${plat}`] || false,
+        profile_url: plat === 'instagram' ? `https://instagram.com/${h.handle_instagram}`
+                   : plat === 'x'         ? `https://x.com/${h.handle_x}`
+                   : plat === 'youtube'   ? `https://youtube.com/@${h.handle_youtube}`
+                   : plat === 'linkedin'  ? `https://linkedin.com/in/${h.handle_linkedin}` : null,
       };
     }));
   }, [session, supabase]);
