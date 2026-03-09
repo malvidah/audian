@@ -1,51 +1,46 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-
 export const dynamic = 'force-dynamic';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
 export async function GET() {
   const out = {};
 
-  // Hard delete null-author comments via RPC to bypass any RLS
-  const { error: delErr } = await supabase.rpc('exec_sql', {
-    sql: "DELETE FROM platform_comments WHERE author_name IS NULL"
-  }).single();
-
-  // Fallback: direct delete if RPC doesn't exist
-  const { error: delErr2 } = await supabase
-    .from('platform_comments')
-    .delete()
-    .is('author_name', null);
-
-  out.cleanup = delErr2 ? `error: ${delErr2.message}` : 'attempted';
-
-  // Counts using service role (bypasses RLS)
+  // Table counts
   for (const tbl of ['platform_comments','platform_interactions','platform_metrics','watchlist']) {
-    const { count, error } = await supabase
-      .from(tbl)
-      .select('*', { count: 'exact', head: true });
-    out[tbl] = error ? `ERR: ${error.message}` : count;
+    const { count } = await supabase.from(tbl).select('*', { count: 'exact', head: true });
+    out[tbl + '_count'] = count;
   }
 
-  // Sample comments with any author_name
-  const { data: comments, error: cErr } = await supabase
-    .from('platform_comments')
-    .select('platform,author_name,content')
-    .not('author_name', 'is', null)
+  // Sample interactions — show ALL fields so we know what we have
+  const { data: interactions } = await supabase
+    .from('platform_interactions')
+    .select('platform,handle,name,followers,bio,verified,interaction_type,influence_score,zone,comment_count,content,on_watchlist')
+    .order('influence_score', { ascending: false })
     .limit(5);
-  out.comments_with_author = cErr ? `ERR: ${cErr.message}` : (comments || []);
+  out.top_interactions = interactions || [];
 
-  // Sample null comments still remaining
-  const { count: nullCount } = await supabase
+  // Zone breakdown
+  const { data: zones } = await supabase
+    .from('platform_interactions')
+    .select('zone');
+  const zoneCounts = { CORE: 0, INFLUENTIAL: 0, RADAR: 0 };
+  for (const z of (zones || [])) zoneCounts[z.zone || 'RADAR']++;
+  out.zone_breakdown = zoneCounts;
+
+  // How many have follower data?
+  const { count: withFollowers } = await supabase
+    .from('platform_interactions')
+    .select('*', { count: 'exact', head: true })
+    .gt('followers', 0);
+  out.have_follower_data = withFollowers;
+
+  // Null author comments remaining
+  const { count: nullComments } = await supabase
     .from('platform_comments')
     .select('*', { count: 'exact', head: true })
     .is('author_name', null);
-  out.null_author_comments_remaining = nullCount;
+  out.null_author_comments = nullComments;
 
-  return NextResponse.json(out);
+  return NextResponse.json(out, { headers: { 'Content-Type': 'application/json' } });
 }

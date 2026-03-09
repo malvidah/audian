@@ -885,18 +885,32 @@ export default function Dashboard() {
   async function triggerScore() {
     setScoring(true); setSyncMsg("Checking for new interactions…");
     try {
-      // First poll Apify for any completed runs (fallback if webhooks didn't fire)
+      // 1. Poll Apify for any completed runs (fallback if webhooks didn't fire)
       const pollRes = await fetch("/api/apify/poll");
       const pollData = await pollRes.json().catch(() => ({}));
-      const pollMsg = pollData.results?.length > 0
-        ? `Imported ${pollData.results.length} scraper run(s) · `
+      const pollMsg = pollData.results?.filter(r => r.processed > 0).length > 0
+        ? `Imported ${pollData.results.filter(r => r.processed > 0).length} scraper run(s) · `
         : '';
 
-      // Then rescore everything
-      const res = await fetch("/api/score", { method: "POST" });
-      const data = await res.json();
-      if (data.error) setSyncMsg(`✗ ${data.error}`);
-      else { setSyncMsg(`✓ ${pollMsg}${data.message}`); await loadData(); }
+      // 2. Rescore everything with engagement-based scoring
+      setSyncMsg("Scoring interactions…");
+      const scoreRes = await fetch("/api/score", { method: "POST" });
+      const scoreData = await scoreRes.json();
+      if (scoreData.error) { setSyncMsg(`✗ ${scoreData.error}`); setScoring(false); return; }
+
+      // 3. Enrich top RADAR profiles with real follower counts (uses existing IG token, no Apify)
+      setSyncMsg("Enriching profiles…");
+      const enrichRes = await fetch("/api/enrich", { method: "POST" });
+      const enrichData = await enrichRes.json().catch(() => ({}));
+      const enrichMsg = enrichData.enriched > 0 ? ` · enriched ${enrichData.enriched} profiles` : '';
+
+      // 4. Final rescore with enriched data
+      if (enrichData.enriched > 0) {
+        await fetch("/api/score", { method: "POST" });
+      }
+
+      setSyncMsg(`✓ ${pollMsg}${scoreData.message}${enrichMsg}`);
+      await loadData();
     } catch (e) { setSyncMsg(`✗ ${e.message}`); }
     setScoring(false);
   }

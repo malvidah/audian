@@ -66,12 +66,13 @@ function normalizeItem(item, type) {
     return {
       username:    item.ownerUsername || item.owner?.username || item.username,
       name:        item.ownerFullName || item.owner?.full_name || item.ownerUsername,
-      followers:   0, // IG comment API doesn't give follower counts
+      followers:   null, // ig_comments scraper doesn't return follower counts
       bio:         '',
       avatar:      item.ownerProfilePicUrl || item.profilePicUrl || null,
-      verified:    false,
+      verified:    item.ownerVerified || false,
       content:     (item.text || item.comment || '').slice(0, 500),
       postUrl:     item.postUrl || null,
+      likes:       parseInt(item.likesCount || item.likes_count || 0),
       interactionType: 'comment',
     };
   }
@@ -188,7 +189,7 @@ export async function POST(req) {
           platform,
           handle:           n.username,
           name:             n.name || n.username,
-          followers:        n.followers || null,
+          followers:        (n.followers !== undefined && n.followers !== null && n.followers > 0) ? n.followers : null,
           bio:              n.bio?.slice(0, 300) || null,
           avatar_url:       n.avatar,
           verified:         n.verified,
@@ -201,6 +202,20 @@ export async function POST(req) {
           interacted_at:    now,
           synced_at:        now,
         }, { onConflict: 'platform,handle' });
+
+        // Also save comment to platform_comments for scoring later
+        if (n.interactionType === 'comment' && n.content) {
+          await supabase.from('platform_comments').upsert({
+            platform,
+            video_id:    n.postUrl || 'unknown',
+            video_title: null,
+            author_name: n.username,
+            content:     n.content,
+            likes:       n.likes || 0,
+            published_at: now,
+            synced_at:   now,
+          }, { onConflict: 'platform,author_name,content', ignoreDuplicates: true }).catch(() => {});
+        }
 
         processed++;
       }
