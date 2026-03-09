@@ -5,48 +5,36 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
-
 export const dynamic = 'force-dynamic';
 
 const NICHE_KEYWORDS = [
   'neuroscience','psychology','cognitive','brain','mind','consciousness',
-  'science','research','study','data','theory','evolution','philosophy',
-  'podcast','author','book','writer','journalist','professor','phd','dr ',
-  'scientist','academic','researcher','educator','ted','kurzgesagt',
-  'veritasium','curious','fascinating','learning','education','insight',
+  'science','research','study','data','evidence','theory','evolution',
+  'philosophy','ethics','critical thinking','skeptic',
+  'curious','fascinating','learning','education','podcast','author',
+  'book','writer','journalist','professor','phd','dr ','scientist',
+  'academic','researcher','educator','ted','kurzgesagt','veritasium','vsauce',
 ];
 
-function nicheScore(bio = '', handle = '', fullName = '') {
-  const lower = [bio, handle, fullName].join(' ').toLowerCase();
+function nicheScore(bio='', handle='', name='') {
+  const lower = [bio,handle,name].join(' ').toLowerCase();
   return NICHE_KEYWORDS.filter(k => lower.includes(k)).length;
 }
 
-function assignZone(onWatchlist, followers = 0, niche = 0) {
-  if (onWatchlist)            return 'CORE';
-  if (followers >= 10_000)    return 'INFLUENTIAL';
-  if (followers >= 1_000 || niche >= 2) return 'INFLUENTIAL';
+function computeScore({ followers=0, commentCount=1, contentLength=0, niche=0 }) {
+  const subPts =
+    followers >= 1_000_000 ? 60 : followers >= 500_000 ? 52 :
+    followers >= 100_000   ? 42 : followers >= 50_000  ? 34 :
+    followers >= 10_000    ? 26 : followers >= 1_000   ? 16 :
+    followers >= 100       ? 8  : 0;
+  return Math.min(100, subPts + Math.min(12,(commentCount-1)*4) + Math.min(8,Math.floor(contentLength/30)) + Math.min(15,niche*4));
+}
+
+function assignZone(score, onWatchlist, followers=0) {
+  if (onWatchlist)        return 'CORE';
+  if (followers >= 10000) return 'INFLUENTIAL';
+  if (score >= 50)        return 'INFLUENTIAL';
   return 'RADAR';
-}
-
-function influenceScore(onWatchlist, followers = 0, niche = 0) {
-  if (onWatchlist) return Math.min(100, 85 + niche * 2);
-  const followerPts =
-    followers >= 1_000_000 ? 60 :
-    followers >= 500_000   ? 52 :
-    followers >= 100_000   ? 42 :
-    followers >= 50_000    ? 34 :
-    followers >= 10_000    ? 26 :
-    followers >= 1_000     ? 16 :
-    followers >= 100       ? 8  : 2;
-  return Math.min(100, followerPts + Math.min(15, niche * 4));
-}
-
-async function loadWatchSet() {
-  const { data } = await supabase
-    .from('watchlist')
-    .select('handle')
-    .eq('platform', 'instagram');
-  return new Set((data || []).map(r => r.handle.toLowerCase().replace(/^@/, '')));
 }
 
 export async function POST(req) {
@@ -54,149 +42,144 @@ export async function POST(req) {
     const body = await req.json();
     const { eventType, resource, webhookData } = body;
 
+    if (eventType === 'ACTOR.RUN.FAILED') {
+      console.error('Apify run failed:', resource?.id, webhookData);
+      return NextResponse.json({ ok: false, message: 'Run failed' });
+    }
     if (eventType !== 'ACTOR.RUN.SUCCEEDED') {
-      console.log('Apify webhook skip:', eventType);
       return NextResponse.json({ ok: true, skipped: eventType });
     }
 
-    const { type, handle: targetHandle } = webhookData || {};
+    const { type, platform = 'instagram' } = webhookData || {};
     const datasetId = resource?.defaultDatasetId;
-    if (!datasetId) return NextResponse.json({ error: 'No datasetId' }, { status: 400 });
+    if (!datasetId) return NextResponse.json({ error: 'No dataset ID' }, { status: 400 });
 
-    // Fetch results from Apify dataset
-    const apiKey   = process.env.APIFY_API_KEY;
-    const itemsRes = await fetch(
-      `https://api.apify.com/v2/datasets/${datasetId}/items?token=${apiKey}&limit=500&clean=true`
-    );
-    const items = await itemsRes.json();
-
+    const apiKey = process.env.APIFY_API_KEY;
+    const res = await fetch(`https://api.apify.com/v2/datasets/${datasetId}/items?token=${apiKey}&limit=500&clean=true`);
+    const items = await res.json();
     if (!Array.isArray(items) || items.length === 0) {
-      return NextResponse.json({ ok: true, processed: 0, type, message: 'Empty dataset' });
+      return NextResponse.json({ ok: true, processed: 0, message: 'Empty dataset' });
     }
 
-    const watchSet  = await loadWatchSet();
-    const isWatched = h => watchSet.has((h || '').toLowerCase().replace(/^@/, ''));
-    const now       = new Date().toISOString();
-    let processed   = 0;
+    // Load watchlist
+    const { data: wlRows } = await supabase.from('watchlist').select('handle').eq('platform', platform);
+    const watchSet = new Set((wlRows||[]).map(r => r.handle.toLowerCase().replace(/^@/,'')));
+    const isWatched = h => watchSet.has((h||'').toLowerCase().replace(/^@/,''));
 
-    // ── LIKERS: who liked your recent posts ───────────────────────────────────
-    if (type === 'likers') {
+    // Load existing comment counts to preserve them
+    const { data: existingInteractions } = await supabase
+      .from('platform_interactions').select('handle,comment_count,content,interacted_at')
+      .eq('platform', platform);
+    const existing = {};
+    for (const row of (existingInteractions||[])) existing[row.handle] = row;
+
+    let processed = 0;
+    const now = new Date().toISOString();
+
+    // ── Profile enrichment (instagram-profile-scraper output) ─────────────────
+    if (type === 'profile_enrich') {
       for (const item of items) {
-        // instaprism/instagram-likers-scraper output schema
-        const username = item.username || item.userName;
-        const fullName = item.fullName  || item.full_name || '';
-        const avatar   = item.profilePicUrl || item.profilePicture || null;
-        const userId   = item.userId   || item.id || null;
-
-        if (!username) continue;
-
-        const watched = isWatched(username);
-        const niche   = nicheScore('', username, fullName);
-        const zone    = assignZone(watched, 0, niche); // no follower data from likers
-        const score   = influenceScore(watched, 0, niche);
-
-        await supabase.from('platform_interactions').upsert({
-          platform:         'instagram',
-          handle:           username,
-          name:             fullName || username,
-          followers:        null, // enriched later by profiles run
-          interaction_type: 'like',
-          content:          `Liked a @${targetHandle} post`,
-          influence_score:  score,
-          zone,
-          profile_url:      `https://instagram.com/${username}`,
-          avatar_url:       avatar,
-          on_watchlist:     watched,
-          interacted_at:    now,
-          synced_at:        now,
-        }, { onConflict: 'platform,handle' });
-
-        processed++;
-      }
-    }
-
-    // ── PROFILES: enrich handles with follower counts + bio ───────────────────
-    else if (type === 'profiles') {
-      for (const item of items) {
-        // apify/instagram-profile-scraper output schema
-        const username  = item.username  || item.userName;
-        const fullName  = item.fullName  || item.full_name || '';
-        const followers = parseInt(item.followersCount || item.followersCount || 0);
+        // Profile scraper output schema
+        const username  = item.username || item.inputUrl?.split('/').filter(Boolean).pop();
+        const followers = parseInt(item.followersCount || item.followers || 0);
+        const fullName  = item.fullName || item.name || '';
         const bio       = item.biography || item.bio || '';
-        const avatar    = item.profilePicUrl || item.profilePicture || null;
-        const verified  = item.verified  || item.isVerified || false;
-        const postsCount = item.postsCount || 0;
-
+        const avatar    = item.profilePicUrl || item.profilePicUrlHD || null;
+        const verified  = item.verified || item.isVerified || false;
         if (!username) continue;
 
-        const watched = isWatched(username);
-        const niche   = nicheScore(bio, username, fullName);
-        const zone    = assignZone(watched, followers, niche);
-        const score   = influenceScore(watched, followers, niche);
+        const watched   = isWatched(username);
+        const niche     = nicheScore(bio, username, fullName);
+        const prev      = existing[username];
+        const commentCount = prev?.comment_count || 1;
+        const score     = computeScore({ followers, commentCount, niche });
+        const zone      = assignZone(score, watched, followers);
 
-        // Upsert interaction record with enriched data
         await supabase.from('platform_interactions').upsert({
-          platform:         'instagram',
-          handle:           username,
-          name:             fullName || username,
-          followers,
-          bio:              bio.slice(0, 300) || null,
-          avatar_url:       avatar,
+          platform, handle: username,
+          name: fullName || username,
+          followers: followers || null,
+          bio: bio?.slice(0,300) || null,
+          avatar_url: avatar,
           verified,
-          interaction_type: 'comment', // base type; enriching existing records
-          influence_score:  score,
+          interaction_type: prev ? 'comment' : 'profile',
+          content: prev?.content || null,
+          influence_score: watched ? Math.max(score,75) : score,
           zone,
-          profile_url:      `https://instagram.com/${username}`,
-          on_watchlist:     watched,
-          synced_at:        now,
+          profile_url: `https://instagram.com/${username}`,
+          comment_count: commentCount,
+          on_watchlist: watched,
+          interacted_at: prev?.interacted_at || now,
+          synced_at: now,
         }, { onConflict: 'platform,handle' });
-
         processed++;
       }
     }
 
-    // ── COMMENTS: richer comment data with profile pics + likes ──────────────
-    else if (type === 'comments') {
+    // ── Post comment scraping (instagram-comment-scraper output) ──────────────
+    if (type === 'post_comments') {
+      // Group by commenter username
+      const byAuthor = {};
       for (const item of items) {
-        // apify/instagram-comment-scraper output schema
-        const username    = item.ownerUsername || item.username;
-        const fullName    = item.ownerFullName || '';
-        const avatar      = item.ownerProfilePicUrl || item.profilePicUrl || null;
-        const commentText = item.text || item.comment || '';
-        const commentLikes = parseInt(item.likesCount || item.likes || 0);
-        const timestamp   = item.timestamp || item.createdAt || now;
-
+        const username = item.ownerUsername || item.username;
         if (!username) continue;
+        if (!byAuthor[username]) byAuthor[username] = [];
+        byAuthor[username].push(item);
+      }
 
-        const watched = isWatched(username);
-        const niche   = nicheScore(commentText, username, fullName);
-        const score   = Math.min(100,
-          influenceScore(watched, 0, niche) +
-          Math.min(20, commentLikes * 2)
-        );
-        const zone = assignZone(watched, 0, niche);
+      for (const [username, comments] of Object.entries(byAuthor)) {
+        const watched      = isWatched(username);
+        const prev         = existing[username];
+        const bestByLen    = comments.reduce((a,b) => (b.text?.length||0) > (a.text?.length||0) ? b : a);
+        const allText      = comments.map(c=>c.text||'').join(' ');
+        const niche        = nicheScore(allText, username);
+        const commentCount = (prev?.comment_count || 0) + comments.length;
+        // Use enriched follower data if we have it
+        const followers    = prev?.followers || 0;
+        const score        = computeScore({ followers, commentCount, contentLength: bestByLen.text?.length||0, niche });
+        const zone         = assignZone(score, watched, followers);
+
+        // First write comments to platform_comments
+        for (const c of comments) {
+          await supabase.from('platform_comments').upsert({
+            platform,
+            video_id: c.postId || c.id,
+            video_title: c.postUrl || '',
+            author_name: username,
+            content: c.text?.slice(0,500) || '',
+            published_at: c.timestamp || now,
+            synced_at: now,
+          }, { onConflict: 'platform,author_name,content' });
+        }
 
         await supabase.from('platform_interactions').upsert({
-          platform:         'instagram',
-          handle:           username,
-          name:             fullName || username,
-          avatar_url:       avatar,
+          platform, handle: username,
+          name: prev?.name || username,
+          followers: prev?.followers || null,
+          bio: prev?.bio || null,
+          avatar_url: prev?.avatar_url || null,
+          verified: prev?.verified || false,
           interaction_type: 'comment',
-          content:          commentText.slice(0, 500),
-          influence_score:  score,
+          content: bestByLen.text?.slice(0,500) || null,
+          influence_score: watched ? Math.max(score,75) : score,
           zone,
-          profile_url:      `https://instagram.com/${username}`,
-          on_watchlist:     watched,
-          interacted_at:    timestamp,
-          synced_at:        now,
+          profile_url: `https://instagram.com/${username}`,
+          comment_count: commentCount,
+          on_watchlist: watched,
+          interacted_at: comments[0].timestamp || now,
+          synced_at: now,
         }, { onConflict: 'platform,handle' });
-
         processed++;
       }
     }
 
-    console.log(`Apify webhook: processed ${processed} ${type} for @${targetHandle}`);
-    return NextResponse.json({ ok: true, type, processed, handle: targetHandle });
+    // After webhook data is processed, trigger a re-score to update zones with enriched data
+    if (processed > 0 && type === 'profile_enrich') {
+      fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'https://www.audian.app'}/api/score`, { method: 'POST' })
+        .catch(e => console.error('Auto-rescore failed:', e));
+    }
+
+    return NextResponse.json({ ok: true, type, processed });
 
   } catch (err) {
     console.error('Apify webhook error:', err);

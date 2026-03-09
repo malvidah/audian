@@ -896,10 +896,14 @@ export default function Dashboard() {
   async function triggerScrape() {
     setScraping(true); setSyncMsg("");
     try {
-      const res  = await fetch("/api/apify/trigger", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ types: ["followers", "likers", "mentions"] }) });
+      const res  = await fetch("/api/apify/trigger", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ types: ["enrich", "recent_posts"] }) });
       const data = await res.json();
       if (data.error) setSyncMsg("✗ " + data.error);
-      else setSyncMsg(`✓ ${data.message} — results arrive via webhook in ~2 min`);
+      else {
+        const runCount = (data.runs || []).filter(r => r.runId).length;
+        if (runCount === 0) setSyncMsg("✗ No Apify API key set — add APIFY_API_KEY to Vercel env vars");
+        else setSyncMsg(`✓ ${data.message}`);
+      }
     } catch (e) { setSyncMsg("✗ " + e.message); }
     setScraping(false);
   }
