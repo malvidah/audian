@@ -65,6 +65,7 @@ async function getYouTubeToken() {
 }
 
 export async function POST() {
+  console.log('[score] POST called at', new Date().toISOString());
   try {
     const results = { youtube: 0, instagram: 0, errors: [] };
 
@@ -155,6 +156,7 @@ export async function POST() {
       .from('platform_comments').select('*').eq('platform','instagram')
       .order('published_at',{ascending:false}).limit(500);
 
+    console.log('[score] IG comments:', igComments?.length || 0);
     if (igComments?.length > 0) {
       const byAuthor = {};
       for (const c of igComments) {
@@ -174,6 +176,7 @@ export async function POST() {
         const score      = computeScore({ followers, commentCount: comments.length, contentLength: bestByLen.content?.length||0, niche });
         const zone       = assignZone(score, watched, followers);
 
+        console.log('[score] upserting IG:', handle, 'score:', watched ? Math.max(computeScore({ followers, commentCount: comments.length, contentLength: bestByLen.content?.length||0, niche }),75) : computeScore({ followers, commentCount: comments.length, contentLength: bestByLen.content?.length||0, niche }));
         const { error } = await supabase.from('platform_interactions').upsert({
           platform:'instagram', handle,
           name: prev?.name || handle,
@@ -196,6 +199,7 @@ export async function POST() {
       }
     }
 
+    console.log('[score] done — YT:', results.youtube, 'IG:', results.instagram, 'errors:', results.errors);
     const total = results.youtube + results.instagram;
     return NextResponse.json({
       success: true,
