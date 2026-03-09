@@ -1,30 +1,39 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+export const dynamic = 'force-dynamic';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
-export const dynamic = 'force-dynamic';
 
 export async function PATCH(req) {
   try {
-    const { id, updates } = await req.json();
-    if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
+    const { id, updates } = await req.json(); // id = interaction id
 
-    const allowed = ['bio', 'followers', 'followed_by', 'zone', 'on_watchlist', 'name', 'notes'];
-    const safe = Object.fromEntries(Object.entries(updates).filter(([k]) => allowed.includes(k)));
-    safe.synced_at = new Date().toISOString();
+    // First resolve person_id from interaction
+    const { data: interaction, error: fetchErr } = await supabase
+      .from('interactions').select('person_id, platform').eq('id', id).single();
+    if (fetchErr) return NextResponse.json({ error: fetchErr.message }, { status: 404 });
 
-    const { data, error } = await supabase
-      .from('platform_interactions')
-      .update(safe)
-      .eq('id', id)
-      .select()
-      .single();
+    // Build safe people updates
+    const plat = interaction.platform;
+    const allowed = ['bio', 'name', 'followed_by', 'notes', 'category'];
+    const peopleUpdates = Object.fromEntries(Object.entries(updates).filter(([k]) => allowed.includes(k)));
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({ interaction: data });
+    // Handle per-platform followers update
+    if (updates.followers != null) {
+      peopleUpdates[`followers_${plat}`] = parseInt(updates.followers) || null;
+    }
+    peopleUpdates.updated_at = new Date().toISOString();
+
+    const { error: updateErr } = await supabase
+      .from('people')
+      .update(peopleUpdates)
+      .eq('id', interaction.person_id);
+
+    if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 });
+    return NextResponse.json({ ok: true });
   } catch (err) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }

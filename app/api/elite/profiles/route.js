@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic';
 export async function GET() {
   try {
     const { data, error } = await supabase
-      .from('accounts')
+      .from('people')
       .select('*')
       .order('updated_at', { ascending: false });
 

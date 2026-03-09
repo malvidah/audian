@@ -16,7 +16,7 @@ export async function POST(request) {
     // Load all data for context
     const [metricsRes, commentsRes, connectionsRes] = await Promise.all([
       supabase.from('platform_metrics').select('*').order('snapshot_at', { ascending: false }).limit(20),
-      supabase.from('platform_comments').select('*').order('published_at', { ascending: false }).limit(30),
+      supabase.from('interactions').select('*, people(*)').eq('type', 'comment').order('interacted_at', { ascending: false }).limit(30),
       supabase.from('platform_connections').select('platform,channel_name,subscriber_count,metadata'),
     ]);
 

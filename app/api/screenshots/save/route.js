@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+export const dynamic = 'force-dynamic';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
-export const dynamic = 'force-dynamic';
 
 function followerScore(f) {
   if (!f) return 5;
@@ -15,61 +15,52 @@ function followerScore(f) {
   if (f >= 50_000)    return 34;
   if (f >= 10_000)    return 26;
   if (f >= 1_000)     return 16;
-  if (f >= 100)       return 8;
   return 3;
 }
 
-// Try accounts table — fail gracefully if it doesn't exist yet
-async function resolveAccount(platform, cleanHandle, item, now) {
-  try {
-    const handleCol    = `handle_${platform}`;
-    const followersCol = `followers_${platform}`;
-    const verifiedCol  = `verified_${platform}`;
-    const incomingCategory = item.zone || 'IGNORE'; // trust frontend computeZone
+// Upsert a person row, return their id
+async function upsertPerson(item, platform, cleanHandle, now) {
+  const handleCol    = `handle_${platform}`;
+  const followersCol = `followers_${platform}`;
+  const verifiedCol  = `verified_${platform}`;
+  const category     = item.zone || 'SIGNAL';
 
-    let { data: account, error: fetchErr } = await supabase
-      .from('accounts')
-      .select('*')
-      .eq(handleCol, cleanHandle)
-      .maybeSingle();
+  // Try to find existing person by this platform handle
+  const { data: existing } = await supabase
+    .from('people')
+    .select('id, category, name, bio')
+    .eq(handleCol, cleanHandle)
+    .maybeSingle();
 
-    if (fetchErr) return null; // table doesn't exist yet — skip accounts layer
-
-    const followers = item.followers || null;
-    const verified  = item.verified  || false;
-
-    if (!account) {
-      const { data: created, error: createErr } = await supabase
-        .from('accounts')
-        .insert({
-          name:           item.name || cleanHandle,
-          bio:            item.bio  || null,
-          category:       incomingCategory,
-          [handleCol]:    cleanHandle,
-          [followersCol]: followers,
-          [verifiedCol]:  verified,
-          avatar_url:     item.avatar_url || null,
-          added_at: now, updated_at: now,
-        })
-        .select().single();
-      if (createErr) return null;
-      return created;
-    } else {
-      const newCategory = account.category === 'ELITE' ? 'ELITE' : incomingCategory;
-      const updates = {
-        updated_at:      now,
-        category:        newCategory,
-        [followersCol]:  item.followers || account[followersCol],
-        [verifiedCol]:   item.verified  || account[verifiedCol],
-        ...(item.name && !account.name ? { name: item.name } : {}),
-        ...(item.bio  && !account.bio  ? { bio:  item.bio  } : {}),
-      };
-      await supabase.from('accounts').update(updates).eq('id', account.id);
-      return { ...account, ...updates };
-    }
-  } catch {
-    return null; // accounts table missing — ok, save continues
+  if (existing) {
+    // Don't downgrade ELITE
+    const newCategory = existing.category === 'ELITE' ? 'ELITE' : category;
+    await supabase.from('people').update({
+      category:        newCategory,
+      [followersCol]:  item.followers || null,
+      [verifiedCol]:   item.verified  || false,
+      ...(item.name && !existing.name ? { name: item.name } : {}),
+      ...(item.bio  && !existing.bio  ? { bio:  item.bio  } : {}),
+      updated_at: now,
+    }).eq('id', existing.id);
+    return existing.id;
   }
+
+  // Create new person
+  const { data: created, error } = await supabase.from('people').insert({
+    name:           item.name || cleanHandle,
+    bio:            item.bio  || null,
+    avatar_url:     item.avatar_url || null,
+    category,
+    [handleCol]:    cleanHandle,
+    [followersCol]: item.followers || null,
+    [verifiedCol]:  item.verified  || false,
+    added_at:  now,
+    updated_at: now,
+  }).select('id').single();
+
+  if (error) { console.error('upsertPerson error:', error.message); return null; }
+  return created.id;
 }
 
 export async function POST(req) {
@@ -81,67 +72,32 @@ export async function POST(req) {
     let saved = 0;
     const errors = [];
 
-    // Save all non-IGNORE items
     const toSave = interactions.filter(i => i.handle && i.zone !== 'IGNORE');
 
     for (const item of toSave) {
       const platform    = (item.platform || 'instagram').toLowerCase();
       const cleanHandle = item.handle.toLowerCase().replace(/^@/, '');
 
-      // Try to maintain accounts table (best-effort — works even if table missing)
-      const account = await resolveAccount(platform, cleanHandle, item, now);
+      // 1. Upsert person
+      const personId = await upsertPerson(item, platform, cleanHandle, now);
+      if (!personId) { errors.push(`${cleanHandle}: could not create person`); continue; }
 
-      const followers = item.followers || null;
-      const verified  = item.verified  || false;
-      const zone      = account?.category || item.zone || 'IGNORE';
-      const score     = zone === 'ELITE' ? 85 :
-        Math.min(100, followerScore(followers) + (verified ? 15 : 0));
-
-      // Get existing interaction to merge types
-      const { data: existing } = await supabase
-        .from('platform_interactions')
-        .select('interaction_type, influence_score, comment_count')
-        .eq('platform', platform)
-        .eq('handle', cleanHandle)
-        .maybeSingle();
-
-      const existingTypes = existing?.interaction_type?.split(',') || [];
-      const newType       = item.interaction_type || 'unknown';
-      const allTypes      = [...new Set([...existingTypes, newType])].join(',');
-      const finalScore    = Math.max(score, existing?.influence_score || 0);
-
-      const profileUrls = {
-        instagram: `https://instagram.com/${cleanHandle}`,
-        x:         `https://x.com/${cleanHandle}`,
-        youtube:   `https://youtube.com/@${cleanHandle}`,
-        linkedin:  `https://linkedin.com/in/${cleanHandle}`,
-      };
-
-      const { error: upsertErr } = await supabase
-        .from('platform_interactions')
-        .upsert({
+      // 2. Insert interaction event(s) — one per type
+      const types = (item.interaction_type || 'unknown').split(',').map(t => t.trim()).filter(Boolean);
+      for (const type of types) {
+        const { error: intErr } = await supabase.from('interactions').insert({
+          person_id:     personId,
           platform,
-          handle:           cleanHandle,
-          name:             item.name  || account?.name || cleanHandle,
-          followers,
-          verified,
-          bio:              item.bio   || account?.bio  || null,
-          interaction_type: allTypes,
-          content:          item.content?.slice(0, 500) || null,
-          influence_score:  finalScore,
-          zone,
-          profile_url:      profileUrls[platform] || `https://${platform}.com/${cleanHandle}`,
-          on_watchlist:     zone === 'ELITE',
-          ignored:          false,
-          comment_count:    (existing?.comment_count || 0) + (newType === 'comment' ? 1 : 0),
-          interacted_at:    now,
-          synced_at:        now,
-          ...(account?.id          ? { account_id:    account.id }          : {}),
-          ...(item.screenshot_id   ? { screenshot_id: item.screenshot_id }  : {}),
-        }, { onConflict: 'platform,handle' });
-
-      if (upsertErr) errors.push(`${cleanHandle}: ${upsertErr.message}`);
-      else saved++;
+          type,
+          content:       item.content?.slice(0, 2000) || null,
+          content_title: item.content_title || null,
+          screenshot_id: item.screenshot_id || null,
+          interacted_at: now,
+          synced_at:     now,
+        });
+        if (intErr) errors.push(`${cleanHandle}/${type}: ${intErr.message}`);
+        else saved++;
+      }
     }
 
     return NextResponse.json({
@@ -153,7 +109,7 @@ export async function POST(req) {
         ? `Saved ${saved} interaction${saved !== 1 ? 's' : ''}`
         : errors.length > 0
           ? `Save failed: ${errors[0]}`
-          : `Nothing to save (${interactions.length - toSave.length} were IGNORE)`,
+          : `Nothing to save (${interactions.length - toSave.length} IGNORE)`,
     });
   } catch (err) {
     return NextResponse.json({ error: err.message }, { status: 500 });

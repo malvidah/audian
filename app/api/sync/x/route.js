@@ -56,36 +56,30 @@ export async function POST() {
       const zone = influenceScore >= 70 ? 'GOLD' : influenceScore >= 40 ? 'CORE' : 'WATCH';
 
       if (followers >= 1000) {
-        await supabase.from('platform_interactions').upsert({
-          platform:         'x',
-          handle:           author.username,
-          name:             author.name,
-          followers,
-          bio:              author.description,
-          avatar_url:       author.profile_image_url,
-          verified:         author.verified || false,
-          interaction_type: 'mention',
-          content:          tweet.text,
-          influence_score:  influenceScore,
-          zone,
-          interacted_at:    tweet.created_at,
-          synced_at:        new Date().toISOString(),
-        }, { onConflict: 'platform,handle,content' });
-        interactionsSaved++;
+        // Upsert person
+        const { data: existingPerson } = await supabase.from('people').select('id').eq('handle_x', author.username).maybeSingle();
+        let personId = existingPerson?.id;
+        if (!personId) {
+          const { data: newPerson } = await supabase.from('people').insert({
+            name: author.name, bio: author.description, avatar_url: author.profile_image_url,
+            handle_x: author.username, followers_x: followers, verified_x: author.verified || false,
+            category: zone, added_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+          }).select('id').single();
+          personId = newPerson?.id;
+        } else {
+          await supabase.from('people').update({ followers_x: followers, category: zone, updated_at: new Date().toISOString() }).eq('id', personId);
+        }
+        if (personId) {
+          await supabase.from('interactions').insert({
+            person_id: personId, platform: 'x', type: 'mention', content: tweet.text,
+            interacted_at: tweet.created_at, synced_at: new Date().toISOString(),
+          });
+          interactionsSaved++;
+        }
       }
 
       if (likes >= 2 || replies >= 1) {
-        await supabase.from('platform_comments').upsert({
-          platform:      'x',
-          author_name:   author.name,
-          author_handle: author.username,
-          content:       tweet.text,
-          likes,
-          reply_count:   replies,
-          quality_tag:   likes >= 10 ? 'THOUGHTFUL' : 'ENGAGED',
-          published_at:  tweet.created_at,
-          synced_at:     new Date().toISOString(),
-        }, { onConflict: 'platform,author_name,content' });
+        // Comments already captured as interactions above
         commentsSaved++;
       }
     }

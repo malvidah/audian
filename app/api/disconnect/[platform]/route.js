@@ -28,8 +28,8 @@ export async function DELETE(req, { params }) {
     const [connResult, metricsResult, commentsResult, interactionsResult] = await Promise.all([
       supabaseAdmin.from('platform_connections').delete().eq('platform', platform),
       supabaseAdmin.from('platform_metrics').delete().eq('platform', platform),
-      supabaseAdmin.from('platform_comments').delete().eq('platform', platform),
-      supabaseAdmin.from('platform_interactions').delete().eq('platform', platform),
+      supabaseAdmin.from('interactions').delete().eq('platform', platform),
+      Promise.resolve(), // interactions handled above
     ]);
 
     const err = connResult.error || metricsResult.error || commentsResult.error;

@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic';
 export async function POST() {
   try {
     const { data: comments } = await supabase
-      .from('platform_comments')
+      .from('interactions').eq('type', 'comment')
       .select('*')
       .order('published_at', { ascending: false })
       .limit(80);

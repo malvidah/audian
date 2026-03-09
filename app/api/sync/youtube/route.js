@@ -119,10 +119,29 @@ export async function POST() {
 
     // Store comments
     if (comments.length > 0) {
-      await supabase.from('platform_comments').upsert(
-        comments.map(c => ({ ...c, synced_at: new Date().toISOString() })),
-        { onConflict: 'platform,author_name,content' }
-      );
+      // Write YouTube comments to interactions table
+      for (const comment of comments) {
+        // Upsert person by name/handle
+        const authorHandle = (comment.author_handle || comment.author_name || '').toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g,'');
+        if (!authorHandle) continue;
+        const { data: existingPerson } = await supabase.from('people').select('id').eq('handle_youtube', authorHandle).maybeSingle();
+        let personId = existingPerson?.id;
+        if (!personId) {
+          const { data: newPerson } = await supabase.from('people').insert({
+            name: comment.author_name, handle_youtube: authorHandle, category: 'SIGNAL',
+            added_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+          }).select('id').single();
+          personId = newPerson?.id;
+        }
+        if (personId) {
+          await supabase.from('interactions').insert({
+            person_id: personId, platform: 'youtube', type: 'comment',
+            content: comment.content, content_title: comment.video_title, likes: comment.likes || 0,
+            interacted_at: comment.published_at || new Date().toISOString(),
+            synced_at: new Date().toISOString(),
+          });
+        }
+      }
     }
 
     return NextResponse.json({
