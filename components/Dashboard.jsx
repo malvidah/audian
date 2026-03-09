@@ -807,7 +807,8 @@ export default function Dashboard() {
   const [comments, setComments]     = useState([]);
   const [interactions, setInteractions] = useState([]);
   const [syncing, setSyncing]       = useState(null);
-  const [scoring, setScoring]       = useState(false);
+  const [scoring, setScoring]         = useState(false);
+  const [scraping, setScraping]       = useState(false);
   const [watchlist, setWatchlist]     = useState([]);
   const [watchlistTotal, setWatchlistTotal] = useState(0);
   const [syncMsg, setSyncMsg]       = useState("");
@@ -880,6 +881,17 @@ export default function Dashboard() {
       else { setSyncMsg(`✓ ${data.message}`); await loadData(); }
     } catch (e) { setSyncMsg(`✗ ${e.message}`); }
     setScoring(false);
+  }
+
+  async function triggerScrape() {
+    setScraping(true); setSyncMsg("");
+    try {
+      const res  = await fetch("/api/apify/trigger", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ types: ["followers", "likers", "mentions"] }) });
+      const data = await res.json();
+      if (data.error) setSyncMsg("✗ " + data.error);
+      else setSyncMsg(`✓ ${data.message} — results arrive via webhook in ~2 min`);
+    } catch (e) { setSyncMsg("✗ " + e.message); }
+    setScraping(false);
   }
 
   const tog = k => setOpen(s => ({ ...s, [k]: !s[k] }));
@@ -1080,7 +1092,16 @@ export default function Dashboard() {
 
         {/* ── Influential Interactions ─────────────────────────────────────── */}
         <Card style={{ marginBottom: 12, overflow: "hidden" }}>
-          <SectionHeader label="Influential Interactions" count={filteredInteractions.length} open={open.interactions} onToggle={() => tog("interactions")} action={<Btn variant="orange" onClick={triggerScore} disabled={scoring}>{scoring ? "Scoring…" : "⚡ Score Now"}</Btn>} />
+          <SectionHeader label="Influential Interactions" count={filteredInteractions.length} open={open.interactions} onToggle={() => tog("interactions")} action={
+              <div style={{ display: "flex", gap: 6 }}>
+                {process.env.NEXT_PUBLIC_APIFY_ENABLED === "true" && (
+                  <Btn variant="secondary" size="sm" onClick={triggerScrape} disabled={scraping}>
+                    {scraping ? "Running…" : "🔍 Scrape IG"}
+                  </Btn>
+                )}
+                <Btn variant="orange" onClick={triggerScore} disabled={scoring}>{scoring ? "Scoring…" : "⚡ Score Now"}</Btn>
+              </div>
+            } />
           {open.interactions && (
             <>
               <Divider />
@@ -1122,7 +1143,14 @@ export default function Dashboard() {
                                 )}
                                 <PlatDot platform={item.platform} size={6} />
                                 <span style={{ background: zoneBg, color: zoneColor, border: `1px solid ${zoneColor}30`, borderRadius: 4, padding: "1px 6px", fontFamily: sans, fontSize: 10, fontWeight: 700 }}>{item.zone}</span>
-                                {item.followers > 0 && <span style={{ fontFamily: sans, fontSize: F.xs, color: T.sub }}>{fmt(item.followers)} subs</span>}
+                                {/* Interaction type badge */}
+                                {item.interaction_type && (
+                                  <span style={{ background: T.well, color: T.sub, border: `1px solid ${T.border}`, borderRadius: 4, padding: "1px 6px", fontFamily: sans, fontSize: 10, fontWeight: 600 }}>
+                                    {item.interaction_type === "follow" ? "👤 follow" : item.interaction_type === "like" ? "♥ like" : item.interaction_type === "mention" ? "@ mention" : "💬 comment"}
+                                  </span>
+                                )}
+                                {item.verified && <span style={{ fontSize: 11 }} title="Verified">✓</span>}
+                                {item.followers > 0 && <span style={{ fontFamily: sans, fontSize: F.xs, color: T.sub }}>{fmt(item.followers)} followers</span>}
                                 {item.comment_count > 1 && <span style={{ fontFamily: sans, fontSize: F.xs, color: T.green, fontWeight: 500 }}>✦ {item.comment_count}×</span>}
                                 <span style={{ marginLeft: "auto", fontFamily: sans, fontSize: F.xs, color: T.dim }}>{timeAgo(item.interacted_at)}</span>
                               </div>
