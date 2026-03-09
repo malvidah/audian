@@ -809,16 +809,13 @@ export default function Dashboard() {
       supabase.from("platform_metrics").select("*").order("snapshot_at", { ascending: false }).limit(10),
       supabase.from("platform_metrics").select("*").order("snapshot_at", { ascending: true }).limit(200),
       supabase.from("platform_comments").select("*").order("published_at", { ascending: false }).limit(100),
-      supabase.from("platform_interactions").select("*, screenshots(thumbnail_url, thumbnail_data, filename)").order("interacted_at", { ascending: false }).limit(50),
+      supabase.from("platform_interactions").select("*").order("interacted_at", { ascending: false }).limit(50),
     ]);
     if (a.data) setConnections(a.data);
     if (b.data) { setMetrics(b.data); if (b.data[0]) setLastSynced(b.data[0].snapshot_at); }
     if (b2.data) setAllMetrics(b2.data);
     if (c.data) setComments(c.data);
-    if (d.data) setInteractions(d.data.map(i => ({
-      ...i,
-      screenshot_thumbnail: i.screenshots?.thumbnail_url || i.screenshots?.thumbnail_data || null,
-    })));
+    if (d.data) setInteractions(d.data);
   }, [session, supabase]);
 
   // Watchlist fetched separately — only on mount and after explicit changes
