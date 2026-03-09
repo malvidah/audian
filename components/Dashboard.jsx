@@ -374,6 +374,18 @@ function ProfileMenu({ session, supabase, connections, onDisconnect, watchlist =
                   <Btn variant="orange" size="sm" onClick={() => fileRef.current?.click()} disabled={uploading}>
                     {uploading ? "Uploading…" : "↑ Upload CSV"}
                   </Btn>
+                  {watchlist.length > 0 && (
+                    <Btn variant="ghost" size="sm" onClick={async () => {
+                      if (!confirm(`Remove all ${watchlist.length} accounts from watchlist?`)) return;
+                      const sess = await supabase.auth.getSession();
+                      const tok = sess.data?.session?.access_token;
+                      await fetch("/api/watchlist", { method: "DELETE", headers: { "Content-Type": "application/json", ...(tok ? { Authorization: `Bearer ${tok}` } : {}) } });
+                      setUploadMsg("✓ Watchlist cleared");
+                      onWatchlistUpdate?.();
+                    }}>
+                      ✕ Clear all
+                    </Btn>
+                  )}
                   {uploadMsg && <span style={{ fontFamily: sans, fontSize: F.xs, color: uploadMsg.startsWith("✓") ? T.green : T.red }}>{uploadMsg}</span>}
                 </div>
                 {watchlist.length > 0 && (

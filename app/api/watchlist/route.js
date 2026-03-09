@@ -66,7 +66,15 @@ export async function DELETE(req) {
   const user = await getUser(req);
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { platform, handle } = await req.json();
+  const text = await req.text();
+  if (!text || text === '{}') {
+    // Empty body = clear entire watchlist
+    const { error } = await adminClient().from('watchlist').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ success: true, cleared: true });
+  }
+
+  const { platform, handle } = JSON.parse(text);
   const { error } = await adminClient()
     .from('watchlist')
     .delete()
