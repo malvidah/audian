@@ -284,8 +284,10 @@ export default function Dashboard() {
                     <div style={{ fontFamily:mono, fontSize:F.sm, color, letterSpacing:"0.08em", marginBottom:8, fontWeight:600 }}>{label}</div>
                     {conn ? <>
                       <div style={{ fontFamily:mono, fontSize:F.sm, color:C.green, marginBottom:4 }}>✓ Connected</div>
-                      {conn.channel_name && <div style={{ fontFamily:mono, fontSize:F.sm, color:C.muted, marginBottom:6, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{conn.channel_name}</div>}
-                      {conn.subscriber_count > 0 && <div style={{ fontFamily:mono, fontSize:F.sm, color:C.text, marginBottom:10 }}>{fmt(conn.subscriber_count)} followers</div>}
+                      {/* Display name: channel_name for YouTube, username for others */}
+                      {(conn.channel_name || conn.username) && <div style={{ fontFamily:mono, fontSize:F.sm, color:C.muted, marginBottom:6, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{conn.channel_name || `@${conn.username}`}</div>}
+                      {/* Follower count: subscriber_count for YouTube, metadata.followers_count for Instagram */}
+                      {(conn.subscriber_count > 0 || conn.metadata?.followers_count > 0) && <div style={{ fontFamily:mono, fontSize:F.sm, color:C.text, marginBottom:10 }}>{fmt(conn.subscriber_count || conn.metadata?.followers_count)} followers</div>}
                       {(id==="youtube"||id==="x") && (
                         <button onClick={()=>triggerSync(id)} disabled={syncing} style={{ fontFamily:mono, fontSize:F.sm, padding:"4px 12px", borderRadius:3, border:`1px solid ${C.accent}66`, background:C.accent+"18", color:C.accent, cursor:syncing?"default":"pointer", letterSpacing:"0.06em" }}>
                           {syncing?"Syncing...":"↻ Sync Now"}

@@ -12,14 +12,15 @@ export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const code  = searchParams.get('code');
   const error = searchParams.get('error');
+  const base  = process.env.NEXT_PUBLIC_APP_URL;
 
-  if (error) return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}?error=instagram_denied`);
-  if (!code)  return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}?error=no_code`);
+  if (error) return NextResponse.redirect(`${base}?error=instagram_denied`);
+  if (!code)  return NextResponse.redirect(`${base}?error=no_code`);
 
   try {
-    const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/instagram/callback`;
+    const redirectUri = `${base}/api/auth/instagram/callback`;
 
-    // Step 1: Exchange code for a Facebook user access token
+    // Step 1: Exchange code for Facebook user access token
     const tokenRes = await fetch('https://graph.facebook.com/v19.0/oauth/access_token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -33,70 +34,97 @@ export async function GET(request) {
     const tokenData = await tokenRes.json();
 
     if (tokenData.error) {
-      console.error('Token exchange error:', tokenData.error);
-      return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}?error=token_exchange_failed`);
+      console.error('Token exchange error:', JSON.stringify(tokenData.error));
+      return NextResponse.redirect(`${base}?error=token_exchange_failed`);
     }
 
     const userAccessToken = tokenData.access_token;
 
-    // Step 2: Get Facebook Pages the user manages
+    // Step 2: Get Facebook Pages the user manages (Instagram must be linked to a Page)
     const pagesRes = await fetch(
-      `https://graph.facebook.com/v19.0/me/accounts?access_token=${userAccessToken}`
+      `https://graph.facebook.com/v19.0/me/accounts?fields=id,name,access_token,instagram_business_account&access_token=${userAccessToken}`
     );
     const pagesData = await pagesRes.json();
 
+    console.log('Pages found:', JSON.stringify(pagesData?.data?.map(p => ({ id: p.id, name: p.name, has_ig: !!p.instagram_business_account }))));
+
     if (!pagesData.data || pagesData.data.length === 0) {
-      console.error('No Facebook Pages found:', pagesData);
-      return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}?error=no_pages_found`);
+      console.error('No Facebook Pages found. Instagram must be linked to a Facebook Page.');
+      return NextResponse.redirect(`${base}?error=no_facebook_pages&hint=Connect_Instagram_to_a_Facebook_Page_first`);
     }
 
-    // Step 3: For each page, find connected Instagram Business Account
-    let igAccount = null;
-    let pageAccessToken = null;
+    // Step 3: Find the page that has an Instagram Business Account linked
+    // Fetch instagram_business_account inline with the pages request above
+    let igAccount   = null;
+    let pageToken   = null;
+    let pageName    = null;
 
     for (const page of pagesData.data) {
-      const igRes = await fetch(
+      if (page.instagram_business_account) {
+        igAccount = page.instagram_business_account;
+        pageToken = page.access_token;
+        pageName  = page.name;
+        break;
+      }
+      // If not returned inline, fetch explicitly
+      const igRes  = await fetch(
         `https://graph.facebook.com/v19.0/${page.id}?fields=instagram_business_account&access_token=${page.access_token}`
       );
       const igData = await igRes.json();
-
       if (igData.instagram_business_account) {
         igAccount = igData.instagram_business_account;
-        pageAccessToken = page.access_token;
+        pageToken = page.access_token;
+        pageName  = page.name;
         break;
       }
     }
 
     if (!igAccount) {
-      console.error('No Instagram Business Account connected to any Facebook Page');
-      return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}?error=no_instagram_business_account`);
+      console.error('No Instagram Business Account found on any page:', pagesData.data.map(p => p.name));
+      return NextResponse.redirect(`${base}?error=no_instagram_on_pages&hint=Link_Instagram_to_your_Facebook_Page_in_Meta_Business_Suite`);
     }
 
-    // Step 4: Fetch Instagram profile + metrics
+    console.log('Found IG account:', igAccount.id, 'on page:', pageName);
+
+    // Step 4: Fetch Instagram profile
     const profileRes = await fetch(
-      `https://graph.facebook.com/v19.0/${igAccount.id}?fields=id,username,followers_count,media_count,profile_picture_url&access_token=${pageAccessToken}`
+      `https://graph.facebook.com/v19.0/${igAccount.id}?fields=id,username,followers_count,media_count,profile_picture_url&access_token=${pageToken}`
     );
     const profile = await profileRes.json();
 
-    // Step 5: Store in Supabase
-    await supabase.from('platform_connections').upsert({
+    if (profile.error) {
+      console.error('Profile fetch error:', JSON.stringify(profile.error));
+      return NextResponse.redirect(`${base}?error=profile_fetch_failed`);
+    }
+
+    console.log('IG profile:', JSON.stringify({ username: profile.username, followers: profile.followers_count }));
+
+    // Step 5: Upsert to Supabase
+    const { error: dbError } = await supabase.from('platform_connections').upsert({
       platform:         'instagram',
       platform_user_id: String(igAccount.id),
       username:         profile.username || 'unknown',
-      access_token:     pageAccessToken,
+      access_token:     pageToken,
       metadata: {
-        followers_count:      profile.followers_count,
-        media_count:          profile.media_count,
-        profile_picture_url:  profile.profile_picture_url,
-        ig_business_id:       igAccount.id,
-        user_access_token:    userAccessToken, // keep for refreshing
+        followers_count:     profile.followers_count,
+        media_count:         profile.media_count,
+        profile_picture_url: profile.profile_picture_url,
+        ig_business_id:      igAccount.id,
+        page_name:           pageName,
+        user_access_token:   userAccessToken,
       },
       updated_at: new Date().toISOString(),
     }, { onConflict: 'platform' });
 
-    return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}?connected=instagram`);
+    if (dbError) {
+      console.error('Supabase upsert error:', JSON.stringify(dbError));
+      return NextResponse.redirect(`${base}?error=db_write_failed`);
+    }
+
+    return NextResponse.redirect(`${base}?connected=instagram`);
+
   } catch (err) {
-    console.error('Instagram OAuth error:', err);
-    return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}?error=oauth_failed`);
+    console.error('Instagram OAuth error:', err.message);
+    return NextResponse.redirect(`${base}?error=oauth_failed`);
   }
 }
