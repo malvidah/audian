@@ -8,9 +8,17 @@ const supabase = createClient(
 
 export const dynamic = 'force-dynamic';
 
+// This route ONLY handles what the Meta basic API does reliably:
+//   - follower count
+//   - post list with permalinks (needed by Apify scrapers)
+//   - engagement totals for the metrics chart
+//
+// ALL interaction data (comments, followers, likers) is scraped via Apify.
+// After saving metrics, it auto-triggers the Apify scraper pipeline.
+
 export async function POST() {
   try {
-    const { data: conns, error } = await supabase
+    const { data: conns } = await supabase
       .from('platform_connections')
       .select('*')
       .eq('platform', 'instagram')
@@ -18,64 +26,37 @@ export async function POST() {
       .limit(1);
 
     const conn = conns?.[0];
-    if (error || !conn) {
-      return NextResponse.json({ error: 'Instagram not connected' }, { status: 400 });
-    }
+    if (!conn) return NextResponse.json({ error: 'Instagram not connected' }, { status: 400 });
 
-    const pageToken = conn.access_token;
-    const igId      = conn.metadata?.ig_business_id || conn.channel_id;
+    const token = conn.access_token;
+    const igId  = conn.channel_id;
 
-    // ── Account-level insights (last 7 days) ──────────────────────────────
-    const since = Math.floor((Date.now() - 7 * 86400000) / 1000);
-    const until = Math.floor(Date.now() / 1000);
-    const insightsRes = await fetch(
-      `https://graph.facebook.com/v19.0/${igId}/insights?` +
-      `metric=impressions,reach,profile_views&period=day&since=${since}&until=${until}&` +
-      `access_token=${pageToken}`
-    );
-    const insightsData = await insightsRes.json();
-
-    const metricTotals = {};
-    if (insightsData.data) {
-      for (const metric of insightsData.data) {
-        metricTotals[metric.name] = metric.values?.reduce((sum, v) => sum + (v.value || 0), 0) || 0;
-      }
-    }
-
-    // ── Profile ───────────────────────────────────────────────────────────
-    const profileRes = await fetch(
-      `https://graph.facebook.com/v19.0/${igId}?fields=followers_count,media_count&access_token=${pageToken}`
-    );
-    const profile = await profileRes.json();
-
-    // ── Recent media ──────────────────────────────────────────────────────
-    const mediaRes = await fetch(
-      `https://graph.facebook.com/v19.0/${igId}/media?` +
-      `fields=id,caption,media_type,timestamp,like_count,comments_count,permalink&` +
-      `limit=20&access_token=${pageToken}`
-    );
-    const mediaData = await mediaRes.json();
+    // ── Profile metrics ───────────────────────────────────────────────────
+    const [profileRes, mediaRes] = await Promise.all([
+      fetch(`https://graph.facebook.com/v19.0/${igId}?fields=followers_count,media_count&access_token=${token}`),
+      fetch(`https://graph.facebook.com/v19.0/${igId}/media?fields=id,caption,media_type,timestamp,like_count,comments_count,permalink&limit=20&access_token=${token}`),
+    ]);
+    const [profile, mediaData] = await Promise.all([profileRes.json(), mediaRes.json()]);
     const posts = mediaData.data || [];
 
+    // ── Update follower count on connection ───────────────────────────────
+    if (profile.followers_count) {
+      await supabase.from('platform_connections')
+        .update({ subscriber_count: profile.followers_count, updated_at: new Date().toISOString() })
+        .eq('platform', 'instagram');
+    }
+
+    // ── Save metrics snapshot (follower trend + post list for Apify) ──────
     const totalLikes    = posts.reduce((s, p) => s + (p.like_count     || 0), 0);
     const totalComments = posts.reduce((s, p) => s + (p.comments_count || 0), 0);
 
-    // ── Update connection with fresh follower count ───────────────────────
-    await supabase.from('platform_connections').update({
-      subscriber_count: profile.followers_count || conn.subscriber_count,
-      updated_at: new Date().toISOString(),
-    }).eq('platform', 'instagram');
-
-    // ── Metrics snapshot ─────────────────────────────────────────────────────
     await supabase.from('platform_metrics').insert({
       platform:       'instagram',
       snapshot_at:    new Date().toISOString(),
       followers:      profile.followers_count || 0,
-      impressions:    metricTotals['impressions']   || 0,
-      reach:          metricTotals['reach']         || 0,
       likes:          totalLikes,
       comments_count: totalComments,
-      videos: posts.slice(0, 20).map(p => ({
+      videos: posts.map(p => ({
         id:        p.id,
         caption:   p.caption?.slice(0, 100),
         type:      p.media_type,
@@ -84,50 +65,34 @@ export async function POST() {
         permalink: p.permalink,
         timestamp: p.timestamp,
       })),
-      raw: {
-        profile_views: metricTotals['profile_views'] || 0,
-        media_count:   profile.media_count,
-      },
     });
 
-    // ── Comments from recent posts ────────────────────────────────────────
-    // Clean up any previously saved null-author comments (from before permission fix)
+    // ── Purge any stale null-author junk from the old API approach ────────
     await supabase.from('platform_comments')
-      .delete()
-      .eq('platform', 'instagram')
-      .is('author_name', null);
+      .delete().eq('platform', 'instagram').is('author_name', null);
 
-    let commentCount = 0;
-    for (const post of posts.slice(0, 5)) {
-      const commentsRes = await fetch(
-        `https://graph.facebook.com/v19.0/${post.id}/comments?` +
-        `fields=id,text,username,from{username,id},timestamp,like_count&limit=25&access_token=${pageToken}`
-      );
-      const commentsData = await commentsRes.json();
-      for (const c of (commentsData.data || [])) {
-        const authorName = c.username || c.from?.username || null;
-        if (!authorName) continue; // skip unattributable comments
-        await supabase.from('platform_comments').upsert({
-          platform:     'instagram',
-          video_id:     post.id,
-          video_title:  post.caption?.slice(0, 100) || post.permalink,
-          author_name:  authorName,
-          content:      c.text,
-          published_at: c.timestamp,
-          synced_at:    new Date().toISOString(),
-        }, { onConflict: 'platform,author_name,content' });
-        commentCount++;
+    // ── Auto-trigger Apify scrapers for ALL interaction data ──────────────
+    const apifyKey = process.env.APIFY_API_KEY;
+    let apifyResult = null;
+    if (apifyKey) {
+      try {
+        const triggerRes = await fetch(
+          `${process.env.NEXT_PUBLIC_APP_URL || 'https://audian.app'}/api/apify/trigger`,
+          { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) }
+        );
+        apifyResult = await triggerRes.json();
+      } catch (e) {
+        console.error('Apify auto-trigger failed:', e.message);
       }
     }
 
     return NextResponse.json({
-      success:     true,
-      followers:   profile.followers_count,
-      impressions: metricTotals['impressions'] || 0,
-      reach:       metricTotals['reach']       || 0,
-      posts:       posts.length,
-      comments:    commentCount,
-      likes:       totalLikes,
+      success:   true,
+      followers: profile.followers_count || 0,
+      posts:     posts.length,
+      likes:     totalLikes,
+      comments_count: totalComments,
+      apify:     apifyResult?.message || (apifyKey ? 'triggered' : 'no APIFY_API_KEY set'),
     });
 
   } catch (err) {
