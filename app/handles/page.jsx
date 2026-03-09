@@ -108,7 +108,28 @@ export default function HandlesPage() {
         totalErrors   += d.errors  || 0;
       }
 
-      setUploadMsg(`✓ ${totalImported} handles imported${totalErrors ? ` (${totalErrors} errors)` : ""}`);
+      setUploadMsg(`✓ ${totalImported} handles imported${totalErrors ? ` (${totalErrors} errors)` : ""} — enriching…`);
+
+      // Reload handles and enrich those missing bios/followers
+      const refreshed = await fetch("/api/handles").then(r => r.json());
+      const PLATFORMS = ["instagram", "x", "youtube", "linkedin"];
+      const toEnrich = (refreshed.handles || [])
+        .filter(h => !h.bio || PLATFORMS.some(p => h[`handle_${p}`] && !h[`followers_${p}`]))
+        .map(h => h.id)
+        .slice(0, 200);
+
+      const ENRICH_CHUNK = 50;
+      let enriched = 0;
+      for (let i = 0; i < toEnrich.length; i += ENRICH_CHUNK) {
+        setUploadMsg(`Enriching… ${i + 1}–${Math.min(i + ENRICH_CHUNK, toEnrich.length)} of ${toEnrich.length}`);
+        const er = await fetch("/api/enrich/handles", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids: toEnrich.slice(i, i + ENRICH_CHUNK) }),
+        }).then(r => r.json());
+        enriched += er.enriched || 0;
+      }
+
+      setUploadMsg(`✓ ${totalImported} imported, ${enriched} enriched`);
       load();
     } catch (e) { setUploadMsg("✗ Upload failed"); }
     setUploading(false);
