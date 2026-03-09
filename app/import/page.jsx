@@ -40,17 +40,24 @@ const INTERACTION_ICONS = {
   tag: "🏷", view: "👁", unknown: "?",
 };
 
-// Zone is fully computed from profile data — never set manually except Elite button
-// Requires bio OR followers to graduate from IGNORE. Name alone is not enough.
+// Zone rules:
+// wiki + 100k+  → INFLUENTIAL
+// 100k+, no wiki → SIGNAL
+// wiki, under 100k → SIGNAL
+// manual bio (not wiki), any followers → SIGNAL
+// neither → IGNORE
 function computeZone(item) {
   if (item.zone === "ELITE" || item.on_watchlist) return "ELITE";
-  const followers = parseInt(item.followers) || 0;
-  const hasBio      = !!(item.bio?.trim());
-  const hasFollowers = followers > 0;
-  if (!hasBio && !hasFollowers) return "IGNORE";
-  if (followers >= 10000) return "INFLUENTIAL";
-  if (item.verified && followers >= 1000) return "INFLUENTIAL";
-  return "SIGNAL";
+  const followers    = parseInt(item.followers) || 0;
+  const hasWiki      = !!item._wikiBio;
+  const hasManualBio = !!(item.bio?.trim()) && !item._wikiBio;
+  const highFollowers = followers >= 100000;
+
+  if (hasWiki && highFollowers) return "INFLUENTIAL";
+  if (highFollowers)            return "SIGNAL";
+  if (hasWiki)                  return "SIGNAL";
+  if (hasManualBio)             return "SIGNAL";
+  return "IGNORE";
 }
 
 function ZoneBadge({ zone }) {

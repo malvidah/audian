@@ -25,7 +25,7 @@ async function resolveAccount(platform, cleanHandle, item, now) {
     const handleCol    = `handle_${platform}`;
     const followersCol = `followers_${platform}`;
     const verifiedCol  = `verified_${platform}`;
-    const incomingCategory = item.zone || 'SIGNAL';
+    const incomingCategory = item.zone || 'IGNORE'; // trust frontend computeZone
 
     let { data: account, error: fetchErr } = await supabase
       .from('accounts')
@@ -93,7 +93,7 @@ export async function POST(req) {
 
       const followers = item.followers || null;
       const verified  = item.verified  || false;
-      const zone      = account?.category || item.zone || 'SIGNAL';
+      const zone      = account?.category || item.zone || 'IGNORE';
       const score     = zone === 'ELITE' ? 85 :
         Math.min(100, followerScore(followers) + (verified ? 15 : 0));
 
