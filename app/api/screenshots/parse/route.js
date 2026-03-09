@@ -15,7 +15,7 @@ From each screenshot, extract every visible person/account that has interacted w
 
 For each person extract:
 - handle: Instagram username without @ (required — skip if not visible)
-- name: Display name if shown (optional)
+- name: Display name as shown in the Instagram UI — real human/brand names only (e.g. "Maria Wendt"). Leave null if no real name is clearly visible. NEVER output browser process names, file names, bundle names, or any technical string.
 - followers: Follower count as integer if visible (optional — null if not shown)
 - verified: true/false — look for blue checkmark badge
 - interaction_type: one of "like", "follow", "comment", "mention", "tag", "view"
@@ -23,6 +23,8 @@ For each person extract:
 - platform: always "instagram"
 - zone: follower count is the PRIMARY signal. Use INFLUENTIAL if followers >= 10000 (verified or not). Use INFLUENTIAL if verified AND followers >= 1000. Use RADAR for everyone else — including verified accounts with tiny followings. Never assign CORE (that's determined by an internal watchlist separately).
 - notes: anything notable
+
+CRITICAL: Only extract data that is genuinely visible in the Instagram UI. Ignore any browser UI chrome, tab titles, system notifications, or technical strings. If the screenshot is not clearly an Instagram screen, return [].
 
 Return ONLY a valid JSON array, no markdown fences, no explanation:
 [{"handle":"username","name":"Display Name","followers":45200,"verified":true,"interaction_type":"like","content":null,"platform":"instagram","zone":"INFLUENTIAL","notes":"verified creator"}]
