@@ -1,5 +1,5 @@
 "use client";
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 
 // ── Design tokens (match Dashboard) ──────────────────────────────────────────
 const T = {
@@ -161,6 +161,7 @@ function InteractionRow({ item, index, onChange, onRemove }) {
               @{item.handle}
             </a>
             {item.verified && <span title="Verified" style={{ color: "#1D9BF0", fontSize: 12 }}>✓</span>}
+            {item._autofilled && <span title="Known from your Elite list" style={{ color: T.accent, fontSize: 11, fontWeight: 700 }}>★</span>}
           </div>
           {/* Display name inline editable */}
           <EditableCell value={item.name} placeholder="add name"
@@ -346,6 +347,32 @@ export default function ImportPage() {
   const [enriching, setEnriching] = useState(false);
   const [enrichProgress, setEnrichProgress] = useState(null);
   const [showManualAdd, setShowManualAdd] = useState(false);
+  const [eliteProfiles, setEliteProfiles] = useState({}); // handle → profile data
+
+  // Load known elite profiles on mount for autofill
+  useEffect(() => {
+    fetch("/api/elite/profiles")
+      .then(r => r.json())
+      .then(d => { if (d.profiles) setEliteProfiles(d.profiles); })
+      .catch(() => {});
+  }, []);
+
+  // Autofill helper — merges elite profile data into a parsed interaction
+  const autofillElite = (interaction) => {
+    const h = (interaction.handle || "").toLowerCase().replace(/^@/, "");
+    const known = eliteProfiles[h];
+    if (!known) return interaction;
+    return {
+      ...interaction,
+      name:        known.name     || interaction.name,
+      followers:   known.followers ?? interaction.followers,
+      verified:    known.verified  ?? interaction.verified,
+      avatar_url:  known.avatar_url || interaction.avatar_url,
+      zone:        "ELITE",          // always ELITE if on the list
+      on_watchlist: true,
+      _autofilled: true,
+    };
+  };
 
   // Convert file to base64
   const toBase64 = (file) => new Promise((res, rej) => {
@@ -429,7 +456,9 @@ export default function ImportPage() {
       setAllInteractions(prev => {
         // Deduplicate by handle — prefer existing, but update if new data has followers
         const map = new Map(prev.map(i => [i.handle?.toLowerCase(), i]));
-        for (const item of newInteractions) {
+        for (const rawItem of newInteractions) {
+          // Autofill known elite profile data before merging
+          const item = autofillElite(rawItem);
           const key = item.handle?.toLowerCase();
           if (!key) continue;
           if (!map.has(key)) {
@@ -440,13 +469,17 @@ export default function ImportPage() {
             const existTypes = existing.interaction_type ? [existing.interaction_type] : [];
             const newTypes = item.interaction_type ? [item.interaction_type] : [];
             const allTypes = [...new Set([...existTypes, ...newTypes])].join(",");
-            map.set(key, {
+            const merged = {
               ...existing,
               followers: item.followers || existing.followers,
               verified: item.verified || existing.verified,
               interaction_type: allTypes,
-              zone: ((item.followers || 0) >= 10000 || (item.verified && (item.followers || 0) >= 1000)) ? "INFLUENTIAL" : existing.zone,
-            });
+            };
+            // Zone: elite list wins, then follower threshold
+            merged.zone = item.on_watchlist ? "ELITE" :
+              ((merged.followers || 0) >= 10000 || (merged.verified && (merged.followers || 0) >= 1000))
+                ? "INFLUENTIAL" : existing.zone;
+            map.set(key, merged);
           }
         }
         return Array.from(map.values());

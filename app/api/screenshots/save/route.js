@@ -79,7 +79,17 @@ export async function POST(req) {
       }, { onConflict: 'platform,handle' });
 
       if (error) errors.push(`${item.handle}: ${error.message}`);
-      else saved++;
+      else {
+        saved++;
+        // If marked ELITE, add to watchlist so it persists for future imports
+        if (zone === 'ELITE') {
+          await supabase.from('watchlist').upsert({
+            platform: item.platform || 'instagram',
+            handle:   item.handle.toLowerCase().replace(/^@/, ''),
+            label:    item.name || item.handle,
+          }, { onConflict: 'platform,handle' });
+        }
+      }
     }
 
     return NextResponse.json({ saved, errors: errors.length, message: `Saved ${saved} interactions` });
