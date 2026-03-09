@@ -807,8 +807,6 @@ export default function Dashboard() {
   const [comments, setComments]     = useState([]);
   const [interactions, setInteractions] = useState([]);
   const [syncing, setSyncing]       = useState(null);
-  const [scoring, setScoring]         = useState(false);
-  const [scraping, setScraping]       = useState(false);
   const [watchlist, setWatchlist]     = useState([]);
   const [watchlistTotal, setWatchlistTotal] = useState(0);
   const [syncMsg, setSyncMsg]       = useState("");
@@ -875,63 +873,11 @@ export default function Dashboard() {
       else {
         setSyncMsg(`✓ ${p} synced — ${data.videos_synced || data.tweets_synced || data.posts || 0} posts`);
         await loadData();
-        // Auto-score after sync (non-blocking)
-        fetch("/api/score", { method: "POST" }).then(r => r.json()).then(d => {
-          if (d.scored?.total > 0) setSyncMsg(prev => prev + ` · ${d.scored.total} interactions scored`);
-          loadData();
-        }).catch(() => {});
-      }
     } catch (e) { setSyncMsg(`✗ ${e.message}`); }
     setSyncing(null);
   }
 
-  async function triggerScore() {
-    setScoring(true); setSyncMsg("Checking for new interactions…");
-    try {
-      // 1. Poll Apify for any completed runs (fallback if webhooks didn't fire)
-      const pollRes = await fetch("/api/apify/poll");
-      const pollData = await pollRes.json().catch(() => ({}));
-      const pollMsg = pollData.results?.filter(r => r.processed > 0).length > 0
-        ? `Imported ${pollData.results.filter(r => r.processed > 0).length} scraper run(s) · `
-        : '';
 
-      // 2. Rescore everything with engagement-based scoring
-      setSyncMsg("Scoring interactions…");
-      const scoreRes = await fetch("/api/score", { method: "POST" });
-      const scoreData = await scoreRes.json();
-      if (scoreData.error) { setSyncMsg(`✗ ${scoreData.error}`); setScoring(false); return; }
-
-      // 3. Enrich top SIGNAL profiles with real follower counts (uses existing IG token, no Apify)
-      setSyncMsg("Enriching profiles…");
-      const enrichRes = await fetch("/api/enrich", { method: "POST" });
-      const enrichData = await enrichRes.json().catch(() => ({}));
-      const enrichMsg = enrichData.enriched > 0 ? ` · enriched ${enrichData.enriched} profiles` : '';
-
-      // 4. Final rescore with enriched data
-      if (enrichData.enriched > 0) {
-        await fetch("/api/score", { method: "POST" });
-      }
-
-      setSyncMsg(`✓ ${pollMsg}${scoreData.message}${enrichMsg}`);
-      await loadData();
-    } catch (e) { setSyncMsg(`✗ ${e.message}`); }
-    setScoring(false);
-  }
-
-  async function triggerScrape() {
-    setScraping(true); setSyncMsg("");
-    try {
-      const res  = await fetch("/api/apify/trigger", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ types: ["enrich", "recent_posts"] }) });
-      const data = await res.json();
-      if (data.error) setSyncMsg("✗ " + data.error);
-      else {
-        const runCount = (data.runs || []).filter(r => r.runId).length;
-        if (runCount === 0) setSyncMsg("✗ No Apify API key set — add APIFY_API_KEY to Vercel env vars");
-        else setSyncMsg(`✓ ${data.message}`);
-      }
-    } catch (e) { setSyncMsg("✗ " + e.message); }
-    setScraping(false);
-  }
 
   const tog = k => setOpen(s => ({ ...s, [k]: !s[k] }));
 
@@ -1135,13 +1081,7 @@ export default function Dashboard() {
         <Card style={{ marginBottom: 12, overflow: "hidden" }}>
           <SectionHeader label="Interactions" count={filteredInteractions.length} open={open.interactions} onToggle={() => tog("interactions")} action={
               <div style={{ display: "flex", gap: 6 }}>
-                {connections.some(c => c.platform === "instagram") && (
-                  <Btn variant="secondary" size="sm" onClick={triggerScrape} disabled={scraping}>
-                    {scraping ? "Syncing…" : "↻ Sync"}
-                  </Btn>
-                )}
                 <Btn variant="ghost" onClick={() => window.open("/import", "_blank")} style={{ fontSize: F.xs }}>📸 Import</Btn>
-                <Btn variant="orange" onClick={triggerScore} disabled={scoring}>{scoring ? "Scoring…" : "⚡ Score Now"}</Btn>
               </div>
             } />
           {open.interactions && (
@@ -1150,9 +1090,9 @@ export default function Dashboard() {
               <div style={{ padding: filteredInteractions.length === 0 ? "24px 20px" : "8px 0" }}>
                 {filteredInteractions.length === 0 ? (
                   <div style={{ textAlign: "center" }}>
-                    <div style={{ fontSize: 28, marginBottom: 8 }}>⭐</div>
-                    <div style={{ fontFamily: sans, fontSize: F.sm, color: T.dim, marginBottom: 4 }}>Hit ⚡ Score Now after syncing to surface your most engaged audience members.</div>
-                    <div style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>Ranked by comment engagement, repeat visits, and niche alignment. Click ↗ to vet each profile manually.</div>
+                    <div style={{ fontSize: 28, marginBottom: 8 }}>📸</div>
+                    <div style={{ fontFamily: sans, fontSize: F.sm, color: T.dim, marginBottom: 4 }}>Import screenshots to track who's engaging with your content.</div>
+                    <div style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>Drop Instagram notifications, likers, followers, or comment sections into the Import tool.</div>
                   </div>
                 ) : (
                   <>
@@ -1163,7 +1103,7 @@ export default function Dashboard() {
                           <span style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>{filteredInteractions.filter(i => i.zone === zone).length}</span>
                         </div>
                       ))}
-                      <span style={{ marginLeft: "auto", fontFamily: sans, fontSize: F.xs, color: T.dim }}>Click ↗ to manually vet each profile</span>
+                      
                     </div>
                     <Divider />
                     {/* Table header */}
@@ -1173,7 +1113,7 @@ export default function Dashboard() {
                       ))}
                     </div>
                     {filteredInteractions
-                      .sort((a, b) => (b.influence_score || 0) - (a.influence_score || 0))
+                      .sort((a, b) => new Date(b.interacted_at) - new Date(a.interacted_at))
                       .map(item => {
                         const zoneColor = item.zone === "ELITE" ? T.accent : item.zone === "INFLUENTIAL" ? "#F59E0B" : "#6B7280";
                         const zoneBg    = item.zone === "ELITE" ? T.accentBg : item.zone === "INFLUENTIAL" ? "#FFFBEB" : T.well;
