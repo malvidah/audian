@@ -91,6 +91,12 @@ export async function POST() {
     });
 
     // ── Comments from recent posts ────────────────────────────────────────
+    // Clean up any previously saved null-author comments (from before permission fix)
+    await supabase.from('platform_comments')
+      .delete()
+      .eq('platform', 'instagram')
+      .is('author_name', null);
+
     let commentCount = 0;
     for (const post of posts.slice(0, 5)) {
       const commentsRes = await fetch(

@@ -69,6 +69,9 @@ export async function POST() {
   try {
     const results = { youtube: 0, instagram: 0, errors: [] };
 
+    // Clean stale null-author comments before scoring
+    await supabase.from('platform_comments').delete().is('author_name', null);
+
     // Load watchlist
     const { data: wlRows } = await supabase.from('watchlist').select('platform,handle');
     const watchlistSets = {};
