@@ -147,6 +147,163 @@ function Btn({ children, onClick, disabled, variant = "ghost", size = "sm" }) {
   );
 }
 
+
+// ─── Profile Menu ─────────────────────────────────────────────────────────────
+const PLAT_META = [
+  { id: "youtube",   label: "YouTube",   icon: "▶", color: "#FF0000", authUrl: "/api/auth/youtube" },
+  { id: "instagram", label: "Instagram", icon: "◉", color: "#E1306C", authUrl: "/api/auth/instagram" },
+  { id: "x",        label: "X / Twitter",icon: "𝕏", color: "#000000", authUrl: "/api/auth/x" },
+  { id: "linkedin",  label: "LinkedIn",  icon: "in", color: "#0077B5", authUrl: "/api/auth/linkedin" },
+];
+
+function Toggle({ on, onClick }) {
+  const [hov, setHov] = useState(false);
+  return (
+    <button onClick={onClick}
+      onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
+      style={{
+        width: 40, height: 22, borderRadius: 11, border: "none", cursor: "pointer",
+        background: on ? T.accent : (hov ? T.border2 : T.border),
+        position: "relative", transition: "background 0.2s", flexShrink: 0,
+        boxShadow: on ? `0 0 0 3px ${T.accent}25` : "none",
+      }}>
+      <span style={{
+        position: "absolute", top: 3, left: on ? 21 : 3,
+        width: 16, height: 16, borderRadius: "50%", background: "#fff",
+        transition: "left 0.18s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+        display: "block",
+      }} />
+    </button>
+  );
+}
+
+function ProfileMenu({ session, supabase, connections, onDisconnect }) {
+  const [open, setOpen] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(null);
+  const menuRef = useRef(null);
+  const email = session?.user?.email || "";
+  const initial = email[0]?.toUpperCase() || "?";
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    function handle(e) {
+      if (menuRef.current && !menuRef.current.contains(e.target)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handle);
+    return () => document.removeEventListener("mousedown", handle);
+  }, [open]);
+
+  async function disconnect(platformId) {
+    setDisconnecting(platformId);
+    await onDisconnect(platformId);
+    setDisconnecting(null);
+  }
+
+  return (
+    <div ref={menuRef} style={{ position: "relative" }}>
+      {/* Avatar badge */}
+      <button onClick={() => setOpen(o => !o)}
+        style={{
+          width: 32, height: 32, borderRadius: "50%",
+          background: open ? T.accent : `linear-gradient(135deg, ${T.accent} 0%, #ff9060 100%)`,
+          border: open ? `2px solid ${T.accent}` : "2px solid transparent",
+          boxShadow: open ? `0 0 0 3px ${T.accent}30` : "none",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          cursor: "pointer", transition: "all 0.15s",
+          fontFamily: sans, fontSize: 13, fontWeight: 700, color: "#fff",
+        }}>
+        {initial}
+      </button>
+
+      {/* Dropdown */}
+      {open && (
+        <div style={{
+          position: "absolute", top: "calc(100% + 10px)", right: 0,
+          width: 280, background: T.card,
+          border: `1px solid ${T.border}`, borderRadius: 14,
+          boxShadow: "0 8px 40px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06)",
+          zIndex: 500, overflow: "hidden",
+          animation: "fadeSlideDown 0.12s ease-out",
+        }}>
+          <style>{`
+            @keyframes fadeSlideDown {
+              from { opacity: 0; transform: translateY(-6px); }
+              to   { opacity: 1; transform: translateY(0); }
+            }
+          `}</style>
+
+          {/* Header */}
+          <div style={{ padding: "16px 18px 14px", borderBottom: `1px solid ${T.border}` }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{
+                width: 38, height: 38, borderRadius: "50%",
+                background: `linear-gradient(135deg, ${T.accent} 0%, #ff9060 100%)`,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontFamily: sans, fontSize: 15, fontWeight: 700, color: "#fff", flexShrink: 0,
+              }}>{initial}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{email.split("@")[0]}</div>
+                <div style={{ fontFamily: sans, fontSize: F.xs, color: T.dim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{email}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Platform connections */}
+          <div style={{ padding: "10px 0" }}>
+            <div style={{ padding: "4px 18px 8px", fontFamily: sans, fontSize: 10, fontWeight: 600, color: T.dim, letterSpacing: "0.06em", textTransform: "uppercase" }}>Connections</div>
+            {PLAT_META.map(p => {
+              const conn = connections.find(c => c.platform === p.id);
+              const isConnected = !!conn;
+              const isLoading = disconnecting === p.id;
+              return (
+                <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 18px" }}>
+                  {/* Platform icon */}
+                  <div style={{
+                    width: 28, height: 28, borderRadius: 7, flexShrink: 0,
+                    background: p.color + "14",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 12, color: p.color, fontWeight: 700,
+                  }}>{p.icon}</div>
+                  {/* Label + handle */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 500, color: T.text }}>{p.label}</div>
+                    {conn?.channel_name && (
+                      <div style={{ fontFamily: sans, fontSize: F.xs, color: T.dim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{conn.channel_name}</div>
+                    )}
+                  </div>
+                  {/* Toggle — connects or disconnects */}
+                  {isLoading ? (
+                    <span style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>…</span>
+                  ) : isConnected ? (
+                    <Toggle on={true} onClick={() => disconnect(p.id)} />
+                  ) : (
+                    <a href={p.authUrl} style={{ textDecoration: "none" }}>
+                      <Toggle on={false} onClick={() => {}} />
+                    </a>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Footer */}
+          <div style={{ borderTop: `1px solid ${T.border}`, padding: "10px 18px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <a href="https://audian.app" target="_blank" rel="noreferrer"
+              style={{ fontFamily: sans, fontSize: F.xs, color: T.sub, textDecoration: "none", fontWeight: 500 }}>
+              Learn more ↗
+            </a>
+            <button onClick={() => supabase.auth.signOut()}
+              style={{ background: "none", border: "none", cursor: "pointer", fontFamily: sans, fontSize: F.xs, color: T.sub, fontWeight: 500 }}>
+              Sign out →
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Sign In ──────────────────────────────────────────────────────────────────
 function SignIn({ supabase }) {
   const [email, setEmail] = useState("");
@@ -673,7 +830,10 @@ export default function Dashboard() {
         {/* Right side */}
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
           {lastSynced && <span style={{ fontSize: F.xs, color: T.dim }}>synced {timeAgo(lastSynced)}</span>}
-          <button onClick={() => supabase.auth.signOut()} style={{ background: T.well, border: `1px solid ${T.border}`, borderRadius: 8, padding: "5px 12px", cursor: "pointer", fontFamily: sans, fontSize: F.xs, color: T.sub, fontWeight: 500 }}>Sign out</button>
+          <ProfileMenu session={session} supabase={supabase} connections={connections} onDisconnect={async (platform) => {
+            await supabase.from("platform_connections").delete().eq("platform", platform);
+            await loadData();
+          }} />
         </div>
       </div>
 
