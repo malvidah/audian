@@ -196,7 +196,11 @@ function ProfileMenu({ session, supabase, connections, onDisconnect }) {
 
   async function disconnect(platformId) {
     setDisconnecting(platformId);
-    await onDisconnect(platformId);
+    try {
+      await onDisconnect(platformId);
+    } catch(e) {
+      console.error("Disconnect error:", e);
+    }
     setDisconnecting(null);
   }
 
@@ -278,9 +282,7 @@ function ProfileMenu({ session, supabase, connections, onDisconnect }) {
                   ) : isConnected ? (
                     <Toggle on={true} onClick={() => disconnect(p.id)} />
                   ) : (
-                    <a href={p.authUrl} style={{ textDecoration: "none" }}>
-                      <Toggle on={false} onClick={() => {}} />
-                    </a>
+                    <Toggle on={false} onClick={() => { window.location.href = p.authUrl; }} />
                   )}
                 </div>
               );
@@ -830,8 +832,10 @@ export default function Dashboard() {
         {/* Right side */}
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
           {lastSynced && <span style={{ fontSize: F.xs, color: T.dim }}>synced {timeAgo(lastSynced)}</span>}
-          <ProfileMenu session={session} supabase={supabase} connections={connections} onDisconnect={async (platform) => {
-            await supabase.from("platform_connections").delete().eq("platform", platform);
+          <ProfileMenu session={session} supabase={supabase} connections={connections} onDisconnect={async (platformId) => {
+            const res = await fetch(`/api/disconnect/${platformId}`, { method: "DELETE" });
+            const data = await res.json();
+            if (!res.ok) console.error("Disconnect error:", data.error);
             await loadData();
           }} />
         </div>
