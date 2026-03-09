@@ -65,20 +65,26 @@ export async function POST(req) {
       const handleId = await upsertHandle(item, platform, cleanHandle, now);
       if (!handleId) { errors.push(`${cleanHandle}: could not upsert handle`); continue; }
 
-      // 2. Insert interaction event(s)
+      // 2. Insert interaction event(s) — count handle save regardless
+      saved++;
       const types = (item.interaction_type || 'unknown').split(',').map(t => t.trim()).filter(Boolean);
       for (const type of types) {
+        const interactedAt = item.interacted_at || item.interaction_date || now;
         const { error } = await supabase.from('interactions').insert({
           handle_id:        handleId,
           platform,
           interaction_type: type,
           content:          item.content?.slice(0, 2000) || null,
           screenshot_id:    item.screenshot_id || null,
-          interacted_at:    now,
+          interacted_at:    interactedAt,
           synced_at:        now,
         });
-        if (error) errors.push(`${cleanHandle}/${type}: ${error.message}`);
-        else saved++;
+        if (error) {
+          // Table missing = schema not set up yet — log but don't fail the save
+          const isSchemaError = error.message?.includes('schema cache') || error.message?.includes('does not exist');
+          if (!isSchemaError) errors.push(`${cleanHandle}/${type}: ${error.message}`);
+          console.error('[save] interactions insert error:', error.message, '— handle saved OK');
+        }
       }
     }
 
