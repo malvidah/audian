@@ -249,13 +249,21 @@ function ProfileMenu({ session, supabase, connections, onDisconnect, watchlist =
         else           entries.push({ platform: "instagram", handle: parts[0].replace(/^@/, "").toLowerCase(), label: parts[parts.length - 1] });
       }
     }
+    // Deduplicate by platform+handle
+    const seen = new Set();
+    const deduped = entries.filter(e => {
+      const key = `${e.platform}:${e.handle}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
     try {
       const sess = await supabase.auth.getSession();
       const tok = sess.data?.session?.access_token;
-      const res = await fetch("/api/watchlist", { method: "POST", headers: { "Content-Type": "application/json", ...(tok ? { Authorization: `Bearer ${tok}` } : {}) }, body: JSON.stringify({ entries }) });
+      const res = await fetch("/api/watchlist", { method: "POST", headers: { "Content-Type": "application/json", ...(tok ? { Authorization: `Bearer ${tok}` } : {}) }, body: JSON.stringify({ entries: deduped }) });
       const data = await res.json();
       if (data.error) setUploadMsg("✗ " + data.error);
-      else { setUploadMsg(`✓ ${data.added || entries.length} accounts added`); onWatchlistUpdate?.(); }
+      else { setUploadMsg(`✓ ${data.added || deduped.length} accounts added`); onWatchlistUpdate?.(); }
     } catch { setUploadMsg("✗ Upload failed"); }
     setUploading(false);
   }
