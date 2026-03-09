@@ -37,10 +37,10 @@ function computeScore({ commentLikes=0, replyCount=0, commentCount=1, contentLen
 }
 
 function getZone(score, onWatchlist, ytSubscribers = 0) {
-  if (onWatchlist)                          return 'INFLUENTIAL';
-  if (!onWatchlist && ytSubscribers >= 5000) return 'FLAGGED';
-  if (score >= 60)                           return 'FLAGGED'; // high score but unknown
-  if (score >= 30)                           return 'CORE';
+  if (onWatchlist)              return 'CORE';        // explicitly watched accounts
+  if (ytSubscribers >= 5000)    return 'INFLUENTIAL'; // high follower count, not on list
+  if (score >= 60)              return 'INFLUENTIAL'; // high engagement signal
+  if (score >= 20)              return 'RADAR';       // promising but unverified
   return 'RADAR';
 }
 

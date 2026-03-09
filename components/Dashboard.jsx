@@ -323,14 +323,14 @@ function ProfileMenu({ session, supabase, connections, onDisconnect, watchlist =
           <div style={{ borderTop: `1px solid ${T.border}` }}>
             <button onClick={() => setWatchlistOpen(o => !o)}
               style={{ width: "100%", padding: "11px 18px", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 8, textAlign: "left" }}>
-              <span style={{ fontFamily: sans, fontSize: F.sm, color: T.text, fontWeight: 500 }}>👁 Listen for accounts</span>
+              <span style={{ fontFamily: sans, fontSize: F.sm, color: T.text, fontWeight: 500 }}>👁 Watch core accounts</span>
               <span style={{ marginLeft: "auto", fontFamily: sans, fontSize: F.xs, color: T.dim }}>{watchlist.length > 0 ? `${watchlist.length} watching` : "Upload CSV"}</span>
               <span style={{ color: T.dim, fontSize: F.xs, transform: watchlistOpen ? "rotate(180deg)" : "none", display: "inline-block", transition: "transform 0.15s" }}>▾</span>
             </button>
             {watchlistOpen && (
               <div style={{ padding: "0 18px 14px" }}>
                 <div style={{ fontFamily: sans, fontSize: F.xs, color: T.sub, marginBottom: 10, lineHeight: 1.5 }}>
-                  Upload a CSV of influential accounts to watch. When they interact with your content they'll be marked <strong>INFLUENTIAL</strong>. Others with high follower counts are <strong>FLAGGED</strong>.
+                  Upload a CSV of your core accounts to watch. When they interact with your content they'll be marked <strong>CORE</strong>. Others with high follower counts are <strong>INFLUENTIAL</strong>. Promising accounts are <strong>RADAR</strong>.
                 </div>
                 <div style={{ fontFamily: sans, fontSize: 10, color: T.dim, marginBottom: 8 }}>
                   CSV format: <code style={{ background: T.well, padding: "1px 4px", borderRadius: 3 }}>handle</code> or <code style={{ background: T.well, padding: "1px 4px", borderRadius: 3 }}>platform,handle</code> or <code style={{ background: T.well, padding: "1px 4px", borderRadius: 3 }}>platform,handle,label</code>
@@ -1040,7 +1040,7 @@ export default function Dashboard() {
                 ) : (
                   <>
                     <div style={{ padding: "10px 20px 6px", display: "flex", gap: 16, alignItems: "center" }}>
-                      {[["INFLUENTIAL", T.accent, T.accentBg], ["FLAGGED", "#F59E0B", "#FFFBEB"], ["CORE", T.blue, T.blueBg], ["RADAR", T.sub, T.well]].map(([zone, color, bg]) => (
+                      {[["CORE", T.accent, T.accentBg], ["INFLUENTIAL", "#F59E0B", "#FFFBEB"], ["RADAR", T.sub, T.well]].map(([zone, color, bg]) => (
                         <div key={zone} style={{ display: "flex", alignItems: "center", gap: 5 }}>
                           <span style={{ background: bg, color, border: `1px solid ${color}30`, borderRadius: 4, padding: "1px 6px", fontFamily: sans, fontSize: 10, fontWeight: 700 }}>{zone}</span>
                           <span style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>{filteredInteractions.filter(i => i.zone === zone).length}</span>
@@ -1052,8 +1052,8 @@ export default function Dashboard() {
                     {filteredInteractions
                       .sort((a, b) => (b.influence_score || 0) - (a.influence_score || 0))
                       .map(item => {
-                        const zoneColor = item.zone === "INFLUENTIAL" ? T.accent : item.zone === "FLAGGED" ? "#F59E0B" : item.zone === "CORE" ? T.blue : T.sub;
-                        const zoneBg    = item.zone === "INFLUENTIAL" ? T.accentBg : item.zone === "FLAGGED" ? "#FFFBEB" : item.zone === "CORE" ? T.blueBg : T.well;
+                        const zoneColor = item.zone === "CORE" ? T.accent : item.zone === "INFLUENTIAL" ? "#F59E0B" : item.zone === "RADAR" ? T.sub : T.dim;
+                        const zoneBg    = item.zone === "CORE" ? T.accentBg : item.zone === "INFLUENTIAL" ? "#FFFBEB" : T.well;
                         return (
                           <div key={item.id} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "13px 20px", borderBottom: `1px solid ${T.border}` }}>
                             <div style={{ width: 36, height: 36, borderRadius: "50%", background: zoneBg, border: `1.5px solid ${zoneColor}40`, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: sans, fontSize: F.sm, color: zoneColor, fontWeight: 700, flexShrink: 0 }}>
