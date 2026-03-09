@@ -17,30 +17,24 @@ function mapZone(label, sourceList, fallback) {
   return fallback;
 }
 
-async function upsertRow(row) {
-  const matchCol = row.handle_x ? 'handle_x'
-    : row.handle_instagram ? 'handle_instagram'
-    : row.handle_youtube   ? 'handle_youtube'
-    : 'handle_linkedin';
-  const matchVal = row[matchCol];
-
-  const { data: existing } = await supabase
-    .from('handles')
-    .select('id, zone')
-    .eq(matchCol, matchVal)
-    .maybeSingle();
-
-  if (existing) {
-    const zone = existing.zone === 'ELITE' ? 'ELITE' : row.zone;
-    const { error } = await supabase
+// Bulk upsert a bucket of rows that all share the same primary handle column.
+// Constraint names must match what exists in Supabase (handles_handle_*_key).
+async function bulkUpsert(rows, conflictCol) {
+  const CHUNK = 500;
+  let imported = 0;
+  const errors = [];
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    const { error, count } = await supabase
       .from('handles')
-      .update({ ...row, zone, updated_at: new Date().toISOString() })
-      .eq('id', existing.id);
-    return error ? error.message : null;
+      .upsert(rows.slice(i, i + CHUNK), {
+        onConflict: conflictCol,
+        ignoreDuplicates: false,
+        count: 'exact',
+      });
+    if (error) errors.push(error.message);
+    else imported += count ?? rows.slice(i, i + CHUNK).length;
   }
-
-  const { error } = await supabase.from('handles').insert(row);
-  return error ? error.message : null;
+  return { imported, errors };
 }
 
 export async function POST(req) {
@@ -113,20 +107,26 @@ export async function POST(req) {
 
     if (!rows.length) return NextResponse.json({ imported: 0, skipped, errors: 0 });
 
-    // Parallel batches of 50 — fast enough for 2700+ rows within 60s
-    const BATCH = 50;
-    let imported = 0;
-    const errors = [];
+    // Bucket by primary platform handle, then bulk upsert each bucket in parallel
+    const xRows  = rows.filter(r => r.handle_x);
+    const igRows = rows.filter(r => !r.handle_x && r.handle_instagram);
+    const ytRows = rows.filter(r => !r.handle_x && !r.handle_instagram && r.handle_youtube);
+    const liRows = rows.filter(r => !r.handle_x && !r.handle_instagram && !r.handle_youtube && r.handle_linkedin);
 
-    for (let i = 0; i < rows.length; i += BATCH) {
-      const results = await Promise.all(rows.slice(i, i + BATCH).map(upsertRow));
-      results.forEach(err => { if (err) errors.push(err); else imported++; });
-    }
+    const results = await Promise.all([
+      xRows.length  ? bulkUpsert(xRows,  'handle_x')         : { imported: 0, errors: [] },
+      igRows.length ? bulkUpsert(igRows, 'handle_instagram')  : { imported: 0, errors: [] },
+      ytRows.length ? bulkUpsert(ytRows, 'handle_youtube')    : { imported: 0, errors: [] },
+      liRows.length ? bulkUpsert(liRows, 'handle_linkedin')   : { imported: 0, errors: [] },
+    ]);
+
+    const imported = results.reduce((s, r) => s + r.imported, 0);
+    const errors   = [...new Set(results.flatMap(r => r.errors))];
 
     return NextResponse.json({
       imported, skipped,
       errors: errors.length,
-      errorDetails: [...new Set(errors)].slice(0, 5),
+      errorDetails: errors.slice(0, 5),
     });
   } catch (err) {
     return NextResponse.json({ error: err.message }, { status: 500 });
