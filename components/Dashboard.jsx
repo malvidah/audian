@@ -1157,12 +1157,15 @@ export default function Dashboard() {
                                 )}
                                 <PlatDot platform={item.platform} size={6} />
                                 <span style={{ background: zoneBg, color: zoneColor, border: `1px solid ${zoneColor}30`, borderRadius: 4, padding: "1px 6px", fontFamily: sans, fontSize: 10, fontWeight: 700 }}>{item.zone}</span>
-                                {/* Interaction type badge */}
-                                {item.interaction_type && (
-                                  <span style={{ background: T.well, color: T.sub, border: `1px solid ${T.border}`, borderRadius: 4, padding: "1px 6px", fontFamily: sans, fontSize: 10, fontWeight: 600 }}>
-                                    {item.interaction_type === "follow" ? "👤 follow" : item.interaction_type === "like" ? "♥ like" : item.interaction_type === "mention" ? "@ mention" : "💬 comment"}
-                                  </span>
-                                )}
+                                {/* Interaction type badges — comma-separated types, show all */}
+                                {item.interaction_type && item.interaction_type.split(",").map(t => {
+                                  const BADGE = { follow: "👤 follow", like: "♥ like", mention: "@ mention", comment: "💬 comment", retweet: "🔁 retweet", reply: "↩ reply" };
+                                  return (
+                                    <span key={t} style={{ background: T.well, color: T.sub, border: `1px solid ${T.border}`, borderRadius: 4, padding: "1px 6px", fontFamily: sans, fontSize: 10, fontWeight: 600 }}>
+                                      {BADGE[t] || t}
+                                    </span>
+                                  );
+                                })}
                                 {item.verified && <span style={{ fontSize: 11 }} title="Verified">✓</span>}
                                 {item.followers > 0 && <span style={{ fontFamily: sans, fontSize: F.xs, color: T.sub }}>{fmt(item.followers)} followers</span>}
                                 {item.comment_count > 1 && <span style={{ fontFamily: sans, fontSize: F.xs, color: T.green, fontWeight: 500 }}>✦ {item.comment_count}×</span>}
