@@ -25,6 +25,8 @@ export async function POST(req) {
 
     for (const item of interactions) {
       if (!item.handle) continue;
+      // Skip ignored accounts — don't save them at all
+      if (item.zone === 'IGNORE' || item.ignored) continue;
 
       const watched = isWatched(item.platform || 'instagram', item.handle);
       // Follower count is the primary zone signal. Verified alone means nothing without audience.
@@ -33,6 +35,7 @@ export async function POST(req) {
         followers >= 10000 ? 'INFLUENTIAL' :
         (item.verified && followers >= 1000) ? 'INFLUENTIAL' :
         'SIGNAL';
+      const isIgnored = item.zone === 'IGNORE' || item.ignored || false;
 
       // Compute influence score
       const followerPts = !item.followers ? 5 :
@@ -69,10 +72,12 @@ export async function POST(req) {
         verified:         item.verified || false,
         interaction_type: allTypes,
         content:          item.content?.slice(0, 500) || null,
+        bio:              item.bio?.slice(0, 500) || null,
         influence_score:  watched ? Math.max(finalScore, 80) : finalScore,
         zone,
         profile_url:      `https://instagram.com/${item.handle}`,
         on_watchlist:     watched,
+        ignored:          isIgnored,
         comment_count:    (existing?.comment_count || 0) + (newType === 'comment' ? 1 : 0),
         interacted_at:    now,
         synced_at:        now,

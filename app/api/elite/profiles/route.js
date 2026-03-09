@@ -7,48 +7,35 @@ const supabase = createClient(
 );
 export const dynamic = 'force-dynamic';
 
-// Returns all instagram watchlist handles with their last-known profile data.
-// Used by the import page to autofill name/followers/verified for known accounts.
+// Returns ALL previously seen instagram accounts for autofill on import.
+// Elite accounts get zone=ELITE enforced. Ignored accounts are flagged.
+// All others carry their last-known zone, followers, bio etc.
 export async function GET() {
   try {
-    // Get all instagram handles from watchlist
-    const { data: wl, error: wlErr } = await supabase
-      .from('watchlist')
-      .select('handle, label')
-      .eq('platform', 'instagram');
-
-    if (wlErr) return NextResponse.json({ error: wlErr.message }, { status: 500 });
-    if (!wl?.length) return NextResponse.json({ profiles: {} });
-
-    const handles = wl.map(r => r.handle.toLowerCase().replace(/^@/, ''));
-
-    // Join with platform_interactions for saved profile data
-    const { data: interactions } = await supabase
+    // All stored instagram interactions
+    const { data: interactions, error } = await supabase
       .from('platform_interactions')
-      .select('handle, name, followers, verified, avatar_url, bio, interaction_type, influence_score, interacted_at')
+      .select('handle, name, followers, verified, bio, avatar_url, zone, on_watchlist, ignored, influence_score, interaction_type, interacted_at')
       .eq('platform', 'instagram')
-      .in('handle', handles);
+      .order('interacted_at', { ascending: false });
 
-    // Build a lookup map keyed by handle
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    // Build lookup map — most recent record wins per handle
     const profileMap = {};
-
-    // Start with watchlist entries (handle + label as fallback name)
-    for (const w of wl) {
-      const h = w.handle.toLowerCase().replace(/^@/, '');
-      profileMap[h] = { handle: h, name: w.label || h, zone: 'ELITE', on_watchlist: true };
-    }
-
-    // Overlay with richer profile data from interactions if available
     for (const p of (interactions || [])) {
       const h = p.handle.toLowerCase().replace(/^@/, '');
-      if (profileMap[h]) {
+      if (!profileMap[h]) {
         profileMap[h] = {
-          ...profileMap[h],
-          name:        p.name || profileMap[h].name,
+          handle:      h,
+          name:        p.name,
           followers:   p.followers,
           verified:    p.verified,
-          avatar_url:  p.avatar_url,
           bio:         p.bio,
+          avatar_url:  p.avatar_url,
+          zone:        p.on_watchlist ? 'ELITE' : p.zone,
+          on_watchlist: p.on_watchlist,
+          ignored:     p.ignored || false,
           last_seen:   p.interacted_at,
         };
       }

@@ -20,6 +20,7 @@ const ZONE_COLORS = {
   ELITE:        { bg: "#F5F3FF", color: "#7C3AED", border: "#DDD6FE" },
   INFLUENTIAL: { bg: "#FFF3EE", color: "#FF6B35", border: "#FFD4C2" },
   SIGNAL:       { bg: "#F3F2F0", color: "#6B6560", border: "#E8E6E1" },
+  IGNORE:       { bg: "#FFF1F1", color: "#999", border: "#FECACA" },
 };
 const INTERACTION_ICONS = {
   like: "♥", follow: "👤", comment: "💬", mention: "@",
@@ -143,16 +144,17 @@ function EditableCell({ value, onChange, type = "text", placeholder = "—", wid
   );
 }
 
-// ── Single interaction row — 4 columns: Handle, Category, Followers, Type ────
+// ── Single interaction row — Handle, Category, Followers, Type, Bio ─────────
 function InteractionRow({ item, index, onChange, onRemove }) {
   const zoneColor = ZONE_COLORS[item.zone] || ZONE_COLORS.SIGNAL;
+  const isIgnored = item.zone === "IGNORE";
   return (
-    <tr style={{ borderBottom: `1px solid ${T.border}` }}>
+    <tr style={{ borderBottom: `1px solid ${T.border}`, opacity: isIgnored ? 0.5 : 1 }}>
       <td style={{ width: 4, padding: 0, background: zoneColor.color }} />
 
-      {/* Handle — link + verified badge + display name below + screenshot thumbnail on hover */}
+      {/* Handle — link + verified badge + display name + bio below */}
       <td style={{ padding: "9px 12px" }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
             <a href={`https://instagram.com/${item.handle}`} target="_blank" rel="noopener noreferrer"
               style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.accent, textDecoration: "none" }}
@@ -161,7 +163,7 @@ function InteractionRow({ item, index, onChange, onRemove }) {
               @{item.handle}
             </a>
             {item.verified && <span title="Verified" style={{ color: "#1D9BF0", fontSize: 12 }}>✓</span>}
-            {item._autofilled && <span title="Known from your Elite list" style={{ color: T.accent, fontSize: 11, fontWeight: 700 }}>★</span>}
+            {item._autofilled && <span title="Autofilled from previous import" style={{ color: T.accent, fontSize: 11, fontWeight: 700 }}>★</span>}
             {item._thumbnailUrl && (
               <span style={{ position: "relative", display: "inline-block" }}
                 onMouseEnter={e => { const t = e.currentTarget.querySelector(".thumb-pop"); if(t) t.style.display="block"; }}
@@ -188,17 +190,19 @@ function InteractionRow({ item, index, onChange, onRemove }) {
               </span>
             )}
           </div>
-          {/* Display name inline editable */}
+          {/* Display name + bio inline editable */}
           <EditableCell value={item.name} placeholder="add name"
-            onChange={v => onChange(index, "name", v)} width={130} />
+            onChange={v => onChange(index, "name", v)} width={150} />
+          <EditableCell value={item.bio} placeholder="add bio"
+            onChange={v => onChange(index, "bio", v)} width={220} />
         </div>
       </td>
 
-      {/* Category — dropdown */}
+      {/* Category — dropdown incl. IGNORE */}
       <td style={{ padding: "9px 12px" }}>
         <EditableCell value={item.zone}
           onChange={v => onChange(index, "zone", v)}
-          options={["ELITE","INFLUENTIAL","SIGNAL"]} />
+          options={["ELITE","INFLUENTIAL","SIGNAL","IGNORE"]} />
       </td>
 
       {/* Followers — inline editable number */}
@@ -291,8 +295,8 @@ function ScreenshotCard({ result, onRemoveScreenshot }) {
 // ── Manual add row ────────────────────────────────────────────────────────────
 function ManualAddRow({ onAdd }) {
   const [form, setForm] = useState({
-    handle: "", name: "", followers: "", verified: false,
-    interaction_type: "like", zone: "SIGNAL", content: "", platform: "instagram",
+    handle: "", name: "", bio: "", followers: "", verified: false,
+    interaction_type: "follow", zone: "SIGNAL", content: "", platform: "instagram",
   });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
@@ -303,8 +307,8 @@ function ManualAddRow({ onAdd }) {
       handle: form.handle.replace(/^@/, "").trim(),
       followers: form.followers ? parseInt(form.followers) : null,
     });
-    setForm({ handle: "", name: "", followers: "", verified: false,
-      interaction_type: "like", zone: "SIGNAL", content: "", platform: "instagram" });
+    setForm({ handle: "", name: "", bio: "", followers: "", verified: false,
+      interaction_type: "follow", zone: "SIGNAL", content: "", platform: "instagram" });
   };
 
   const inp = (key, placeholder, type = "text", width = 110) => (
@@ -332,7 +336,8 @@ function ManualAddRow({ onAdd }) {
             <span style={{ color: T.dim, fontSize: F.xs }}>@</span>
             {inp("handle", "handle", "text", 110)}
           </div>
-          {inp("name", "Display name", "text", 120)}
+          {inp("name", "Display name", "text", 150)}
+          {inp("bio", "Bio (optional)", "text", 220)}
         </div>
       </td>
       {/* Category */}
@@ -340,7 +345,7 @@ function ManualAddRow({ onAdd }) {
         <select value={form.zone} onChange={e => set("zone", e.target.value)}
           style={{ fontFamily: sans, fontSize: F.sm, padding: "6px 8px", borderRadius: 8,
             border: `1px solid ${T.border2}`, background: T.card, color: T.text }}>
-          {["ELITE","INFLUENTIAL","SIGNAL"].map(o => <option key={o} value={o}>{o}</option>)}
+          {["ELITE","INFLUENTIAL","SIGNAL","IGNORE"].map(o => <option key={o} value={o}>{o}</option>)}
         </select>
       </td>
       {/* Followers */}
@@ -372,30 +377,32 @@ export default function ImportPage() {
   const [enriching, setEnriching] = useState(false);
   const [enrichProgress, setEnrichProgress] = useState(null);
   const [showManualAdd, setShowManualAdd] = useState(false);
-  const [eliteProfiles, setEliteProfiles] = useState({}); // handle → profile data
+  const [knownProfiles, setKnownProfiles] = useState({}); // handle → all previously seen accounts
 
   // Load known elite profiles on mount for autofill
   useEffect(() => {
     fetch("/api/elite/profiles")
       .then(r => r.json())
-      .then(d => { if (d.profiles) setEliteProfiles(d.profiles); })
+      .then(d => { if (d.profiles) setKnownProfiles(d.profiles); })
       .catch(() => {});
   }, []);
 
-  // Autofill helper — merges elite profile data into a parsed interaction
-  const autofillElite = (interaction) => {
+  // Autofill helper — fills info from any previously seen account
+  const autofillKnown = (interaction) => {
     const h = (interaction.handle || "").toLowerCase().replace(/^@/, "");
-    const known = eliteProfiles[h];
+    const known = knownProfiles[h];
     if (!known) return interaction;
     return {
       ...interaction,
-      name:        known.name     || interaction.name,
-      followers:   known.followers ?? interaction.followers,
-      verified:    known.verified  ?? interaction.verified,
-      avatar_url:  known.avatar_url || interaction.avatar_url,
-      zone:        "ELITE",          // always ELITE if on the list
-      on_watchlist: true,
-      _autofilled: true,
+      name:         known.name      || interaction.name,
+      followers:    known.followers  ?? interaction.followers,
+      verified:     known.verified   ?? interaction.verified,
+      bio:          known.bio        || interaction.bio,
+      avatar_url:   known.avatar_url || interaction.avatar_url,
+      zone:         known.on_watchlist ? "ELITE" : (known.ignored ? "IGNORE" : (known.zone || interaction.zone)),
+      on_watchlist: known.on_watchlist || false,
+      ignored:      known.ignored || false,
+      _autofilled:  true,
     };
   };
 
@@ -500,7 +507,7 @@ export default function ImportPage() {
         const map = new Map(prev.map(i => [i.handle?.toLowerCase(), i]));
         for (const rawItem of newInteractions) {
           // Autofill known elite profile data before merging
-          const item = autofillElite(rawItem);
+          const item = autofillKnown(rawItem);
           const key = item.handle?.toLowerCase();
           if (!key) continue;
           if (!map.has(key)) {
@@ -519,8 +526,10 @@ export default function ImportPage() {
             };
             // Zone: elite list wins, then follower threshold
             merged.zone = item.on_watchlist ? "ELITE" :
+              item.ignored ? "IGNORE" :
               ((merged.followers || 0) >= 10000 || (merged.verified && (merged.followers || 0) >= 1000))
                 ? "INFLUENTIAL" : existing.zone;
+            merged.ignored = item.ignored || false;
             map.set(key, merged);
           }
         }
@@ -676,6 +685,7 @@ export default function ImportPage() {
     ELITE:        allInteractions.filter(i => i.zone === "ELITE").length,
     INFLUENTIAL: allInteractions.filter(i => i.zone === "INFLUENTIAL").length,
     SIGNAL:       allInteractions.filter(i => i.zone === "SIGNAL").length,
+    IGNORE:       allInteractions.filter(i => i.zone === "IGNORE").length,
   };
 
   return (

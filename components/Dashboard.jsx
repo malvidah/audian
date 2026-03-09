@@ -955,7 +955,9 @@ export default function Dashboard() {
 
   const ytVideos = latestPerPlatform["youtube"]?.videos || [];
   const filteredComments = comments.filter(c => platform === "All" || c.platform === platform);
-  const filteredInteractions = interactions.filter(i => platform === "All" || i.platform === platform);
+  const filteredInteractions = interactions.filter(i =>
+    (platform === "All" || i.platform === platform) && !i.ignored
+  );
 
   const KPIS_DEF = [
     { key: "followers",   label: "Followers",   icon: "👥", color: T.accent },
@@ -1217,6 +1219,12 @@ export default function Dashboard() {
                               )}
                               {item.name && item.name !== item.handle && (
                                 <div style={{ fontFamily: sans, fontSize: F.xs, color: T.dim, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</div>
+                              )}
+                              {item.bio && (
+                                <div style={{ fontFamily: sans, fontSize: 10, color: T.dim, lineHeight: 1.4, maxWidth: 220,
+                                  overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 1, WebkitBoxOrient: "vertical" }}>
+                                  {item.bio}
+                                </div>
                               )}
                             </div>
 

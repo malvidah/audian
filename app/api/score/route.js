@@ -116,7 +116,8 @@ export async function POST() {
     // ── Re-score all existing platform_interactions ───────────────────────
     const { data: existing } = await supabase
       .from('platform_interactions')
-      .select('id,platform,handle,followers,bio,content,comment_count,influence_score,zone,on_watchlist');
+      .select('id,platform,handle,followers,bio,content,comment_count,influence_score,zone,on_watchlist,ignored')
+      .neq('ignored', true);
 
     for (const row of (existing || [])) {
       const watched  = isWatched(row.platform, row.handle);
