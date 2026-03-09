@@ -23,12 +23,14 @@ async function refreshYouTubeToken(refreshToken) {
 export async function POST() {
   try {
     // Get YouTube connection
-    const { data: conn, error } = await supabase
+    const { data: conns, error } = await supabase
       .from('platform_connections')
       .select('*')
       .eq('platform', 'youtube')
-      .single();
+      .order('connected_at', { ascending: false })
+      .limit(1);
 
+    const conn = conns?.[0];
     if (error || !conn) {
       return NextResponse.json({ error: 'YouTube not connected' }, { status: 400 });
     }

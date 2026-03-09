@@ -10,12 +10,14 @@ export const dynamic = 'force-dynamic';
 
 export async function POST() {
   try {
-    const { data: conn, error } = await supabase
+    const { data: conns, error } = await supabase
       .from('platform_connections')
       .select('*')
       .eq('platform', 'instagram')
-      .single();
+      .order('connected_at', { ascending: false })
+      .limit(1);
 
+    const conn = conns?.[0];
     if (error || !conn) {
       return NextResponse.json({ error: 'Instagram not connected' }, { status: 400 });
     }

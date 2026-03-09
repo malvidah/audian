@@ -65,7 +65,8 @@ export async function POST() {
 
       // Batch fetch channel stats (YouTube allows up to 50 per request)
       if (channelIds.length > 0) {
-        const { data: ytConn } = await supabase.from('platform_connections').select('access_token, refresh_token, expires_at').eq('platform', 'youtube').single();
+        const { data: ytConns } = await supabase.from('platform_connections').select('access_token, refresh_token, expires_at').eq('platform', 'youtube').order('connected_at', { ascending: false }).limit(1);
+        const ytConn = ytConns?.[0];
 
         if (ytConn) {
           let accessToken = ytConn.access_token;

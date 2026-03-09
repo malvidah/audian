@@ -27,14 +27,18 @@ export async function DELETE(req, { params }) {
       process.env.SUPABASE_SERVICE_ROLE_KEY
     );
 
-    const { error } = await supabaseAdmin
-      .from('platform_connections')
-      .delete()
-      .eq('platform', platform);
+    // Cascade delete all platform data
+    const [connResult, metricsResult, commentsResult, interactionsResult] = await Promise.all([
+      supabaseAdmin.from('platform_connections').delete().eq('platform', platform),
+      supabaseAdmin.from('platform_metrics').delete().eq('platform', platform),
+      supabaseAdmin.from('platform_comments').delete().eq('platform', platform),
+      supabaseAdmin.from('platform_interactions').delete().eq('platform', platform),
+    ]);
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    const err = connResult.error || metricsResult.error || commentsResult.error;
+    if (err) return NextResponse.json({ error: err.message }, { status: 500 });
 
-    return NextResponse.json({ success: true, platform });
+    return NextResponse.json({ success: true, platform, deleted: { metrics: true, comments: true, interactions: true } });
   } catch (err) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
