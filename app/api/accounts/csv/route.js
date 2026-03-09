@@ -17,6 +17,32 @@ function mapZone(label, sourceList, fallback) {
   return fallback;
 }
 
+async function upsertRow(row) {
+  const matchCol = row.handle_x ? 'handle_x'
+    : row.handle_instagram ? 'handle_instagram'
+    : row.handle_youtube   ? 'handle_youtube'
+    : 'handle_linkedin';
+  const matchVal = row[matchCol];
+
+  const { data: existing } = await supabase
+    .from('handles')
+    .select('id, zone')
+    .eq(matchCol, matchVal)
+    .maybeSingle();
+
+  if (existing) {
+    const zone = existing.zone === 'ELITE' ? 'ELITE' : row.zone;
+    const { error } = await supabase
+      .from('handles')
+      .update({ ...row, zone, updated_at: new Date().toISOString() })
+      .eq('id', existing.id);
+    return error ? error.message : null;
+  }
+
+  const { error } = await supabase.from('handles').insert(row);
+  return error ? error.message : null;
+}
+
 export async function POST(req) {
   try {
     const { csv, category = 'SIGNAL' } = await req.json();
@@ -48,8 +74,7 @@ export async function POST(req) {
     const iSource = col('source list');
     const iBio    = col('bio', 'description');
 
-    // Parse all rows into clean objects
-    const xRows = [], igRows = [], ytRows = [], liRows = [];
+    const rows = [];
     let skipped = 0;
 
     for (let i = 1; i < rawLines.length; i++) {
@@ -80,58 +105,26 @@ export async function POST(req) {
 
       if (!xH && !igH && !ytH && !liH) { skipped++; continue; }
 
-      const row = {
-        name: name || xH || igH || ytH || liH,
-        bio:  bio  || null,
-        zone,
-        handle_x:         xH  || null,
-        handle_instagram: igH || null,
-        handle_youtube:   ytH || null,
-        handle_linkedin:  liH || null,
-        added_at:   now,
-        updated_at: now,
-      };
-
-      // Bucket by primary handle to use the right conflict column
-      if (xH)  xRows.push(row);
-      else if (igH) igRows.push(row);
-      else if (ytH) ytRows.push(row);
-      else liRows.push(row);
+      rows.push({ name: name || xH || igH || ytH || liH, bio: bio || null, zone,
+        handle_x: xH || null, handle_instagram: igH || null,
+        handle_youtube: ytH || null, handle_linkedin: liH || null,
+        added_at: now, updated_at: now });
     }
 
-    const total = xRows.length + igRows.length + ytRows.length + liRows.length;
-    if (!total) return NextResponse.json({ imported: 0, skipped, errors: 0 });
+    if (!rows.length) return NextResponse.json({ imported: 0, skipped, errors: 0 });
 
-    // Bulk upsert each bucket by its conflict column — 500 rows per call
-    const CHUNK = 500;
+    // Parallel batches of 50 — fast enough for 2700+ rows within 60s
+    const BATCH = 50;
     let imported = 0;
     const errors = [];
 
-    async function bulkUpsert(rows, conflictCol) {
-      for (let i = 0; i < rows.length; i += CHUNK) {
-        const chunk = rows.slice(i, i + CHUNK);
-        const { error, count } = await supabase
-          .from('handles')
-          .upsert(chunk, { onConflict: conflictCol, ignoreDuplicates: false, count: 'exact' });
-        if (error) {
-          console.error(`[csv] upsert error (${conflictCol}):`, error.message, error.details);
-          errors.push(`${conflictCol}: ${error.message}`);
-        } else {
-          imported += count ?? chunk.length;
-        }
-      }
+    for (let i = 0; i < rows.length; i += BATCH) {
+      const results = await Promise.all(rows.slice(i, i + BATCH).map(upsertRow));
+      results.forEach(err => { if (err) errors.push(err); else imported++; });
     }
 
-    await Promise.all([
-      xRows.length  && bulkUpsert(xRows,  'handle_x'),
-      igRows.length && bulkUpsert(igRows, 'handle_instagram'),
-      ytRows.length && bulkUpsert(ytRows, 'handle_youtube'),
-      liRows.length && bulkUpsert(liRows, 'handle_linkedin'),
-    ].filter(Boolean));
-
     return NextResponse.json({
-      imported,
-      skipped,
+      imported, skipped,
       errors: errors.length,
       errorDetails: [...new Set(errors)].slice(0, 5),
     });
