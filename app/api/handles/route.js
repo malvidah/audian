@@ -7,7 +7,6 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-// GET — all handles with their recent interaction counts
 export async function GET() {
   const { data: handles, error } = await supabase
     .from('handles')
@@ -15,10 +14,15 @@ export async function GET() {
     .order('updated_at', { ascending: false })
     .limit(1000);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  // Surface the real error but don't 500 — return empty handles so the page still loads
+  if (error) {
+    return NextResponse.json({
+      handles: [],
+      _error: error.message,
+      _hint: 'Run in Supabase SQL Editor: NOTIFY pgrst, \'reload schema\'; — then refresh'
+    });
+  }
 
-  // For each handle, count interactions and get the most recent date
-  // Do this in one query: group platform_interactions by handle_id
   const ids = (handles || []).map(h => h.id).filter(Boolean);
   let interactionMap = {};
 
@@ -42,13 +46,12 @@ export async function GET() {
   const enriched = (handles || []).map(h => ({
     ...h,
     interaction_count: interactionMap[h.id]?.count || 0,
-    last_interaction:  interactionMap[h.id]?.last || null,
+    last_interaction:  interactionMap[h.id]?.last  || null,
   }));
 
   return NextResponse.json({ handles: enriched });
 }
 
-// PATCH — update a single handle
 export async function PATCH(req) {
   try {
     const { id, updates } = await req.json();
@@ -68,7 +71,6 @@ export async function PATCH(req) {
   }
 }
 
-// DELETE — remove a handle
 export async function DELETE(req) {
   try {
     const { id } = await req.json();
