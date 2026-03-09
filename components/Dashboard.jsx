@@ -1467,7 +1467,7 @@ export default function Dashboard() {
         {/* ── Interactions ─────────────────────────────────────── */}
         <Card style={{ marginBottom: 12, overflow: "hidden" }}>
           <SectionHeader label="Interactions" count={filteredInteractions.length} open={open.interactions} onToggle={() => tog("interactions")} action={
-              <Btn variant="ghost" onClick={() => window.open("/import", "_blank")} style={{ fontSize: F.xs }}>📸 Import</Btn>
+              <Btn variant="ghost" onClick={() => window.location.href = "/interactions"} style={{ fontSize: F.xs }}>📸 Import</Btn>
             } />
           {open.interactions && (
             <>
