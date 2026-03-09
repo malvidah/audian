@@ -104,3 +104,24 @@ export async function POST(req) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
+
+// PATCH — update followed_by array for an account
+// Body: { id, followed_by: ["instagram:handle", "x:handle", ...] }
+export async function PATCH(req) {
+  try {
+    const { id, followed_by } = await req.json();
+    if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
+
+    const { data, error } = await supabase
+      .from('accounts')
+      .update({ followed_by: followed_by || [], updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ account: data });
+  } catch (err) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}

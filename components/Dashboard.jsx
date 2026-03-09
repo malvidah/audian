@@ -765,6 +765,149 @@ function AudianAIBar() {
 
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 
+
+// ─── FollowedByEditor ─────────────────────────────────────────────────────────
+// Inline tag-input. allAccounts = full accounts list for autocomplete.
+function FollowedByEditor({ accountId, initialValue, allAccounts }) {
+  const platforms = ["instagram","x","youtube","linkedin"];
+  const platIcon  = { instagram:"📸", x:"𝕏", youtube:"▶", linkedin:"in" };
+  const ZONE_COLORS = {
+    ELITE:       T.accent,
+    INFLUENTIAL: "#F59E0B",
+    SIGNAL:      T.sub,
+    IGNORE:      T.dim,
+  };
+
+  // Build flat list of all known handles: { key:"instagram:handle", label, platform, account }
+  const allHandles = [];
+  for (const acc of allAccounts) {
+    for (const p of platforms) {
+      const h = acc[`handle_${p}`];
+      if (h && acc.id !== accountId) {
+        allHandles.push({
+          key: `${p}:${h}`,
+          label: `@${h}`,
+          platform: p,
+          account: acc,
+        });
+      }
+    }
+  }
+
+  const [tags, setTags]         = useState(initialValue || []);
+  const [query, setQuery]       = useState("");
+  const [focused, setFocused]   = useState(false);
+  const [saving, setSaving]     = useState(false);
+  const inputRef                = useRef(null);
+
+  const filtered = query.length > 0
+    ? allHandles.filter(h =>
+        h.key.includes(query.toLowerCase().replace(/^@/,"")) &&
+        !tags.includes(h.key)
+      ).slice(0, 8)
+    : [];
+
+  const addTag = async (key) => {
+    if (tags.includes(key)) return;
+    const next = [...tags, key];
+    setTags(next);
+    setQuery("");
+    inputRef.current?.focus();
+    await save(next);
+  };
+
+  const removeTag = async (key) => {
+    const next = tags.filter(t => t !== key);
+    setTags(next);
+    await save(next);
+  };
+
+  const save = async (next) => {
+    setSaving(true);
+    try {
+      await fetch("/api/accounts", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: accountId, followed_by: next }),
+      });
+    } catch {}
+    setSaving(false);
+  };
+
+  const resolveTag = (key) => allHandles.find(h => h.key === key);
+
+  return (
+    <div style={{ position: "relative" }}>
+      {/* Tag chips + input */}
+      <div onClick={() => inputRef.current?.focus()}
+        style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center",
+          minHeight: 28, cursor: "text" }}>
+        {tags.map(key => {
+          const h = resolveTag(key);
+          const [p, handle] = key.split(":");
+          const zc = h ? ZONE_COLORS[h.account?.category] || T.dim : T.dim;
+          return (
+            <span key={key} style={{ display: "inline-flex", alignItems: "center", gap: 3,
+              background: T.well, border: `1px solid ${T.border2}`, borderRadius: 5,
+              padding: "2px 6px", fontFamily: sans, fontSize: 11, color: T.text }}>
+              <span style={{ fontSize: 9, opacity: 0.7 }}>{platIcon[p] || p}</span>
+              <span style={{ color: zc, fontWeight: 600 }}>@{handle}</span>
+              {h?.account?.name && (
+                <span style={{ color: T.dim, fontSize: 10 }}>{h.account.name}</span>
+              )}
+              <button onClick={e => { e.stopPropagation(); removeTag(key); }}
+                style={{ background: "none", border: "none", cursor: "pointer",
+                  color: T.dim, fontSize: 12, padding: "0 0 0 2px", lineHeight: 1 }}>×</button>
+            </span>
+          );
+        })}
+        <input ref={inputRef}
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setTimeout(() => setFocused(false), 150)}
+          placeholder={tags.length === 0 ? "Tag handles…" : ""}
+          style={{ fontFamily: sans, fontSize: 11, border: "none", outline: "none",
+            background: "transparent", color: T.text, minWidth: 80,
+            flex: 1, padding: "2px 0" }} />
+        {saving && <span style={{ fontSize: 10, color: T.dim }}>saving…</span>}
+      </div>
+
+      {/* Autocomplete dropdown */}
+      {focused && filtered.length > 0 && (
+        <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, zIndex: 200,
+          background: T.card, border: `1px solid ${T.border2}`, borderRadius: 8,
+          boxShadow: "0 8px 24px rgba(0,0,0,0.18)", minWidth: 220, maxWidth: 320 }}>
+          {filtered.map(h => {
+            const zc = ZONE_COLORS[h.account?.category] || T.dim;
+            return (
+              <div key={h.key} onMouseDown={() => addTag(h.key)}
+                style={{ display: "flex", alignItems: "center", gap: 8,
+                  padding: "8px 12px", cursor: "pointer", borderBottom: `1px solid ${T.border}` }}
+                onMouseEnter={e => e.currentTarget.style.background = T.well}
+                onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                <span style={{ fontSize: 11 }}>{platIcon[h.platform]}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: sans, fontSize: 12, fontWeight: 600,
+                    color: zc }}>@{h.key.split(":")[1]}</div>
+                  {h.account?.name && (
+                    <div style={{ fontFamily: sans, fontSize: 10, color: T.dim,
+                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {h.account.name}
+                    </div>
+                  )}
+                </div>
+                <span style={{ fontFamily: sans, fontSize: 9, fontWeight: 700,
+                  color: zc, opacity: 0.8 }}>{h.account?.category}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Accounts ─────────────────────────────────────────────────────────────────
 function AccountsSection({ open, onToggle }) {
   const [accounts, setAccounts]   = useState([]);
@@ -829,8 +972,8 @@ function AccountsSection({ open, onToggle }) {
             {!loading && filtered.length > 0 && (
               <>
                 {/* Header */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 110px 1fr 100px", padding: "6px 20px", borderBottom: `1px solid ${T.border}` }}>
-                  {["Name / Handle","Category","Platforms","Added"].map(h => (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 110px 1fr 1fr 90px", padding: "6px 20px", borderBottom: `1px solid ${T.border}` }}>
+                  {["Name / Handle","Category","Platforms","Followed By","Added"].map(h => (
                     <div key={h} style={{ fontFamily: sans, fontSize: 10, fontWeight: 700, color: T.dim, textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</div>
                   ))}
                 </div>
@@ -876,8 +1019,15 @@ function AccountsSection({ open, onToggle }) {
                         ))}
                         {connectedPlatforms.length === 0 && <span style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>—</span>}
                       </div>
+                      {/* Followed by */}
+                      <div style={{ paddingTop: 2 }}>
+                        <FollowedByEditor
+                          accountId={acc.id}
+                          initialValue={acc.followed_by || []}
+                          allAccounts={accounts} />
+                      </div>
                       {/* Added date */}
-                      <div style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>
+                      <div style={{ fontFamily: sans, fontSize: F.xs, color: T.dim, paddingTop: 4 }}>
                         {acc.added_at ? new Date(acc.added_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" }) : "—"}
                       </div>
                     </div>
