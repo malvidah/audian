@@ -839,13 +839,16 @@ export default function Dashboard() {
       supabase.from("platform_metrics").select("*").order("snapshot_at", { ascending: false }).limit(10),
       supabase.from("platform_metrics").select("*").order("snapshot_at", { ascending: true }).limit(200),
       supabase.from("platform_comments").select("*").order("published_at", { ascending: false }).limit(100),
-      supabase.from("platform_interactions").select("*").order("interacted_at", { ascending: false }).limit(50),
+      supabase.from("platform_interactions").select("*, screenshots(thumbnail_url, thumbnail_data, filename)").order("interacted_at", { ascending: false }).limit(50),
     ]);
     if (a.data) setConnections(a.data);
     if (b.data) { setMetrics(b.data); if (b.data[0]) setLastSynced(b.data[0].snapshot_at); }
     if (b2.data) setAllMetrics(b2.data);
     if (c.data) setComments(c.data);
-    if (d.data) setInteractions(d.data);
+    if (d.data) setInteractions(d.data.map(i => ({
+      ...i,
+      screenshot_thumbnail: i.screenshots?.thumbnail_url || i.screenshots?.thumbnail_data || null,
+    })));
   }, [session, supabase]);
 
   // Watchlist fetched separately — only on mount and after explicit changes
@@ -1194,6 +1197,24 @@ export default function Dashboard() {
                                   <span title="Verified" style={{ color: "#1D9BF0", fontSize: 12, lineHeight: 1 }}>✓</span>
                                 )}
                               </div>
+                              {item.screenshot_thumbnail && (
+                                <div style={{ position: "relative", display: "inline-block" }}
+                                  onMouseEnter={e => { const t = e.currentTarget.querySelector(".db-thumb"); if(t) t.style.display="block"; }}
+                                  onMouseLeave={e => { const t = e.currentTarget.querySelector(".db-thumb"); if(t) t.style.display="none"; }}>
+                                  <span style={{ background: T.well, border: `1px solid ${T.border}`, borderRadius: 3,
+                                    padding: "1px 4px", fontSize: 9, color: T.dim, cursor: "default" }}>📸</span>
+                                  <div className="db-thumb" style={{
+                                    display: "none", position: "absolute", zIndex: 100,
+                                    bottom: "calc(100% + 6px)", left: 0,
+                                    background: T.card, border: `1px solid ${T.border2}`,
+                                    borderRadius: 8, padding: 6, boxShadow: "0 8px 24px rgba(0,0,0,0.18)",
+                                    width: 180,
+                                  }}>
+                                    <img src={item.screenshot_thumbnail} alt="source"
+                                      style={{ width: "100%", borderRadius: 4, display: "block" }} />
+                                  </div>
+                                </div>
+                              )}
                               {item.name && item.name !== item.handle && (
                                 <div style={{ fontFamily: sans, fontSize: F.xs, color: T.dim, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</div>
                               )}

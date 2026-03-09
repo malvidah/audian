@@ -76,6 +76,7 @@ export async function POST(req) {
         comment_count:    (existing?.comment_count || 0) + (newType === 'comment' ? 1 : 0),
         interacted_at:    now,
         synced_at:        now,
+        ...(item.screenshot_id ? { screenshot_id: item.screenshot_id } : {}),
       }, { onConflict: 'platform,handle' });
 
       if (error) errors.push(`${item.handle}: ${error.message}`);

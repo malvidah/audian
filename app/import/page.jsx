@@ -150,7 +150,7 @@ function InteractionRow({ item, index, onChange, onRemove }) {
     <tr style={{ borderBottom: `1px solid ${T.border}` }}>
       <td style={{ width: 4, padding: 0, background: zoneColor.color }} />
 
-      {/* Handle — link + verified badge + display name below */}
+      {/* Handle — link + verified badge + display name below + screenshot thumbnail on hover */}
       <td style={{ padding: "9px 12px" }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
@@ -162,6 +162,31 @@ function InteractionRow({ item, index, onChange, onRemove }) {
             </a>
             {item.verified && <span title="Verified" style={{ color: "#1D9BF0", fontSize: 12 }}>✓</span>}
             {item._autofilled && <span title="Known from your Elite list" style={{ color: T.accent, fontSize: 11, fontWeight: 700 }}>★</span>}
+            {item._thumbnailUrl && (
+              <span style={{ position: "relative", display: "inline-block" }}
+                onMouseEnter={e => { const t = e.currentTarget.querySelector(".thumb-pop"); if(t) t.style.display="block"; }}
+                onMouseLeave={e => { const t = e.currentTarget.querySelector(".thumb-pop"); if(t) t.style.display="none"; }}>
+                <span title="View source screenshot"
+                  style={{ background: T.well, border: `1px solid ${T.border}`, borderRadius: 3,
+                    padding: "1px 4px", fontSize: 9, color: T.dim, cursor: "default", userSelect: "none" }}>
+                  📸
+                </span>
+                <div className="thumb-pop" style={{
+                  display: "none", position: "absolute", zIndex: 100,
+                  bottom: "calc(100% + 6px)", left: 0,
+                  background: T.card, border: `1px solid ${T.border2}`,
+                  borderRadius: 8, padding: 6, boxShadow: "0 8px 24px rgba(0,0,0,0.18)",
+                  width: 180,
+                }}>
+                  <img src={item._thumbnailUrl} alt="source screenshot"
+                    style={{ width: "100%", borderRadius: 4, display: "block" }} />
+                  <div style={{ fontFamily: sans, fontSize: 9, color: T.dim, marginTop: 4,
+                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {item._source}
+                  </div>
+                </div>
+              </span>
+            )}
           </div>
           {/* Display name inline editable */}
           <EditableCell value={item.name} placeholder="add name"
@@ -388,6 +413,23 @@ export default function ImportPage() {
     r.readAsDataURL(file);
   });
 
+  // Compress image to ~300px wide JPEG thumbnail (~15-25KB)
+  const compressThumbnail = (dataUrl) => new Promise((res) => {
+    const img = new Image();
+    img.onload = () => {
+      const MAX_W = 300;
+      const scale = Math.min(1, MAX_W / img.width);
+      const canvas = document.createElement("canvas");
+      canvas.width  = Math.round(img.width  * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+      // Strip data URL prefix, return raw base64
+      const full = canvas.toDataURL("image/jpeg", 0.72);
+      res(full.split(",")[1]);
+    };
+    img.src = dataUrl;
+  });
+
   const handleFiles = async (files) => {
     if (parsing) return;
     setParsing(true);
@@ -484,6 +526,41 @@ export default function ImportPage() {
         }
         return Array.from(map.values());
       });
+
+      // Store compressed thumbnails for each successfully-parsed screenshot
+      for (const img of images) {
+        const result = results.find(r => r.filename === img.filename);
+        if (!result || result.error) continue;
+        try {
+          const thumbnail = await compressThumbnail(img.preview);
+          const storeRes = await fetch("/api/screenshots/store", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              filename: img.filename,
+              thumbnail,
+              mediaType: "image/jpeg",
+              platform: "instagram",
+              interactionCount: result.interactions?.length || 0,
+            }),
+          });
+          const storeData = await storeRes.json();
+          if (storeData.id) {
+            // Attach screenshot_id to all interactions from this file
+            setAllInteractions(prev => prev.map(i =>
+              i._source === img.filename && !i.screenshot_id
+                ? { ...i, screenshot_id: storeData.id, _thumbnailUrl: storeData.thumbnailUrl }
+                : i
+            ));
+            // Also store thumbnailUrl in screenshots state for the card preview
+            setScreenshots(prev => prev.map(s =>
+              s.filename === img.filename
+                ? { ...s, screenshot_id: storeData.id, thumbnailUrl: storeData.thumbnailUrl }
+                : s
+            ));
+          }
+        } catch (_) { /* thumbnail storage is non-critical */ }
+      }
 
     } catch (e) {
       setScreenshots(prev => prev.map(s =>
