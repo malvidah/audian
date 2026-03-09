@@ -1094,9 +1094,9 @@ export default function Dashboard() {
         <Card style={{ marginBottom: 12, overflow: "hidden" }}>
           <SectionHeader label="Influential Interactions" count={filteredInteractions.length} open={open.interactions} onToggle={() => tog("interactions")} action={
               <div style={{ display: "flex", gap: 6 }}>
-                {process.env.NEXT_PUBLIC_APIFY_ENABLED === "true" && (
+                {connections.some(c => c.platform === "instagram") && (
                   <Btn variant="secondary" size="sm" onClick={triggerScrape} disabled={scraping}>
-                    {scraping ? "Running…" : "🔍 Scrape IG"}
+                    {scraping ? "Syncing…" : "↻ Sync"}
                   </Btn>
                 )}
                 <Btn variant="orange" onClick={triggerScore} disabled={scoring}>{scoring ? "Scoring…" : "⚡ Score Now"}</Btn>
