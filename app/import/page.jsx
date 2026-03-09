@@ -173,7 +173,19 @@ function InteractionRow({ item, index, onChange, onRemove }) {
       <td style={{ padding: "10px 12px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <span style={{ color: T.dim, fontSize: F.xs }}>@</span>
-          {field("handle", item.handle)}
+          {editing ? field("handle", item.handle) : (
+            <a
+              href={`https://instagram.com/${item.handle}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ fontFamily: sans, fontSize: F.sm, color: T.accent,
+                textDecoration: "none", fontWeight: 500 }}
+              onMouseEnter={e => e.target.style.textDecoration = "underline"}
+              onMouseLeave={e => e.target.style.textDecoration = "none"}
+            >
+              {item.handle}
+            </a>
+          )}
         </div>
       </td>
 
