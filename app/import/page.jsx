@@ -430,6 +430,8 @@ export default function ImportPage() {
   const [enrichProgress, setEnrichProgress] = useState(null);
   const [wikiEnriching, setWikiEnriching] = useState(false);
   const [wikiProgress, setWikiProgress] = useState(null);
+  const [followerEnriching, setFollowerEnriching] = useState(false);
+  const [followerProgress, setFollowerProgress] = useState(null);
   const [showManualAdd, setShowManualAdd] = useState(false);
   const [knownProfiles, setKnownProfiles] = useState({}); // handle → all previously seen accounts
 
@@ -805,6 +807,57 @@ export default function ImportPage() {
     setWikiEnriching(false);
   };
 
+  const followerFill = async () => {
+    // Only target accounts missing followers
+    const targets = allInteractions.filter(i => i.handle && !(parseInt(i.followers) > 0));
+    if (!targets.length) {
+      setFollowerProgress("All accounts already have follower counts");
+      setTimeout(() => setFollowerProgress(null), 2500);
+      return;
+    }
+    setFollowerEnriching(true);
+    setFollowerProgress(`Searching follower counts for ${targets.length} accounts…`);
+    try {
+      const BATCH = 5; // smaller batch — each request does a web search
+      let filled = 0;
+      for (let i = 0; i < targets.length; i += BATCH) {
+        const batch = targets.slice(i, i + BATCH);
+        setFollowerProgress(`Looking up ${i + 1}–${Math.min(i + BATCH, targets.length)} of ${targets.length}…`);
+        const res = await fetch("/api/enrich/followers", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            accounts: batch.map(t => ({ handle: t.handle, name: t.name || t.handle, platform: t.platform || "instagram" }))
+          }),
+        });
+        const data = await res.json();
+        if (data.results) {
+          setAllInteractions(prev => {
+            const updated = [...prev];
+            data.results.forEach(r => {
+              if (!r.found || !r.followers) return;
+              const idx = updated.findIndex(u => u.handle?.toLowerCase() === r.handle?.toLowerCase());
+              if (idx >= 0) {
+                updated[idx] = { ...updated[idx], followers: r.followers, _followerSource: "web" };
+                // Recompute zone — followers may now qualify for INFLUENTIAL
+                if (updated[idx].zone !== "ELITE") {
+                  updated[idx].zone = computeZone(updated[idx]);
+                }
+                filled++;
+              }
+            });
+            return updated;
+          });
+        }
+      }
+      setFollowerProgress(`✓ Found follower counts for ${filled} account${filled !== 1 ? "s" : ""}`);
+      setTimeout(() => setFollowerProgress(null), 3500);
+    } catch (e) {
+      setFollowerProgress(`Error: ${e.message}`);
+    }
+    setFollowerEnriching(false);
+  };
+
   const handleSave = async () => {
     // Save ALL interactions — not just filtered view
     const toSave = allInteractions.filter(i => i.handle);
@@ -959,6 +1012,15 @@ export default function ImportPage() {
                 </Btn>
                 {wikiProgress && !wikiEnriching && (
                   <span style={{ fontFamily: sans, fontSize: F.xs, color: T.green }}>{wikiProgress}</span>
+                )}
+                <Btn variant="ghost" onClick={followerFill}
+                  disabled={followerEnriching || allInteractions.filter(i => !(parseInt(i.followers) > 0)).length === 0}
+                  style={{ fontSize: F.xs }}
+                  title="Search the web for follower counts using AI">
+                  {followerEnriching ? followerProgress || "Searching…" : `👥 Follower counts (${allInteractions.filter(i => !(parseInt(i.followers) > 0)).length})`}
+                </Btn>
+                {followerProgress && !followerEnriching && (
+                  <span style={{ fontFamily: sans, fontSize: F.xs, color: T.green }}>{followerProgress}</span>
                 )}
                 {saveResult?.saved > 0 && (
                   <span style={{ fontFamily: sans, fontSize: F.sm, color: T.green, fontWeight: 600 }}>
