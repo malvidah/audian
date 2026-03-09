@@ -19,6 +19,59 @@ function followerScore(f) {
   return 3;
 }
 
+// Try accounts table — fail gracefully if it doesn't exist yet
+async function resolveAccount(platform, cleanHandle, item, now) {
+  try {
+    const handleCol    = `handle_${platform}`;
+    const followersCol = `followers_${platform}`;
+    const verifiedCol  = `verified_${platform}`;
+    const incomingCategory = item.zone || 'SIGNAL';
+
+    let { data: account, error: fetchErr } = await supabase
+      .from('accounts')
+      .select('*')
+      .eq(handleCol, cleanHandle)
+      .maybeSingle();
+
+    if (fetchErr) return null; // table doesn't exist yet — skip accounts layer
+
+    const followers = item.followers || null;
+    const verified  = item.verified  || false;
+
+    if (!account) {
+      const { data: created, error: createErr } = await supabase
+        .from('accounts')
+        .insert({
+          name:           item.name || cleanHandle,
+          bio:            item.bio  || null,
+          category:       incomingCategory,
+          [handleCol]:    cleanHandle,
+          [followersCol]: followers,
+          [verifiedCol]:  verified,
+          avatar_url:     item.avatar_url || null,
+          added_at: now, updated_at: now,
+        })
+        .select().single();
+      if (createErr) return null;
+      return created;
+    } else {
+      const newCategory = account.category === 'ELITE' ? 'ELITE' : incomingCategory;
+      const updates = {
+        updated_at:      now,
+        category:        newCategory,
+        [followersCol]:  item.followers || account[followersCol],
+        [verifiedCol]:   item.verified  || account[verifiedCol],
+        ...(item.name && !account.name ? { name: item.name } : {}),
+        ...(item.bio  && !account.bio  ? { bio:  item.bio  } : {}),
+      };
+      await supabase.from('accounts').update(updates).eq('id', account.id);
+      return { ...account, ...updates };
+    }
+  } catch {
+    return null; // accounts table missing — ok, save continues
+  }
+}
+
 export async function POST(req) {
   try {
     const { interactions } = await req.json();
@@ -28,85 +81,23 @@ export async function POST(req) {
     let saved = 0;
     const errors = [];
 
-    for (const item of interactions) {
-      if (!item.handle) continue;
+    // Save all non-IGNORE items
+    const toSave = interactions.filter(i => i.handle && i.zone !== 'IGNORE');
 
+    for (const item of toSave) {
       const platform    = (item.platform || 'instagram').toLowerCase();
       const cleanHandle = item.handle.toLowerCase().replace(/^@/, '');
-      const handleCol   = `handle_${platform}`;
-      const followersCol = `followers_${platform}`;
-      const verifiedCol  = `verified_${platform}`;
 
-      // ── 1. Resolve account ────────────────────────────────────────────────
-      // Look up by this platform's handle
-      let { data: account } = await supabase
-        .from('accounts')
-        .select('*')
-        .eq(handleCol, cleanHandle)
-        .maybeSingle();
-
-      const incomingCategory = item.zone === 'IGNORE' ? 'IGNORE' :
-        item.zone || account?.category || 'SIGNAL';
-
-      // Skip: if already IGNORE in DB or incoming
-      if (account?.category === 'IGNORE' || item.zone === 'IGNORE') {
-        // Still upsert account so it stays ignored
-        if (!account) {
-          await supabase.from('accounts').insert({
-            name:        item.name || cleanHandle,
-            bio:         item.bio  || null,
-            category:    'IGNORE',
-            [handleCol]: cleanHandle,
-            added_at:    now, updated_at: now,
-          });
-        } else if (incomingCategory === 'IGNORE') {
-          await supabase.from('accounts').update({ category: 'IGNORE', updated_at: now }).eq('id', account.id);
-        }
-        continue;
-      }
+      // Try to maintain accounts table (best-effort — works even if table missing)
+      const account = await resolveAccount(platform, cleanHandle, item, now);
 
       const followers = item.followers || null;
       const verified  = item.verified  || false;
-
-      if (!account) {
-        // Create account
-        const { data: created, error: createErr } = await supabase
-          .from('accounts')
-          .insert({
-            name:           item.name || cleanHandle,
-            bio:            item.bio  || null,
-            category:       incomingCategory,
-            [handleCol]:    cleanHandle,
-            [followersCol]: followers,
-            [verifiedCol]:  verified,
-            avatar_url:     item.avatar_url || null,
-            added_at:       now, updated_at: now,
-          })
-          .select()
-          .single();
-        if (createErr) { errors.push(`account create ${cleanHandle}: ${createErr.message}`); continue; }
-        account = created;
-      } else {
-        // Update account — category respects ELITE lock
-        const newCategory = account.category === 'ELITE' ? 'ELITE' : incomingCategory;
-        const updates = {
-          updated_at:      now,
-          category:        newCategory,
-          [followersCol]:  followers || account[followersCol],
-          [verifiedCol]:   verified  || account[verifiedCol],
-          ...(item.name && !account.name ? { name: item.name } : {}),
-          ...(item.bio  && !account.bio  ? { bio:  item.bio  } : {}),
-          ...(item.avatar_url && !account.avatar_url ? { avatar_url: item.avatar_url } : {}),
-        };
-        await supabase.from('accounts').update(updates).eq('id', account.id);
-        account = { ...account, ...updates };
-      }
-
-      // ── 2. Compute interaction score ──────────────────────────────────────
-      const score = account.category === 'ELITE' ? 85 :
+      const zone      = account?.category || item.zone || 'SIGNAL';
+      const score     = zone === 'ELITE' ? 85 :
         Math.min(100, followerScore(followers) + (verified ? 15 : 0));
 
-      // ── 3. Upsert platform_interaction ────────────────────────────────────
+      // Get existing interaction to merge types
       const { data: existing } = await supabase
         .from('platform_interactions')
         .select('interaction_type, influence_score, comment_count')
@@ -119,7 +110,6 @@ export async function POST(req) {
       const allTypes      = [...new Set([...existingTypes, newType])].join(',');
       const finalScore    = Math.max(score, existing?.influence_score || 0);
 
-      // Profile URL by platform
       const profileUrls = {
         instagram: `https://instagram.com/${cleanHandle}`,
         x:         `https://x.com/${cleanHandle}`,
@@ -132,22 +122,22 @@ export async function POST(req) {
         .upsert({
           platform,
           handle:           cleanHandle,
-          name:             item.name     || account.name || cleanHandle,
-          followers:        followers,
-          verified:         verified,
-          bio:              item.bio      || account.bio || null,
+          name:             item.name  || account?.name || cleanHandle,
+          followers,
+          verified,
+          bio:              item.bio   || account?.bio  || null,
           interaction_type: allTypes,
           content:          item.content?.slice(0, 500) || null,
           influence_score:  finalScore,
-          zone:             account.category,
+          zone,
           profile_url:      profileUrls[platform] || `https://${platform}.com/${cleanHandle}`,
-          on_watchlist:     account.category === 'ELITE',
+          on_watchlist:     zone === 'ELITE',
           ignored:          false,
           comment_count:    (existing?.comment_count || 0) + (newType === 'comment' ? 1 : 0),
           interacted_at:    now,
           synced_at:        now,
-          account_id:       account.id,
-          ...(item.screenshot_id ? { screenshot_id: item.screenshot_id } : {}),
+          ...(account?.id          ? { account_id:    account.id }          : {}),
+          ...(item.screenshot_id   ? { screenshot_id: item.screenshot_id }  : {}),
         }, { onConflict: 'platform,handle' });
 
       if (upsertErr) errors.push(`${cleanHandle}: ${upsertErr.message}`);
@@ -156,9 +146,14 @@ export async function POST(req) {
 
     return NextResponse.json({
       saved,
+      skipped: interactions.length - toSave.length,
       errors: errors.length,
       errorDetails: errors.slice(0, 5),
-      message: `Saved ${saved} interactions`,
+      message: saved > 0
+        ? `Saved ${saved} interaction${saved !== 1 ? 's' : ''}`
+        : errors.length > 0
+          ? `Save failed: ${errors[0]}`
+          : `Nothing to save (${interactions.length - toSave.length} were IGNORE)`,
     });
   } catch (err) {
     return NextResponse.json({ error: err.message }, { status: 500 });

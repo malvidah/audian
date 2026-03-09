@@ -754,7 +754,8 @@ export default function ImportPage() {
   };
 
   const handleSave = async () => {
-    const toSave = filtered.filter(i => i.handle);
+    // Save ALL interactions — not just filtered view
+    const toSave = allInteractions.filter(i => i.handle);
     if (!toSave.length) return;
     setSaving(true);
     setSaveResult(null);
@@ -766,6 +767,10 @@ export default function ImportPage() {
       });
       const data = await res.json();
       setSaveResult(data);
+      if (data.saved > 0) {
+        // Clear saved non-IGNORE items from the list
+        setAllInteractions(prev => prev.filter(i => i.zone === 'IGNORE'));
+      }
     } catch (e) {
       setSaveResult({ error: e.message });
     }
