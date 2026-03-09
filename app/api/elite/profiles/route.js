@@ -7,42 +7,46 @@ const supabase = createClient(
 );
 export const dynamic = 'force-dynamic';
 
-// Returns ALL previously seen instagram accounts for autofill on import.
-// Elite accounts get zone=ELITE enforced. Ignored accounts are flagged.
-// All others carry their last-known zone, followers, bio etc.
+// Returns all accounts as a lookup map keyed by "platform:handle".
+// Used by the import page for autofill — any previously seen account
+// on any platform will autofill name/bio/category.
 export async function GET() {
   try {
-    // All stored instagram interactions
-    const { data: interactions, error } = await supabase
-      .from('platform_interactions')
-      .select('handle, name, followers, verified, bio, avatar_url, zone, on_watchlist, ignored, influence_score, interaction_type, interacted_at')
-      .eq('platform', 'instagram')
-      .order('interacted_at', { ascending: false });
+    const { data, error } = await supabase
+      .from('accounts')
+      .select('*')
+      .order('updated_at', { ascending: false });
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-    // Build lookup map — most recent record wins per handle
-    const profileMap = {};
-    for (const p of (interactions || [])) {
-      const h = p.handle.toLowerCase().replace(/^@/, '');
-      if (!profileMap[h]) {
-        profileMap[h] = {
-          handle:      h,
-          name:        p.name,
-          followers:   p.followers,
-          verified:    p.verified,
-          bio:         p.bio,
-          avatar_url:  p.avatar_url,
-          zone:        p.on_watchlist ? 'ELITE' : p.zone,
-          on_watchlist: p.on_watchlist,
-          ignored:     p.ignored || false,
-          last_seen:   p.interacted_at,
+    const PLATFORMS = ['instagram', 'x', 'youtube', 'linkedin'];
+    const profiles  = {};
+
+    for (const acct of (data || [])) {
+      for (const plat of PLATFORMS) {
+        const h = acct[`handle_${plat}`];
+        if (!h) continue;
+        const key = `${plat}:${h.toLowerCase()}`;
+        profiles[key] = {
+          account_id:  acct.id,
+          name:        acct.name,
+          bio:         acct.bio,
+          zone:        acct.category,
+          ignored:     acct.category === 'IGNORE',
+          on_watchlist: acct.category === 'ELITE',
+          followers:   acct[`followers_${plat}`],
+          verified:    acct[`verified_${plat}`] || false,
+          avatar_url:  acct.avatar_url,
+          // Also carry all handles so cross-platform display is possible
+          handles:     PLATFORMS.reduce((acc, p) => {
+            if (acct[`handle_${p}`]) acc[p] = acct[`handle_${p}`];
+            return acc;
+          }, {}),
         };
       }
     }
 
-    return NextResponse.json({ profiles: profileMap });
-
+    return NextResponse.json({ profiles });
   } catch (err) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }

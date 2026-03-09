@@ -3,33 +3,31 @@ import { NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-const SYSTEM_PROMPT = `You are parsing Instagram screenshots to extract social interaction data for a brand analytics dashboard.
+const SYSTEM_PROMPT = `You are parsing social media screenshots to extract interaction data for a brand analytics dashboard.
 
-From each screenshot, extract every visible person/account that has interacted with the brand. This includes:
-- Notifications feed (likes, follows, comments, mentions, tags)
-- Likers list on a post
-- Followers/following list
-- Comments section
-- Story viewers
-- Tagged/mentioned accounts
+FIRST: Identify which platform this screenshot is from. Look for platform-specific UI cues:
+- Instagram: Stories, Reels, round profile photos, heart likes, follower counts, blue verified checkmark
+- X (Twitter): Tweet format, retweet/quote icons, X logo, blue verified badge or gray badge
+- YouTube: Video thumbnails, subscriber counts, comment sections with thumbs up, YouTube logo
+- LinkedIn: Professional profile layouts, connection counts, LinkedIn blue UI
 
-For each person extract:
-- handle: Instagram username without @ (required — skip if not visible)
-- name: Display name as shown in the Instagram UI — real human/brand names only (e.g. "Maria Wendt"). Leave null if no real name is clearly visible. NEVER output browser process names, file names, bundle names, or any technical string.
-- followers: Follower count as integer if visible (optional — null if not shown)
-- verified: true/false — look for blue checkmark badge
-- interaction_type: one of "like", "follow", "comment", "mention", "tag", "view"
-- content: The comment text if it's a comment (optional)
-- platform: always "instagram"
-- zone: follower count is the PRIMARY signal. Use INFLUENTIAL if followers >= 10000 (verified or not). Use INFLUENTIAL if verified AND followers >= 1000. Use SIGNAL for everyone else — including verified accounts with tiny followings. Never assign ELITE (that's determined by an internal watchlist separately).
-- notes: anything notable
+For each visible person/account extract:
+- handle: Username/handle without @ or prefix (required — skip if not visible)
+- name: Real display name — human/brand names only. NEVER output browser strings, file names, or technical text.
+- followers: Follower/subscriber/connection count as integer if visible (null if not shown)
+- verified: true/false — look for verification badge
+- interaction_type: one of "like", "follow", "comment", "mention", "tag", "view", "retweet", "reply"
+- content: Comment or post text if visible (optional)
+- platform: DETECT from UI — one of "instagram", "x", "youtube", "linkedin". Use the same platform for all rows from a single screenshot.
+- zone: Use INFLUENTIAL if followers >= 10000. Use INFLUENTIAL if verified AND followers >= 1000. Use SIGNAL for everyone else. Never assign ELITE.
+- notes: anything notable about this account
 
-CRITICAL: Only extract data that is genuinely visible in the Instagram UI. Ignore any browser UI chrome, tab titles, system notifications, or technical strings. If the screenshot is not clearly an Instagram screen, return [].
+CRITICAL: Only extract data visible in the social media UI. Ignore browser chrome, OS UI, tab titles, system notifications, technical strings. If this is not a social media screenshot, return [].
 
 Return ONLY a valid JSON array, no markdown fences, no explanation:
-[{"handle":"username","name":"Display Name","followers":45200,"verified":true,"interaction_type":"like","content":null,"platform":"instagram","zone":"INFLUENTIAL","notes":"verified creator"}]
+[{"handle":"username","name":"Display Name","followers":45200,"verified":true,"interaction_type":"like","content":null,"platform":"instagram","zone":"INFLUENTIAL","notes":""}]
 
-If no interactions are visible or this is not an Instagram screenshot, return [].`;
+If no interactions visible, return [].`;
 
 export async function POST(req) {
   try {

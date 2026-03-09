@@ -1,23 +1,28 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-export const dynamic = 'force-dynamic';
-
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
+export const dynamic = 'force-dynamic';
+
+function followerScore(f) {
+  if (!f) return 5;
+  if (f >= 1_000_000) return 60;
+  if (f >= 500_000)   return 52;
+  if (f >= 100_000)   return 42;
+  if (f >= 50_000)    return 34;
+  if (f >= 10_000)    return 26;
+  if (f >= 1_000)     return 16;
+  if (f >= 100)       return 8;
+  return 3;
+}
 
 export async function POST(req) {
   try {
     const { interactions } = await req.json();
     if (!interactions?.length) return NextResponse.json({ saved: 0 });
-
-    // Load watchlist for zone correction
-    const { data: wlRows } = await supabase.from('watchlist').select('platform,handle');
-    const watchSet = new Set((wlRows || []).map(r => `${r.platform}:${r.handle.toLowerCase().replace(/^@/, '')}`));
-    const isWatched = (platform, handle) =>
-      watchSet.has(`${platform}:${(handle || '').toLowerCase().replace(/^@/, '')}`);
 
     const now = new Date().toISOString();
     let saved = 0;
@@ -25,80 +30,136 @@ export async function POST(req) {
 
     for (const item of interactions) {
       if (!item.handle) continue;
-      // Skip ignored accounts — don't save them at all
-      if (item.zone === 'IGNORE' || item.ignored) continue;
 
-      const watched = isWatched(item.platform || 'instagram', item.handle);
-      // Follower count is the primary zone signal. Verified alone means nothing without audience.
-      const followers = item.followers || 0;
-      const zone = watched ? 'ELITE' :
-        followers >= 10000 ? 'INFLUENTIAL' :
-        (item.verified && followers >= 1000) ? 'INFLUENTIAL' :
-        'SIGNAL';
-      const isIgnored = item.zone === 'IGNORE' || item.ignored || false;
+      const platform    = (item.platform || 'instagram').toLowerCase();
+      const cleanHandle = item.handle.toLowerCase().replace(/^@/, '');
+      const handleCol   = `handle_${platform}`;
+      const followersCol = `followers_${platform}`;
+      const verifiedCol  = `verified_${platform}`;
 
-      // Compute influence score
-      const followerPts = !item.followers ? 5 :
-        item.followers >= 1_000_000 ? 60 :
-        item.followers >= 500_000   ? 52 :
-        item.followers >= 100_000   ? 42 :
-        item.followers >= 50_000    ? 34 :
-        item.followers >= 10_000    ? 26 :
-        item.followers >= 1_000     ? 16 :
-        item.followers >= 100       ? 8  : 3;
-      const verifiedBonus = item.verified ? 15 : 0;
-      const score = watched ? 85 : Math.min(100, followerPts + verifiedBonus);
+      // ── 1. Resolve account ────────────────────────────────────────────────
+      // Look up by this platform's handle
+      let { data: account } = await supabase
+        .from('accounts')
+        .select('*')
+        .eq(handleCol, cleanHandle)
+        .maybeSingle();
 
-      // Merge with existing
+      const incomingCategory = item.zone === 'IGNORE' ? 'IGNORE' :
+        item.zone || account?.category || 'SIGNAL';
+
+      // Skip: if already IGNORE in DB or incoming
+      if (account?.category === 'IGNORE' || item.zone === 'IGNORE') {
+        // Still upsert account so it stays ignored
+        if (!account) {
+          await supabase.from('accounts').insert({
+            name:        item.name || cleanHandle,
+            bio:         item.bio  || null,
+            category:    'IGNORE',
+            [handleCol]: cleanHandle,
+            added_at:    now, updated_at: now,
+          });
+        } else if (incomingCategory === 'IGNORE') {
+          await supabase.from('accounts').update({ category: 'IGNORE', updated_at: now }).eq('id', account.id);
+        }
+        continue;
+      }
+
+      const followers = item.followers || null;
+      const verified  = item.verified  || false;
+
+      if (!account) {
+        // Create account
+        const { data: created, error: createErr } = await supabase
+          .from('accounts')
+          .insert({
+            name:           item.name || cleanHandle,
+            bio:            item.bio  || null,
+            category:       incomingCategory,
+            [handleCol]:    cleanHandle,
+            [followersCol]: followers,
+            [verifiedCol]:  verified,
+            avatar_url:     item.avatar_url || null,
+            added_at:       now, updated_at: now,
+          })
+          .select()
+          .single();
+        if (createErr) { errors.push(`account create ${cleanHandle}: ${createErr.message}`); continue; }
+        account = created;
+      } else {
+        // Update account — category respects ELITE lock
+        const newCategory = account.category === 'ELITE' ? 'ELITE' : incomingCategory;
+        const updates = {
+          updated_at:      now,
+          category:        newCategory,
+          [followersCol]:  followers || account[followersCol],
+          [verifiedCol]:   verified  || account[verifiedCol],
+          ...(item.name && !account.name ? { name: item.name } : {}),
+          ...(item.bio  && !account.bio  ? { bio:  item.bio  } : {}),
+          ...(item.avatar_url && !account.avatar_url ? { avatar_url: item.avatar_url } : {}),
+        };
+        await supabase.from('accounts').update(updates).eq('id', account.id);
+        account = { ...account, ...updates };
+      }
+
+      // ── 2. Compute interaction score ──────────────────────────────────────
+      const score = account.category === 'ELITE' ? 85 :
+        Math.min(100, followerScore(followers) + (verified ? 15 : 0));
+
+      // ── 3. Upsert platform_interaction ────────────────────────────────────
       const { data: existing } = await supabase
         .from('platform_interactions')
         .select('interaction_type, influence_score, comment_count')
-        .eq('platform', item.platform || 'instagram')
-        .eq('handle', item.handle)
-        .single();
+        .eq('platform', platform)
+        .eq('handle', cleanHandle)
+        .maybeSingle();
 
-      const existingTypes = existing?.interaction_type
-        ? existing.interaction_type.split(',')
-        : [];
-      const newType = item.interaction_type || 'unknown';
-      const allTypes = [...new Set([...existingTypes, newType])].join(',');
-      const finalScore = Math.max(score, existing?.influence_score || 0);
+      const existingTypes = existing?.interaction_type?.split(',') || [];
+      const newType       = item.interaction_type || 'unknown';
+      const allTypes      = [...new Set([...existingTypes, newType])].join(',');
+      const finalScore    = Math.max(score, existing?.influence_score || 0);
 
-      const { error } = await supabase.from('platform_interactions').upsert({
-        platform:         item.platform || 'instagram',
-        handle:           item.handle,
-        name:             item.name || item.handle,
-        followers:        item.followers || null,
-        verified:         item.verified || false,
-        interaction_type: allTypes,
-        content:          item.content?.slice(0, 500) || null,
-        bio:              item.bio?.slice(0, 500) || null,
-        influence_score:  watched ? Math.max(finalScore, 80) : finalScore,
-        zone,
-        profile_url:      `https://instagram.com/${item.handle}`,
-        on_watchlist:     watched,
-        ignored:          isIgnored,
-        comment_count:    (existing?.comment_count || 0) + (newType === 'comment' ? 1 : 0),
-        interacted_at:    now,
-        synced_at:        now,
-        ...(item.screenshot_id ? { screenshot_id: item.screenshot_id } : {}),
-      }, { onConflict: 'platform,handle' });
+      // Profile URL by platform
+      const profileUrls = {
+        instagram: `https://instagram.com/${cleanHandle}`,
+        x:         `https://x.com/${cleanHandle}`,
+        youtube:   `https://youtube.com/@${cleanHandle}`,
+        linkedin:  `https://linkedin.com/in/${cleanHandle}`,
+      };
 
-      if (error) errors.push(`${item.handle}: ${error.message}`);
-      else {
-        saved++;
-        // If marked ELITE, add to watchlist so it persists for future imports
-        if (zone === 'ELITE') {
-          await supabase.from('watchlist').upsert({
-            platform: item.platform || 'instagram',
-            handle:   item.handle.toLowerCase().replace(/^@/, ''),
-            label:    item.name || item.handle,
-          }, { onConflict: 'platform,handle' });
-        }
-      }
+      const { error: upsertErr } = await supabase
+        .from('platform_interactions')
+        .upsert({
+          platform,
+          handle:           cleanHandle,
+          name:             item.name     || account.name || cleanHandle,
+          followers:        followers,
+          verified:         verified,
+          bio:              item.bio      || account.bio || null,
+          interaction_type: allTypes,
+          content:          item.content?.slice(0, 500) || null,
+          influence_score:  finalScore,
+          zone:             account.category,
+          profile_url:      profileUrls[platform] || `https://${platform}.com/${cleanHandle}`,
+          on_watchlist:     account.category === 'ELITE',
+          ignored:          false,
+          comment_count:    (existing?.comment_count || 0) + (newType === 'comment' ? 1 : 0),
+          interacted_at:    now,
+          synced_at:        now,
+          account_id:       account.id,
+          ...(item.screenshot_id ? { screenshot_id: item.screenshot_id } : {}),
+        }, { onConflict: 'platform,handle' });
+
+      if (upsertErr) errors.push(`${cleanHandle}: ${upsertErr.message}`);
+      else saved++;
     }
 
-    return NextResponse.json({ saved, errors: errors.length, message: `Saved ${saved} interactions` });
+    return NextResponse.json({
+      saved,
+      errors: errors.length,
+      errorDetails: errors.slice(0, 5),
+      message: `Saved ${saved} interactions`,
+    });
   } catch (err) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }

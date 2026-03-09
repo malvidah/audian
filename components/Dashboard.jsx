@@ -208,62 +208,24 @@ function ProfileMenu({ session, supabase, connections, onDisconnect, watchlist =
     setDisconnecting(null);
   }
 
+  const [csvCategory, setCsvCategory] = React.useState("ELITE");
+
   async function handleCSV(file) {
     if (!file) return;
     setUploading(true); setUploadMsg("");
-    const text = await file.text();
-    const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
-    const entries = [];
-
-    // Detect header row and skip it
-    const firstLine = lines[0]?.toLowerCase() || "";
-    const startIdx = (firstLine.includes("handle") || firstLine.includes("name") || firstLine.includes("platform")) ? 1 : 0;
-
-    for (const line of lines.slice(startIdx, 5000)) {
-      // Handle quoted CSV fields
-      const parts = line.match(/("([^"]*)"|[^,]+|(?<=,)(?=,)|^(?=,))/g)
-        ?.map(p => p.replace(/^"|"$/g, "").trim()) || line.split(",").map(p => p.trim());
-
-      if (parts.length === 0 || !parts.some(p => p)) continue;
-
-      // Format: Name, @handle, Source List, Status, ..., Label  (Big Think export)
-      // Detect by: has @ in one of the first 3 columns
-      const handleIdx = parts.findIndex((p, i) => i < 4 && p.startsWith("@"));
-      if (handleIdx >= 0) {
-        const handle = parts[handleIdx].replace(/^@/, "").toLowerCase().trim();
-        const label  = parts[parts.length - 1] || parts[2] || null;
-        const platform = "x"; // Big Think list is X handles
-        if (handle) entries.push({ platform, handle, label });
-        continue;
-      }
-
-      // Generic formats: handle | platform,handle | platform,handle,label
-      const knownPlat = ["instagram","youtube","x","twitter","linkedin"].includes(parts[0]?.toLowerCase());
-      if (parts.length === 1) {
-        entries.push({ platform: "instagram", handle: parts[0].replace(/^@/, "").toLowerCase() });
-      } else if (parts.length === 2) {
-        if (knownPlat) entries.push({ platform: parts[0] === "twitter" ? "x" : parts[0].toLowerCase(), handle: parts[1].replace(/^@/, "").toLowerCase() });
-        else           entries.push({ platform: "instagram", handle: parts[0].replace(/^@/, "").toLowerCase(), label: parts[1] });
-      } else if (parts.length >= 3) {
-        if (knownPlat) entries.push({ platform: parts[0] === "twitter" ? "x" : parts[0].toLowerCase(), handle: parts[1].replace(/^@/, "").toLowerCase(), label: parts[2] });
-        else           entries.push({ platform: "instagram", handle: parts[0].replace(/^@/, "").toLowerCase(), label: parts[parts.length - 1] });
-      }
-    }
-    // Deduplicate by platform+handle
-    const seen = new Set();
-    const deduped = entries.filter(e => {
-      const key = `${e.platform}:${e.handle}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
     try {
-      const sess = await supabase.auth.getSession();
-      const tok = sess.data?.session?.access_token;
-      const res = await fetch("/api/watchlist", { method: "POST", headers: { "Content-Type": "application/json", ...(tok ? { Authorization: `Bearer ${tok}` } : {}) }, body: JSON.stringify({ entries: deduped }) });
+      const csv = await file.text();
+      const res = await fetch("/api/accounts/csv", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ csv, category: csvCategory }),
+      });
       const data = await res.json();
       if (data.error) setUploadMsg("✗ " + data.error);
-      else { setUploadMsg(`✓ ${(data.added || deduped.length).toLocaleString()} accounts added`); onWatchlistUpdate?.(); }
+      else {
+        setUploadMsg(`✓ ${data.imported} accounts added as ${csvCategory}`);
+        onWatchlistUpdate?.();
+      }
     } catch { setUploadMsg("✗ Upload failed"); }
     setUploading(false);
   }
@@ -363,11 +325,21 @@ function ProfileMenu({ session, supabase, connections, onDisconnect, watchlist =
             </button>
             {watchlistOpen && (
               <div style={{ padding: "0 18px 14px" }}>
-                <div style={{ fontFamily: sans, fontSize: F.xs, color: T.sub, marginBottom: 10, lineHeight: 1.5 }}>
-                  Upload a CSV of your core accounts to watch. When they interact with your content they'll be marked <strong>ELITE</strong>. Others with high follower counts are <strong>INFLUENTIAL</strong>. Promising accounts are <strong>SIGNAL</strong>.
+                <div style={{ fontFamily: sans, fontSize: F.xs, color: T.sub, marginBottom: 8, lineHeight: 1.5 }}>
+                  Upload a CSV to add accounts to any list. Supports <code style={{ background: T.well, padding: "1px 3px", borderRadius: 3 }}>handle</code>, <code style={{ background: T.well, padding: "1px 3px", borderRadius: 3 }}>platform,handle</code>, or <code style={{ background: T.well, padding: "1px 3px", borderRadius: 3 }}>platform,handle,name,bio</code>.
                 </div>
-                <div style={{ fontFamily: sans, fontSize: 10, color: T.dim, marginBottom: 8 }}>
-                  CSV format: <code style={{ background: T.well, padding: "1px 4px", borderRadius: 3 }}>handle</code> or <code style={{ background: T.well, padding: "1px 4px", borderRadius: 3 }}>platform,handle</code> or <code style={{ background: T.well, padding: "1px 4px", borderRadius: 3 }}>platform,handle,label</code>
+                <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 10, flexWrap: "wrap" }}>
+                  <span style={{ fontFamily: sans, fontSize: 10, color: T.dim }}>Import as:</span>
+                  {["ELITE","INFLUENTIAL","SIGNAL","IGNORE"].map(cat => (
+                    <button key={cat} onClick={() => setCsvCategory(cat)}
+                      style={{ fontFamily: sans, fontSize: 10, padding: "2px 8px", borderRadius: 6,
+                        border: `1px solid ${csvCategory === cat ? T.accent : T.border}`,
+                        background: csvCategory === cat ? T.accentBg : "transparent",
+                        color: csvCategory === cat ? T.accent : T.sub,
+                        cursor: "pointer", fontWeight: csvCategory === cat ? 700 : 400 }}>
+                      {cat}
+                    </button>
+                  ))}
                 </div>
                 <input ref={fileRef} type="file" accept=".csv,.txt" style={{ display: "none" }} onChange={e => handleCSV(e.target.files[0])} />
                 <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
@@ -1137,6 +1109,12 @@ export default function Dashboard() {
                                 )}
                                 {item.verified && (
                                   <span title="Verified" style={{ color: "#1D9BF0", fontSize: 12, lineHeight: 1 }}>✓</span>
+                                )}
+                                {platform === "All" && item.platform && (
+                                  <span style={{ fontFamily: sans, fontSize: 9, color: T.dim, background: T.well,
+                                    border: `1px solid ${T.border}`, borderRadius: 3, padding: "1px 4px" }}>
+                                    {{"instagram":"📸","x":"𝕏","youtube":"▶","linkedin":"in"}[item.platform] || item.platform}
+                                  </span>
                                 )}
                               </div>
                               {item.screenshot_thumbnail && (

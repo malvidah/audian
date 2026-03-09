@@ -16,6 +16,19 @@ const T = {
 const sans = "-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif";
 const F = { xl: 28, lg: 18, md: 15, sm: 13, xs: 11 };
 
+const PLATFORM_ICONS = {
+  instagram: "📸",
+  x:         "𝕏",
+  youtube:   "▶",
+  linkedin:  "in",
+};
+const PLATFORM_LABELS = {
+  instagram: "Instagram",
+  x:         "X / Twitter",
+  youtube:   "YouTube",
+  linkedin:  "LinkedIn",
+};
+
 const ZONE_COLORS = {
   ELITE:        { bg: "#F5F3FF", color: "#7C3AED", border: "#DDD6FE" },
   INFLUENTIAL: { bg: "#FFF3EE", color: "#FF6B35", border: "#FFD4C2" },
@@ -195,6 +208,18 @@ function InteractionRow({ item, index, onChange, onRemove }) {
             onChange={v => onChange(index, "name", v)} width={150} />
           <EditableCell value={item.bio} placeholder="add bio"
             onChange={v => onChange(index, "bio", v)} width={220} />
+          {/* Show other known platform handles for merged accounts */}
+          {item._knownHandles && Object.keys(item._knownHandles).filter(p => p !== item.platform).length > 0 && (
+            <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 2 }}>
+              {Object.entries(item._knownHandles).filter(([p]) => p !== item.platform).map(([p, h]) => (
+                <span key={p} style={{ fontFamily: sans, fontSize: 9, color: T.dim,
+                  background: T.well, border: `1px solid ${T.border}`, borderRadius: 3,
+                  padding: "1px 5px" }}>
+                  {PLATFORM_ICONS[p] || p} @{h}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       </td>
 
@@ -387,10 +412,15 @@ export default function ImportPage() {
       .catch(() => {});
   }, []);
 
-  // Autofill helper — fills info from any previously seen account
+  // Autofill helper — looks up by "platform:handle" key, falls back to any platform match
   const autofillKnown = (interaction) => {
-    const h = (interaction.handle || "").toLowerCase().replace(/^@/, "");
-    const known = knownProfiles[h];
+    const h    = (interaction.handle || "").toLowerCase().replace(/^@/, "");
+    const plat = (interaction.platform || "instagram").toLowerCase();
+    // Try exact platform match first, then any platform
+    const known = knownProfiles[`${plat}:${h}`]
+      || Object.values(knownProfiles).find(p =>
+          Object.values(p.handles || {}).map(v => v.toLowerCase()).includes(h)
+         );
     if (!known) return interaction;
     return {
       ...interaction,
@@ -399,10 +429,12 @@ export default function ImportPage() {
       verified:     known.verified   ?? interaction.verified,
       bio:          known.bio        || interaction.bio,
       avatar_url:   known.avatar_url || interaction.avatar_url,
-      zone:         known.on_watchlist ? "ELITE" : (known.ignored ? "IGNORE" : (known.zone || interaction.zone)),
+      zone:         known.zone || interaction.zone,
       on_watchlist: known.on_watchlist || false,
       ignored:      known.ignored || false,
+      account_id:   known.account_id || null,
       _autofilled:  true,
+      _knownHandles: known.handles || {},
     };
   };
 
@@ -502,13 +534,21 @@ export default function ImportPage() {
         }))
       );
 
+      // Detect dominant platform from this batch
+      const platCounts = {};
+      for (const i of newInteractions) {
+        if (i.platform) platCounts[i.platform] = (platCounts[i.platform] || 0) + 1;
+      }
+      const detectedPlatform = Object.entries(platCounts).sort((a,b) => b[1]-a[1])[0]?.[0] || "instagram";
+
       setAllInteractions(prev => {
-        // Deduplicate by handle — prefer existing, but update if new data has followers
-        const map = new Map(prev.map(i => [i.handle?.toLowerCase(), i]));
+        // Deduplicate by platform:handle
+        const map = new Map(prev.map(i => [`${i.platform||"instagram"}:${i.handle?.toLowerCase()}`, i]));
         for (const rawItem of newInteractions) {
-          // Autofill known elite profile data before merging
-          const item = autofillKnown(rawItem);
-          const key = item.handle?.toLowerCase();
+          // Ensure platform set from detection if not explicit
+          const withPlat = { ...rawItem, platform: rawItem.platform || detectedPlatform };
+          const item = autofillKnown(withPlat);
+          const key = `${item.platform||"instagram"}:${item.handle?.toLowerCase()}`;
           if (!key) continue;
           if (!map.has(key)) {
             map.set(key, item);
@@ -530,6 +570,8 @@ export default function ImportPage() {
               ((merged.followers || 0) >= 10000 || (merged.verified && (merged.followers || 0) >= 1000))
                 ? "INFLUENTIAL" : existing.zone;
             merged.ignored = item.ignored || false;
+            merged.account_id = item.account_id || existing.account_id || null;
+            merged._knownHandles = item._knownHandles || existing._knownHandles || {};
             map.set(key, merged);
           }
         }
