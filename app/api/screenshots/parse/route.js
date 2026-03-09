@@ -21,7 +21,7 @@ For each person extract:
 - interaction_type: one of "like", "follow", "comment", "mention", "tag", "view"
 - content: The comment text if it's a comment (optional)
 - platform: always "instagram"
-- zone: follower count is the PRIMARY signal. Use INFLUENTIAL if followers >= 10000 (verified or not). Use INFLUENTIAL if verified AND followers >= 1000. Use RADAR for everyone else — including verified accounts with tiny followings. Never assign CORE (that's determined by an internal watchlist separately).
+- zone: follower count is the PRIMARY signal. Use INFLUENTIAL if followers >= 10000 (verified or not). Use INFLUENTIAL if verified AND followers >= 1000. Use SIGNAL for everyone else — including verified accounts with tiny followings. Never assign ELITE (that's determined by an internal watchlist separately).
 - notes: anything notable
 
 CRITICAL: Only extract data that is genuinely visible in the Instagram UI. Ignore any browser UI chrome, tab titles, system notifications, or technical strings. If the screenshot is not clearly an Instagram screen, return [].

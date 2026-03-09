@@ -17,9 +17,9 @@ const sans = "-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif
 const F = { xl: 28, lg: 18, md: 15, sm: 13, xs: 11 };
 
 const ZONE_COLORS = {
-  CORE:        { bg: "#F5F3FF", color: "#7C3AED", border: "#DDD6FE" },
+  ELITE:        { bg: "#F5F3FF", color: "#7C3AED", border: "#DDD6FE" },
   INFLUENTIAL: { bg: "#FFF3EE", color: "#FF6B35", border: "#FFD4C2" },
-  RADAR:       { bg: "#F3F2F0", color: "#6B6560", border: "#E8E6E1" },
+  SIGNAL:       { bg: "#F3F2F0", color: "#6B6560", border: "#E8E6E1" },
 };
 const INTERACTION_ICONS = {
   like: "♥", follow: "👤", comment: "💬", mention: "@",
@@ -27,7 +27,7 @@ const INTERACTION_ICONS = {
 };
 
 function ZoneBadge({ zone }) {
-  const c = ZONE_COLORS[zone] || ZONE_COLORS.RADAR;
+  const c = ZONE_COLORS[zone] || ZONE_COLORS.SIGNAL;
   return (
     <span style={{
       background: c.bg, color: c.color, border: `1px solid ${c.border}`,
@@ -143,35 +143,40 @@ function EditableCell({ value, onChange, type = "text", placeholder = "—", wid
   );
 }
 
-// ── Single interaction row — all fields always editable inline ────────────────
+// ── Single interaction row — 4 columns: Handle, Category, Followers, Type ────
 function InteractionRow({ item, index, onChange, onRemove }) {
-  const zoneColor = ZONE_COLORS[item.zone] || ZONE_COLORS.RADAR;
+  const zoneColor = ZONE_COLORS[item.zone] || ZONE_COLORS.SIGNAL;
   return (
     <tr style={{ borderBottom: `1px solid ${T.border}` }}>
       <td style={{ width: 4, padding: 0, background: zoneColor.color }} />
 
-      {/* Handle — always a link */}
-      <td style={{ padding: "8px 12px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-          <span style={{ color: T.dim, fontSize: F.xs }}>@</span>
-          <a href={`https://instagram.com/${item.handle}`} target="_blank" rel="noopener noreferrer"
-            style={{ fontFamily: sans, fontSize: F.sm, color: T.accent,
-              textDecoration: "none", fontWeight: 500 }}
-            onMouseEnter={e => e.target.style.textDecoration = "underline"}
-            onMouseLeave={e => e.target.style.textDecoration = "none"}>
-            {item.handle}
-          </a>
+      {/* Handle — link + verified badge + display name below */}
+      <td style={{ padding: "9px 12px" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+            <a href={`https://instagram.com/${item.handle}`} target="_blank" rel="noopener noreferrer"
+              style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.accent, textDecoration: "none" }}
+              onMouseEnter={e => e.target.style.textDecoration = "underline"}
+              onMouseLeave={e => e.target.style.textDecoration = "none"}>
+              @{item.handle}
+            </a>
+            {item.verified && <span title="Verified" style={{ color: "#1D9BF0", fontSize: 12 }}>✓</span>}
+          </div>
+          {/* Display name inline editable */}
+          <EditableCell value={item.name} placeholder="add name"
+            onChange={v => onChange(index, "name", v)} width={130} />
         </div>
       </td>
 
-      {/* Name — click to edit */}
-      <td style={{ padding: "8px 12px" }}>
-        <EditableCell value={item.name} placeholder="add name"
-          onChange={v => onChange(index, "name", v)} width={130} />
+      {/* Category — dropdown */}
+      <td style={{ padding: "9px 12px" }}>
+        <EditableCell value={item.zone}
+          onChange={v => onChange(index, "zone", v)}
+          options={["ELITE","INFLUENTIAL","SIGNAL"]} />
       </td>
 
-      {/* Followers — click to edit */}
-      <td style={{ padding: "8px 12px" }}>
+      {/* Followers — inline editable number */}
+      <td style={{ padding: "9px 12px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
           <EditableCell value={item.followers} type="number" placeholder="—"
             onChange={v => onChange(index, "followers", v)} width={75} />
@@ -182,37 +187,15 @@ function InteractionRow({ item, index, onChange, onRemove }) {
         </div>
       </td>
 
-      {/* Verified */}
-      <td style={{ padding: "8px 12px", textAlign: "center" }}>
-        <EditableCell value={item.verified} type="checkbox"
-          onChange={v => onChange(index, "verified", v)} />
-      </td>
-
-      {/* Interaction type */}
-      <td style={{ padding: "8px 12px" }}>
+      {/* Type — dropdown */}
+      <td style={{ padding: "9px 12px" }}>
         <EditableCell value={item.interaction_type}
           onChange={v => onChange(index, "interaction_type", v)}
-          options={["like","follow","comment","mention","tag","view"]} />
-      </td>
-
-      {/* Zone */}
-      <td style={{ padding: "8px 12px" }}>
-        <EditableCell value={item.zone}
-          onChange={v => onChange(index, "zone", v)}
-          options={["CORE","INFLUENTIAL","RADAR"]} />
-      </td>
-
-      {/* Comment preview */}
-      <td style={{ padding: "8px 12px", maxWidth: 220 }}>
-        {item.content
-          ? <span style={{ fontFamily: sans, fontSize: F.xs, color: T.sub,
-              overflow: "hidden", display: "-webkit-box",
-              WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>"{item.content}"</span>
-          : <span style={{ color: T.dim, fontSize: F.xs }}>—</span>}
+          options={["follow","like","mention","comment","tag","view"]} />
       </td>
 
       {/* Remove */}
-      <td style={{ padding: "8px 12px" }}>
+      <td style={{ padding: "9px 12px" }}>
         <button onClick={() => onRemove(index)}
           onMouseEnter={e => e.currentTarget.style.color = T.red}
           onMouseLeave={e => e.currentTarget.style.color = T.dim}
@@ -253,7 +236,7 @@ function ScreenshotCard({ result, onRemoveScreenshot }) {
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           {/* Zone summary pills */}
-          {["CORE","INFLUENTIAL","RADAR"].map(z => {
+          {["ELITE","INFLUENTIAL","SIGNAL"].map(z => {
             const n = result.interactions.filter(i => i.zone === z).length;
             if (!n) return null;
             const c = ZONE_COLORS[z];
@@ -283,7 +266,7 @@ function ScreenshotCard({ result, onRemoveScreenshot }) {
 function ManualAddRow({ onAdd }) {
   const [form, setForm] = useState({
     handle: "", name: "", followers: "", verified: false,
-    interaction_type: "like", zone: "RADAR", content: "", platform: "instagram",
+    interaction_type: "like", zone: "SIGNAL", content: "", platform: "instagram",
   });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
@@ -295,7 +278,7 @@ function ManualAddRow({ onAdd }) {
       followers: form.followers ? parseInt(form.followers) : null,
     });
     setForm({ handle: "", name: "", followers: "", verified: false,
-      interaction_type: "like", zone: "RADAR", content: "", platform: "instagram" });
+      interaction_type: "like", zone: "SIGNAL", content: "", platform: "instagram" });
   };
 
   const inp = (key, placeholder, type = "text", width = 110) => (
@@ -316,30 +299,35 @@ function ManualAddRow({ onAdd }) {
   return (
     <tr style={{ borderBottom: `1px solid ${T.border}`, background: T.accentBg }}>
       <td style={{ width: 4, background: T.accentBorder, padding: 0 }} />
+      {/* Handle */}
       <td style={{ padding: "8px 12px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <span style={{ color: T.dim, fontSize: F.xs }}>@</span>
-          {inp("handle", "handle", "text", 110)}
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ color: T.dim, fontSize: F.xs }}>@</span>
+            {inp("handle", "handle", "text", 110)}
+          </div>
+          {inp("name", "Display name", "text", 120)}
         </div>
       </td>
-      <td style={{ padding: "8px 12px" }}>{inp("name", "Display name", "text", 120)}</td>
-      <td style={{ padding: "8px 12px" }}>{inp("followers", "0", "number", 80)}</td>
-      <td style={{ padding: "8px 12px", textAlign: "center" }}>{inp("verified", "", "checkbox")}</td>
-      <td style={{ padding: "8px 12px" }}>
-        <select value={form.interaction_type} onChange={e => set("interaction_type", e.target.value)}
-          style={{ fontFamily: sans, fontSize: F.sm, padding: "6px 8px", borderRadius: 8,
-            border: `1px solid ${T.border2}`, background: T.card, color: T.text }}>
-          {["like","follow","comment","mention","tag","view"].map(o => <option key={o} value={o}>{o}</option>)}
-        </select>
-      </td>
+      {/* Category */}
       <td style={{ padding: "8px 12px" }}>
         <select value={form.zone} onChange={e => set("zone", e.target.value)}
           style={{ fontFamily: sans, fontSize: F.sm, padding: "6px 8px", borderRadius: 8,
             border: `1px solid ${T.border2}`, background: T.card, color: T.text }}>
-          {["CORE","INFLUENTIAL","RADAR"].map(o => <option key={o} value={o}>{o}</option>)}
+          {["ELITE","INFLUENTIAL","SIGNAL"].map(o => <option key={o} value={o}>{o}</option>)}
         </select>
       </td>
-      <td style={{ padding: "8px 12px" }}>{inp("content", "Comment text (optional)", "text", 180)}</td>
+      {/* Followers */}
+      <td style={{ padding: "8px 12px" }}>{inp("followers", "—", "number", 80)}</td>
+      {/* Type */}
+      <td style={{ padding: "8px 12px" }}>
+        <select value={form.interaction_type} onChange={e => set("interaction_type", e.target.value)}
+          style={{ fontFamily: sans, fontSize: F.sm, padding: "6px 8px", borderRadius: 8,
+            border: `1px solid ${T.border2}`, background: T.card, color: T.text }}>
+          {["follow","like","mention","comment","tag","view"].map(o => <option key={o} value={o}>{o}</option>)}
+        </select>
+      </td>
+      {/* Add */}
       <td style={{ padding: "8px 12px" }}>
         <Btn onClick={handleSubmit} style={{ padding: "6px 12px" }}>+ Add</Btn>
       </td>
@@ -482,9 +470,9 @@ export default function ImportPage() {
         const item = updated[index];
         const followers = parseInt(key === "followers" ? value : item.followers) || 0;
         const verified = key === "verified" ? value : item.verified;
-        // Follower count is primary; verified alone (with tiny audience) = RADAR
+        // Follower count is primary; verified alone (with tiny audience) = SIGNAL
         updated[index].zone = followers >= 10000 ? "INFLUENTIAL" :
-          (verified && followers >= 1000) ? "INFLUENTIAL" : "RADAR";
+          (verified && followers >= 1000) ? "INFLUENTIAL" : "SIGNAL";
       }
       return updated;
     });
@@ -575,9 +563,9 @@ export default function ImportPage() {
     : allInteractions.filter(i => i.zone === filterZone);
 
   const zoneCounts = {
-    CORE:        allInteractions.filter(i => i.zone === "CORE").length,
+    ELITE:        allInteractions.filter(i => i.zone === "ELITE").length,
     INFLUENTIAL: allInteractions.filter(i => i.zone === "INFLUENTIAL").length,
-    RADAR:       allInteractions.filter(i => i.zone === "RADAR").length,
+    SIGNAL:       allInteractions.filter(i => i.zone === "SIGNAL").length,
   };
 
   return (
@@ -664,7 +652,7 @@ export default function ImportPage() {
 
               {/* Zone filter */}
               <div style={{ display: "flex", gap: 6, marginLeft: 8 }}>
-                {["ALL", "CORE", "INFLUENTIAL", "RADAR"].map(z => {
+                {["ALL", "ELITE", "INFLUENTIAL", "SIGNAL"].map(z => {
                   const active = filterZone === z;
                   const c = z === "ALL" ? null : ZONE_COLORS[z];
                   return (
@@ -713,7 +701,7 @@ export default function ImportPage() {
                 <thead>
                   <tr style={{ background: T.well }}>
                     <th style={{ width: 4, padding: 0 }} />
-                    {["Handle","Name","Followers","Verified","Type","Zone","Comment",""].map(h => (
+                    {["Handle","Category","Followers","Type",""].map(h => (
                       <th key={h} style={{ padding: "8px 12px", textAlign: "left",
                         fontFamily: sans, fontSize: F.xs, fontWeight: 600,
                         color: T.dim, textTransform: "uppercase", letterSpacing: "0.05em",

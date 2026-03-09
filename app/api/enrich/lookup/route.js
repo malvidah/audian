@@ -29,7 +29,7 @@ export async function POST(req) {
       return NextResponse.json({ error: 'No Instagram connection', results: [] });
     }
 
-    // Load watchlist for CORE detection
+    // Load watchlist for ELITE detection
     const { data: wlRows } = await supabase
       .from('watchlist')
       .select('handle')
@@ -61,8 +61,8 @@ export async function POST(req) {
 
         const followers = p.followers_count || 0;
         const onWatchlist = watchSet.has(clean);
-        const zone = onWatchlist ? 'CORE' :
-          followers >= 10000 ? 'INFLUENTIAL' : 'RADAR';
+        const zone = onWatchlist ? 'ELITE' :
+          followers >= 10000 ? 'INFLUENTIAL' : 'SIGNAL';
 
         results.push({
           handle:      clean,

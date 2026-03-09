@@ -364,7 +364,7 @@ function ProfileMenu({ session, supabase, connections, onDisconnect, watchlist =
             {watchlistOpen && (
               <div style={{ padding: "0 18px 14px" }}>
                 <div style={{ fontFamily: sans, fontSize: F.xs, color: T.sub, marginBottom: 10, lineHeight: 1.5 }}>
-                  Upload a CSV of your core accounts to watch. When they interact with your content they'll be marked <strong>CORE</strong>. Others with high follower counts are <strong>INFLUENTIAL</strong>. Promising accounts are <strong>RADAR</strong>.
+                  Upload a CSV of your core accounts to watch. When they interact with your content they'll be marked <strong>ELITE</strong>. Others with high follower counts are <strong>INFLUENTIAL</strong>. Promising accounts are <strong>SIGNAL</strong>.
                 </div>
                 <div style={{ fontFamily: sans, fontSize: 10, color: T.dim, marginBottom: 8 }}>
                   CSV format: <code style={{ background: T.well, padding: "1px 4px", borderRadius: 3 }}>handle</code> or <code style={{ background: T.well, padding: "1px 4px", borderRadius: 3 }}>platform,handle</code> or <code style={{ background: T.well, padding: "1px 4px", borderRadius: 3 }}>platform,handle,label</code>
@@ -898,7 +898,7 @@ export default function Dashboard() {
       const scoreData = await scoreRes.json();
       if (scoreData.error) { setSyncMsg(`✗ ${scoreData.error}`); setScoring(false); return; }
 
-      // 3. Enrich top RADAR profiles with real follower counts (uses existing IG token, no Apify)
+      // 3. Enrich top SIGNAL profiles with real follower counts (uses existing IG token, no Apify)
       setSyncMsg("Enriching profiles…");
       const enrichRes = await fetch("/api/enrich", { method: "POST" });
       const enrichData = await enrichRes.json().catch(() => ({}));
@@ -1126,9 +1126,9 @@ export default function Dashboard() {
           </Card>
         )}
 
-        {/* ── Influential Interactions ─────────────────────────────────────── */}
+        {/* ── Interactions ─────────────────────────────────────── */}
         <Card style={{ marginBottom: 12, overflow: "hidden" }}>
-          <SectionHeader label="Influential Interactions" count={filteredInteractions.length} open={open.interactions} onToggle={() => tog("interactions")} action={
+          <SectionHeader label="Interactions" count={filteredInteractions.length} open={open.interactions} onToggle={() => tog("interactions")} action={
               <div style={{ display: "flex", gap: 6 }}>
                 {connections.some(c => c.platform === "instagram") && (
                   <Btn variant="secondary" size="sm" onClick={triggerScrape} disabled={scraping}>
@@ -1152,7 +1152,7 @@ export default function Dashboard() {
                 ) : (
                   <>
                     <div style={{ padding: "10px 20px 6px", display: "flex", gap: 16, alignItems: "center" }}>
-                      {[["CORE", T.accent, T.accentBg], ["INFLUENTIAL", "#F59E0B", "#FFFBEB"], ["RADAR", T.sub, T.well]].map(([zone, color, bg]) => (
+                      {[["ELITE", T.accent, T.accentBg], ["INFLUENTIAL", "#F59E0B", "#FFFBEB"], ["SIGNAL", T.sub, T.well]].map(([zone, color, bg]) => (
                         <div key={zone} style={{ display: "flex", alignItems: "center", gap: 5 }}>
                           <span style={{ background: bg, color, border: `1px solid ${color}30`, borderRadius: 4, padding: "1px 6px", fontFamily: sans, fontSize: 10, fontWeight: 700 }}>{zone}</span>
                           <span style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>{filteredInteractions.filter(i => i.zone === zone).length}</span>
@@ -1161,49 +1161,68 @@ export default function Dashboard() {
                       <span style={{ marginLeft: "auto", fontFamily: sans, fontSize: F.xs, color: T.dim }}>Click ↗ to manually vet each profile</span>
                     </div>
                     <Divider />
+                    {/* Table header */}
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 100px 80px 100px", gap: 0, padding: "6px 20px 6px", borderBottom: `1px solid ${T.border}` }}>
+                      {["Handle", "Category", "Followers", "Type"].map(h => (
+                        <div key={h} style={{ fontFamily: sans, fontSize: 10, fontWeight: 700, color: T.dim, textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</div>
+                      ))}
+                    </div>
                     {filteredInteractions
                       .sort((a, b) => (b.influence_score || 0) - (a.influence_score || 0))
                       .map(item => {
-                        const zoneColor = item.zone === "CORE" ? T.accent : item.zone === "INFLUENTIAL" ? "#F59E0B" : item.zone === "RADAR" ? T.sub : T.dim;
-                        const zoneBg    = item.zone === "CORE" ? T.accentBg : item.zone === "INFLUENTIAL" ? "#FFFBEB" : T.well;
+                        const zoneColor = item.zone === "ELITE" ? T.accent : item.zone === "INFLUENTIAL" ? "#F59E0B" : "#6B7280";
+                        const zoneBg    = item.zone === "ELITE" ? T.accentBg : item.zone === "INFLUENTIAL" ? "#FFFBEB" : T.well;
+                        const profileUrl = item.profile_url || (item.platform === "instagram" ? `https://instagram.com/${item.handle}` : null);
+                        const typeParts = (item.interaction_type || "").split(",").map(t => t.trim()).filter(Boolean);
                         return (
-                          <div key={item.id} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "13px 20px", borderBottom: `1px solid ${T.border}` }}>
-                            <div style={{ width: 36, height: 36, borderRadius: "50%", background: zoneBg, border: `1.5px solid ${zoneColor}40`, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: sans, fontSize: F.sm, color: zoneColor, fontWeight: 700, flexShrink: 0 }}>
-                              {(item.name || item.handle || "?")[0].toUpperCase()}
-                            </div>
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5, flexWrap: "wrap" }}>
-                                {item.profile_url ? (
-                                  <a href={item.profile_url} target="_blank" rel="noreferrer" style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text, textDecoration: "none" }}>{item.name || item.handle} ↗</a>
+                          <div key={item.id} style={{ display: "grid", gridTemplateColumns: "1fr 100px 80px 100px", gap: 0, padding: "10px 20px", borderBottom: `1px solid ${T.border}`, alignItems: "center" }}>
+
+                            {/* Handle */}
+                            <div style={{ display: "flex", flexDirection: "column", gap: 1, minWidth: 0 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                                {profileUrl ? (
+                                  <a href={profileUrl} target="_blank" rel="noreferrer"
+                                    style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text, textDecoration: "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                                    onMouseEnter={e => e.currentTarget.style.color = T.accent}
+                                    onMouseLeave={e => e.currentTarget.style.color = T.text}>
+                                    @{item.handle}
+                                  </a>
                                 ) : (
-                                  <span style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text }}>{item.name || item.handle}</span>
+                                  <span style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text }}>@{item.handle}</span>
                                 )}
-                                <PlatDot platform={item.platform} size={6} />
-                                <span style={{ background: zoneBg, color: zoneColor, border: `1px solid ${zoneColor}30`, borderRadius: 4, padding: "1px 6px", fontFamily: sans, fontSize: 10, fontWeight: 700 }}>{item.zone}</span>
-                                {/* Interaction type badges — comma-separated types, show all */}
-                                {item.interaction_type && item.interaction_type.split(",").map(t => {
-                                  const BADGE = { follow: "👤 follow", like: "♥ like", mention: "@ mention", comment: "💬 comment", retweet: "🔁 retweet", reply: "↩ reply" };
-                                  return (
-                                    <span key={t} style={{ background: T.well, color: T.sub, border: `1px solid ${T.border}`, borderRadius: 4, padding: "1px 6px", fontFamily: sans, fontSize: 10, fontWeight: 600 }}>
-                                      {BADGE[t] || t}
-                                    </span>
-                                  );
-                                })}
-                                {item.verified && <span style={{ fontSize: 11 }} title="Verified">✓</span>}
-                                {item.followers > 0 && <span style={{ fontFamily: sans, fontSize: F.xs, color: T.sub }}>{fmt(item.followers)} followers</span>}
-                                {item.comment_count > 1 && <span style={{ fontFamily: sans, fontSize: F.xs, color: T.green, fontWeight: 500 }}>✦ {item.comment_count}×</span>}
-                                <span style={{ marginLeft: "auto", fontFamily: sans, fontSize: F.xs, color: T.dim }}>{timeAgo(item.interacted_at)}</span>
+                                {item.verified && (
+                                  <span title="Verified" style={{ color: "#1D9BF0", fontSize: 12, lineHeight: 1 }}>✓</span>
+                                )}
                               </div>
-                              {item.content && (
-                                <div style={{ fontFamily: sans, fontSize: F.sm, color: T.sub, lineHeight: 1.55, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
-                                  "{item.content}"
-                                </div>
+                              {item.name && item.name !== item.handle && (
+                                <div style={{ fontFamily: sans, fontSize: F.xs, color: T.dim, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</div>
                               )}
                             </div>
-                            <div style={{ flexShrink: 0, background: zoneBg, border: `1px solid ${zoneColor}30`, borderRadius: 8, padding: "4px 10px", textAlign: "center", minWidth: 44 }}>
-                              <div style={{ fontFamily: sans, fontSize: 18, fontWeight: 700, color: zoneColor, lineHeight: 1 }}>{item.influence_score || 0}</div>
-                              <div style={{ fontFamily: sans, fontSize: 9, color: T.dim, marginTop: 2 }}>SCORE</div>
+
+                            {/* Category */}
+                            <div>
+                              <span style={{ background: zoneBg, color: zoneColor, border: `1px solid ${zoneColor}30`, borderRadius: 4, padding: "2px 7px", fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: "0.04em" }}>
+                                {item.zone}
+                              </span>
                             </div>
+
+                            {/* Followers */}
+                            <div style={{ fontFamily: sans, fontSize: F.sm, color: item.followers ? T.text : T.dim }}>
+                              {item.followers ? fmt(item.followers) : "—"}
+                            </div>
+
+                            {/* Type */}
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
+                              {typeParts.length > 0 ? typeParts.map(t => {
+                                const ICONS = { follow: "👤", like: "♥", mention: "@", comment: "💬", retweet: "🔁", reply: "↩", tag: "🏷" };
+                                return (
+                                  <span key={t} style={{ fontFamily: sans, fontSize: F.xs, color: T.sub }}>
+                                    {ICONS[t] || ""} {t}
+                                  </span>
+                                );
+                              }) : <span style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>—</span>}
+                            </div>
+
                           </div>
                         );
                       })}

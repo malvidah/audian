@@ -72,7 +72,7 @@ function computeScore({
 }
 
 function assignZone(onWatchlist, followers = null, score = 0, commentCount = 1, verified = false) {
-  if (onWatchlist) return 'CORE';
+  if (onWatchlist) return 'ELITE';
   // Follower count is the primary signal
   if (followers !== null && followers >= 50000) return 'INFLUENTIAL';
   if (followers !== null && followers >= 10000) return 'INFLUENTIAL';
@@ -80,7 +80,7 @@ function assignZone(onWatchlist, followers = null, score = 0, commentCount = 1, 
   if (verified && followers !== null && followers >= 1000) return 'INFLUENTIAL';
   // Without follower data: use strong engagement signals only
   if (followers === null && (score >= 40 || commentCount >= 3)) return 'INFLUENTIAL';
-  return 'RADAR';
+  return 'SIGNAL';
 }
 
 export async function POST() {

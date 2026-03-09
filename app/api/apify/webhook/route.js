@@ -36,11 +36,11 @@ function computeScore(onWatchlist, followers = 0, niche = 0) {
 }
 
 function assignZone(onWatchlist, followers = 0, score = 0, verified = false) {
-  if (onWatchlist)                          return 'CORE';
+  if (onWatchlist)                          return 'ELITE';
   if (followers >= 10000)                   return 'INFLUENTIAL';
   if (verified && followers >= 1000)        return 'INFLUENTIAL';
   if (!followers && score >= 55)            return 'INFLUENTIAL';
-  return 'RADAR';
+  return 'SIGNAL';
 }
 
 // ── Normalize items from different actor output schemas ───────────────────────
@@ -283,9 +283,9 @@ async function enrichCommentersWithFollowerData(supabase) {
       match.followers >= 1_000     ? 16 :
       match.followers >= 100       ? 8  : 2;
     const newScore = Math.min(100, Math.max(row.influence_score || 0, followerPts));
-    const newZone = watched ? 'CORE' :
+    const newZone = watched ? 'ELITE' :
                     match.followers >= 10000 ? 'INFLUENTIAL' :
-                    newScore >= 55 ? 'INFLUENTIAL' : 'RADAR';
+                    newScore >= 55 ? 'INFLUENTIAL' : 'SIGNAL';
 
     await supabase.from('platform_interactions')
       .update({

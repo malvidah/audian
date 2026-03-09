@@ -7,7 +7,7 @@ const supabase = createClient(
 );
 export const dynamic = 'force-dynamic';
 
-// Enriches top RADAR accounts using the connected IG access token to
+// Enriches top SIGNAL accounts using the connected IG access token to
 // look up public profile data. No Apify credits needed.
 // Prioritizes: repeat commenters first, then alphabetical.
 // Called by Score Now after rescoring.
@@ -25,12 +25,12 @@ export async function POST() {
     return NextResponse.json({ ok: false, message: 'No Instagram connection' });
   }
 
-  // Get RADAR accounts with multiple comments but no follower data — most likely to be real people
+  // Get SIGNAL accounts with multiple comments but no follower data — most likely to be real people
   const { data: toEnrich } = await supabase
     .from('platform_interactions')
     .select('handle, comment_count, followers')
     .eq('platform', 'instagram')
-    .eq('zone', 'RADAR')
+    .eq('zone', 'SIGNAL')
     .is('followers', null)
     .order('comment_count', { ascending: false })
     .limit(20); // Stay well within rate limits
@@ -56,7 +56,7 @@ export async function POST() {
       }
 
       const followers = profile.followers_count || 0;
-      const zone = followers >= 10000 ? 'INFLUENTIAL' : 'RADAR';
+      const zone = followers >= 10000 ? 'INFLUENTIAL' : 'SIGNAL';
 
       await supabase.from('platform_interactions')
         .update({

@@ -29,10 +29,10 @@ export async function POST(req) {
       const watched = isWatched(item.platform || 'instagram', item.handle);
       // Follower count is the primary zone signal. Verified alone means nothing without audience.
       const followers = item.followers || 0;
-      const zone = watched ? 'CORE' :
+      const zone = watched ? 'ELITE' :
         followers >= 10000 ? 'INFLUENTIAL' :
         (item.verified && followers >= 1000) ? 'INFLUENTIAL' :
-        'RADAR';
+        'SIGNAL';
 
       // Compute influence score
       const followerPts = !item.followers ? 5 :
