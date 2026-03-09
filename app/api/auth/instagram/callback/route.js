@@ -101,14 +101,14 @@ export async function GET(request) {
 
     // Step 5: Upsert to Supabase
     const { error: dbError } = await supabase.from('platform_connections').upsert({
-      platform:         'instagram',
-      platform_user_id: String(igAccount.id),
-      username:         profile.username || 'unknown',
-      access_token:     pageToken,
+      platform:          'instagram',
+      channel_id:        String(igAccount.id),
+      channel_name:      profile.username || pageName || 'unknown',
+      channel_thumbnail: profile.profile_picture_url || null,
+      subscriber_count:  profile.followers_count || 0,
+      access_token:      pageToken,
       metadata: {
-        followers_count:     profile.followers_count,
         media_count:         profile.media_count,
-        profile_picture_url: profile.profile_picture_url,
         ig_business_id:      igAccount.id,
         page_name:           pageName,
         user_access_token:   userAccessToken,
