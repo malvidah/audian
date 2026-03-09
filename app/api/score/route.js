@@ -8,30 +8,46 @@ const supabase = createClient(
 
 export const dynamic = 'force-dynamic';
 
-// ── Scoring formula ───────────────────────────────────────────────────────────
-// Returns 0–100 influence score
-function computeScore({ subscribers, commentLikes = 0, replyCount = 0, contentLength = 0 }) {
-  // Follower/subscriber tier (0–60 pts)
-  let followerScore = 0;
-  if (subscribers >= 1000000)     followerScore = 60;
-  else if (subscribers >= 100000) followerScore = 50;
-  else if (subscribers >= 10000)  followerScore = 38;
-  else if (subscribers >= 1000)   followerScore = 24;
-  else if (subscribers >= 100)    followerScore = 12;
-  else                             followerScore = 4;
+// Niche keywords that signal a curious/science/culture audience
+const NICHE_SIGNALS = [
+  'neuroscience','psychology','science','research','study','brain','cognitive',
+  'fascinating','curious','interesting','mind','theory','philosophy','evolution',
+  'data','analysis','podcast','author','professor','phd','dr ','scientist',
+  'journalist','writer','educator','ted','kurzgesagt','veritasium',
+];
 
-  // Engagement on their comment (0–25 pts)
-  const engScore = Math.min(25, Math.floor((commentLikes * 3 + replyCount * 5) / 2));
+function nicheScore(text = '', handle = '') {
+  const lower = (text + ' ' + handle).toLowerCase();
+  return NICHE_SIGNALS.filter(k => lower.includes(k)).length;
+}
 
-  // Content quality proxy: longer thoughtful comments score higher (0–15 pts)
-  const qualityScore = Math.min(15, Math.floor(contentLength / 20));
+function computeScore({ commentLikes = 0, replyCount = 0, commentCount = 1, contentLength = 0, niche = 0, ytSubscribers = 0 }) {
+  // YouTube subscribers if available (0–50 pts)
+  let subScore = 0;
+  if (ytSubscribers >= 1000000)     subScore = 50;
+  else if (ytSubscribers >= 100000) subScore = 40;
+  else if (ytSubscribers >= 10000)  subScore = 28;
+  else if (ytSubscribers >= 1000)   subScore = 16;
+  else if (ytSubscribers >= 100)    subScore = 8;
 
-  return Math.min(100, followerScore + engScore + qualityScore);
+  // Comment engagement (0–25 pts)
+  const engScore = Math.min(25, (commentLikes * 4) + (replyCount * 6));
+
+  // Repeat commenter signal — engaged audience member (0–10 pts)
+  const repeatScore = Math.min(10, (commentCount - 1) * 4);
+
+  // Comment quality proxy: length (0–10 pts)
+  const qualityScore = Math.min(10, Math.floor(contentLength / 25));
+
+  // Niche alignment (0–15 pts)
+  const nicheBonus = Math.min(15, niche * 5);
+
+  return Math.min(100, subScore + engScore + repeatScore + qualityScore + nicheBonus);
 }
 
 function getZone(score) {
-  if (score >= 70) return 'GOLD';
-  if (score >= 40) return 'CORE';
+  if (score >= 60) return 'GOLD';
+  if (score >= 30) return 'CORE';
   return 'RADAR';
 }
 
@@ -39,184 +55,146 @@ export async function POST() {
   try {
     const results = { youtube: 0, instagram: 0, total: 0 };
 
-    // ── YOUTUBE: look up channel stats for commenters ─────────────────────────
+    // ── YOUTUBE ───────────────────────────────────────────────────────────────
     const { data: ytComments } = await supabase
       .from('platform_comments')
       .select('*')
       .eq('platform', 'youtube')
-      .not('author_channel_url', 'is', null)
       .order('likes', { ascending: false })
-      .limit(50);
+      .limit(100);
 
     if (ytComments?.length > 0) {
-      // Extract unique channel IDs from URLs
+      // Group by author
+      const byAuthor = {};
+      ytComments.forEach(c => {
+        if (!byAuthor[c.author_name]) byAuthor[c.author_name] = [];
+        byAuthor[c.author_name].push(c);
+      });
+
+      // Extract channel IDs
       const channelMap = {};
       ytComments.forEach(c => {
         if (!c.author_channel_url) return;
-        // URL format: https://www.youtube.com/channel/UCxxxxx OR /user/name
         const match = c.author_channel_url.match(/channel\/(UC[A-Za-z0-9_-]+)/);
-        if (match) channelMap[c.author_name] = { id: match[1], comments: [] };
-      });
-      ytComments.forEach(c => {
-        if (channelMap[c.author_name]) channelMap[c.author_name].comments.push(c);
+        if (match) channelMap[c.author_name] = match[1];
       });
 
-      const channelIds = Object.values(channelMap).map(v => v.id).filter(Boolean);
-
-      // Batch fetch channel stats (YouTube allows up to 50 per request)
+      // Fetch subscriber counts for known channel IDs
+      const subCounts = {};
+      const channelIds = Object.values(channelMap).filter(Boolean);
       if (channelIds.length > 0) {
-        const { data: ytConns } = await supabase.from('platform_connections').select('access_token, refresh_token, expires_at').eq('platform', 'youtube').order('connected_at', { ascending: false }).limit(1);
-        const ytConn = ytConns?.[0];
+        const { data: ytConn } = await supabase
+          .from('platform_connections')
+          .select('access_token, refresh_token, expires_at')
+          .eq('platform', 'youtube')
+          .order('connected_at', { ascending: false })
+          .limit(1);
 
-        if (ytConn) {
-          let accessToken = ytConn.access_token;
-
-          // Refresh if needed
-          if (new Date(ytConn.expires_at) < new Date()) {
-            const refreshRes = await fetch('https://oauth2.googleapis.com/token', {
+        const conn = ytConn?.[0];
+        if (conn) {
+          let token = conn.access_token;
+          if (new Date(conn.expires_at) < new Date()) {
+            const r = await fetch('https://oauth2.googleapis.com/token', {
               method: 'POST',
               headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-              body: new URLSearchParams({
-                refresh_token: ytConn.refresh_token,
-                client_id: process.env.GOOGLE_CLIENT_ID,
-                client_secret: process.env.GOOGLE_CLIENT_SECRET,
-                grant_type: 'refresh_token',
-              }),
+              body: new URLSearchParams({ refresh_token: conn.refresh_token, client_id: process.env.GOOGLE_CLIENT_ID, client_secret: process.env.GOOGLE_CLIENT_SECRET, grant_type: 'refresh_token' }),
             });
-            const refreshData = await refreshRes.json();
-            if (refreshData.access_token) {
-              accessToken = refreshData.access_token;
-              await supabase.from('platform_connections').update({
-                access_token: accessToken,
-                expires_at: new Date(Date.now() + refreshData.expires_in * 1000).toISOString(),
-              }).eq('platform', 'youtube');
+            const rd = await r.json();
+            if (rd.access_token) {
+              token = rd.access_token;
+              await supabase.from('platform_connections').update({ access_token: token, expires_at: new Date(Date.now() + rd.expires_in * 1000).toISOString() }).eq('platform', 'youtube');
             }
           }
 
-          // Fetch in batches of 50
           for (let i = 0; i < channelIds.length; i += 50) {
             const batch = channelIds.slice(i, i + 50);
-            const statsRes = await fetch(
-              `https://www.googleapis.com/youtube/v3/channels?part=statistics,snippet&id=${batch.join(',')}&maxResults=50`,
-              { headers: { Authorization: `Bearer ${accessToken}` } }
-            );
-            const statsData = await statsRes.json();
-
-            for (const ch of (statsData.items || [])) {
-              const subscribers = parseInt(ch.statistics?.subscriberCount || 0);
-              const authorName = Object.keys(channelMap).find(name => channelMap[name].id === ch.id);
-              if (!authorName) continue;
-
-              const comments = channelMap[authorName].comments;
-              const bestComment = comments.sort((a, b) => (b.likes || 0) - (a.likes || 0))[0];
-              if (!bestComment) continue;
-
-              const score = computeScore({
-                subscribers,
-                commentLikes: bestComment.likes || 0,
-                replyCount: bestComment.reply_count || 0,
-                contentLength: bestComment.content?.length || 0,
-              });
-
-              if (score < 8) continue; // Skip very low scores
-
-              await supabase.from('platform_interactions').upsert({
-                platform:         'youtube',
-                handle:           authorName,
-                name:             ch.snippet?.title || authorName,
-                followers:        subscribers,
-                avatar_url:       ch.snippet?.thumbnails?.default?.url,
-                interaction_type: 'comment',
-                content:          bestComment.content?.slice(0, 500),
-                influence_score:  score,
-                zone:             getZone(score),
-                interacted_at:    bestComment.published_at,
-                synced_at:        new Date().toISOString(),
-              }, { onConflict: 'platform,handle,content' });
-
-              results.youtube++;
+            const res = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=statistics,snippet&id=${batch.join(',')}&maxResults=50`, { headers: { Authorization: `Bearer ${token}` } });
+            const data = await res.json();
+            for (const ch of (data.items || [])) {
+              const name = Object.keys(channelMap).find(n => channelMap[n] === ch.id);
+              if (name) subCounts[name] = parseInt(ch.statistics?.subscriberCount || 0);
             }
           }
         }
       }
+
+      // Score each unique commenter
+      for (const [authorName, comments] of Object.entries(byAuthor)) {
+        const best = comments.sort((a, b) => (b.likes || 0) - (a.likes || 0))[0];
+        const allText = comments.map(c => c.content || '').join(' ');
+        const niche = nicheScore(allText, authorName);
+
+        const score = computeScore({
+          commentLikes: best.likes || 0,
+          replyCount: best.reply_count || 0,
+          commentCount: comments.length,
+          contentLength: best.content?.length || 0,
+          niche,
+          ytSubscribers: subCounts[authorName] || 0,
+        });
+
+        if (score < 8) continue;
+
+        const channelUrl = best.author_channel_url;
+        await supabase.from('platform_interactions').upsert({
+          platform:         'youtube',
+          handle:           authorName,
+          name:             authorName,
+          followers:        subCounts[authorName] || null,
+          interaction_type: 'comment',
+          content:          best.content?.slice(0, 500),
+          influence_score:  score,
+          zone:             getZone(score),
+          profile_url:      channelUrl || null,
+          comment_count:    comments.length,
+          interacted_at:    best.published_at,
+          synced_at:        new Date().toISOString(),
+        }, { onConflict: 'platform,handle,content' });
+
+        results.youtube++;
+      }
     }
 
-    // ── INSTAGRAM: AI-assisted name recognition for top commenters ────────────
+    // ── INSTAGRAM ─────────────────────────────────────────────────────────────
     const { data: igComments } = await supabase
       .from('platform_comments')
       .select('*')
       .eq('platform', 'instagram')
       .order('published_at', { ascending: false })
-      .limit(60);
+      .limit(100);
 
     if (igComments?.length > 0) {
-      // Deduplicate by author
       const byAuthor = {};
       igComments.forEach(c => {
         if (!byAuthor[c.author_name]) byAuthor[c.author_name] = [];
         byAuthor[c.author_name].push(c);
       });
 
-      const authorList = Object.entries(byAuthor).map(([name, comments]) => ({
-        handle: name,
-        commentCount: comments.length,
-        sample: comments[0].content?.slice(0, 150),
-        postTitle: comments[0].video_title?.slice(0, 60),
-      }));
-
-      // Ask Claude to identify potentially notable accounts
-      const aiRes = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': process.env.ANTHROPIC_API_KEY,
-          'anthropic-version': '2023-06-01',
-        },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 800,
-          system: `You identify potentially influential or notable Instagram accounts based on their handle and comment quality.
-
-Score each account 0-100 for likely influence. Consider:
-- Handle patterns suggesting professionals, brands, journalists, academics, creators (e.g. @drXXX, @profXXX, company names, verified-style handles)
-- Comment sophistication, domain expertise, thoughtfulness
-- Multiple comments = engaged audience member
-
-Respond ONLY with valid JSON array:
-[{"handle": "...", "score": 0-100, "reason": "one phrase", "likely_type": "creator|journalist|academic|brand|professional|public|unknown"}]
-
-Only include handles with score >= 20. Be conservative.`,
-          messages: [{
-            role: 'user',
-            content: `Score these Instagram commenters for influence potential:\n\n${JSON.stringify(authorList, null, 2)}`,
-          }],
-        }),
-      });
-
-      const aiData = await aiRes.json();
-      const raw = aiData.content?.[0]?.text || '[]';
-
-      let scored = [];
-      try {
-        const clean = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-        scored = JSON.parse(clean);
-      } catch { scored = []; }
-
-      for (const s of scored) {
-        if (s.score < 20) continue;
-        const comments = byAuthor[s.handle] || [];
+      for (const [handle, comments] of Object.entries(byAuthor)) {
         const best = comments.sort((a, b) => (b.content?.length || 0) - (a.content?.length || 0))[0];
-        if (!best) continue;
+        const allText = comments.map(c => c.content || '').join(' ');
+        const niche = nicheScore(allText, handle);
+
+        const score = computeScore({
+          commentLikes: 0,  // IG API doesn't return comment likes
+          commentCount: comments.length,
+          contentLength: best.content?.length || 0,
+          niche,
+        });
+
+        if (score < 5) continue;
 
         await supabase.from('platform_interactions').upsert({
           platform:         'instagram',
-          handle:           s.handle,
-          name:             s.handle,
-          followers:        null, // Not available via Instagram API
+          handle,
+          name:             handle,
+          followers:        null,  // Not available via API — user vets manually
           interaction_type: 'comment',
           content:          best.content?.slice(0, 500),
-          influence_score:  s.score,
-          zone:             getZone(s.score),
+          influence_score:  score,
+          zone:             getZone(score),
+          profile_url:      `https://instagram.com/${handle}`,
+          comment_count:    comments.length,
           interacted_at:    best.published_at,
           synced_at:        new Date().toISOString(),
         }, { onConflict: 'platform,handle,content' });
@@ -226,12 +204,7 @@ Only include handles with score >= 20. Be conservative.`,
     }
 
     results.total = results.youtube + results.instagram;
-
-    return NextResponse.json({
-      success: true,
-      scored: results,
-      message: `Scored ${results.total} interactions (${results.youtube} YouTube, ${results.instagram} Instagram)`,
-    });
+    return NextResponse.json({ success: true, scored: results, message: `Scored ${results.total} interactions (${results.youtube} YouTube, ${results.instagram} Instagram)` });
 
   } catch (err) {
     console.error('Score error:', err);

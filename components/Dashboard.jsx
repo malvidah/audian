@@ -957,23 +957,59 @@ export default function Dashboard() {
                 {filteredInteractions.length === 0 ? (
                   <div style={{ textAlign: "center" }}>
                     <div style={{ fontSize: 28, marginBottom: 8 }}>⭐</div>
-                    <div style={{ fontFamily: sans, fontSize: F.sm, color: T.dim }}>No influential interactions yet — coming as the scoring engine processes your data.</div>
+                    <div style={{ fontFamily: sans, fontSize: F.sm, color: T.dim, marginBottom: 4 }}>Hit ⚡ Score Now after syncing to surface your most engaged audience members.</div>
+                    <div style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>Ranked by comment engagement, repeat visits, and niche alignment. Click ↗ to vet each profile manually.</div>
                   </div>
-                ) : filteredInteractions.map(item => (
-                  <div key={item.id} style={{ display: "flex", gap: 12, padding: "12px 20px", borderBottom: `1px solid ${T.border}` }}>
-                    <div style={{ width: 36, height: 36, borderRadius: "50%", background: T.accent + "15", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: sans, fontSize: F.sm, color: T.accent, fontWeight: 700, flexShrink: 0 }}>
-                      {(item.name || item.handle || "?")[0].toUpperCase()}
+                ) : (
+                  <>
+                    <div style={{ padding: "10px 20px 6px", display: "flex", gap: 16, alignItems: "center" }}>
+                      {[["GOLD", "#F59E0B", "#FFFBEB"], ["CORE", T.blue, T.blueBg], ["RADAR", T.sub, T.well]].map(([zone, color, bg]) => (
+                        <div key={zone} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                          <span style={{ background: bg, color, border: `1px solid ${color}30`, borderRadius: 4, padding: "1px 6px", fontFamily: sans, fontSize: 10, fontWeight: 700 }}>{zone}</span>
+                          <span style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>{filteredInteractions.filter(i => i.zone === zone).length}</span>
+                        </div>
+                      ))}
+                      <span style={{ marginLeft: "auto", fontFamily: sans, fontSize: F.xs, color: T.dim }}>Click ↗ to manually vet each profile</span>
                     </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 4 }}>
-                        <span style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text }}>{item.name || item.handle}</span>
-                        <PlatDot platform={item.platform} size={6} />
-                        <span style={{ marginLeft: "auto", fontFamily: sans, fontSize: F.xs, color: T.dim }}>{timeAgo(item.interacted_at)}</span>
-                      </div>
-                      {item.content && <div style={{ fontFamily: sans, fontSize: F.sm, color: T.sub, lineHeight: 1.55 }}>"{item.content}"</div>}
-                    </div>
-                  </div>
-                ))}
+                    <Divider />
+                    {filteredInteractions
+                      .sort((a, b) => (b.influence_score || 0) - (a.influence_score || 0))
+                      .map(item => {
+                        const zoneColor = item.zone === "GOLD" ? "#F59E0B" : item.zone === "CORE" ? T.blue : T.sub;
+                        const zoneBg    = item.zone === "GOLD" ? "#FFFBEB"  : item.zone === "CORE" ? T.blueBg : T.well;
+                        return (
+                          <div key={item.id} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "13px 20px", borderBottom: `1px solid ${T.border}` }}>
+                            <div style={{ width: 36, height: 36, borderRadius: "50%", background: zoneBg, border: `1.5px solid ${zoneColor}40`, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: sans, fontSize: F.sm, color: zoneColor, fontWeight: 700, flexShrink: 0 }}>
+                              {(item.name || item.handle || "?")[0].toUpperCase()}
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5, flexWrap: "wrap" }}>
+                                {item.profile_url ? (
+                                  <a href={item.profile_url} target="_blank" rel="noreferrer" style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text, textDecoration: "none" }}>{item.name || item.handle} ↗</a>
+                                ) : (
+                                  <span style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text }}>{item.name || item.handle}</span>
+                                )}
+                                <PlatDot platform={item.platform} size={6} />
+                                <span style={{ background: zoneBg, color: zoneColor, border: `1px solid ${zoneColor}30`, borderRadius: 4, padding: "1px 6px", fontFamily: sans, fontSize: 10, fontWeight: 700 }}>{item.zone}</span>
+                                {item.followers > 0 && <span style={{ fontFamily: sans, fontSize: F.xs, color: T.sub }}>{fmt(item.followers)} subs</span>}
+                                {item.comment_count > 1 && <span style={{ fontFamily: sans, fontSize: F.xs, color: T.green, fontWeight: 500 }}>✦ {item.comment_count}×</span>}
+                                <span style={{ marginLeft: "auto", fontFamily: sans, fontSize: F.xs, color: T.dim }}>{timeAgo(item.interacted_at)}</span>
+                              </div>
+                              {item.content && (
+                                <div style={{ fontFamily: sans, fontSize: F.sm, color: T.sub, lineHeight: 1.55, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
+                                  "{item.content}"
+                                </div>
+                              )}
+                            </div>
+                            <div style={{ flexShrink: 0, background: zoneBg, border: `1px solid ${zoneColor}30`, borderRadius: 8, padding: "4px 10px", textAlign: "center", minWidth: 44 }}>
+                              <div style={{ fontFamily: sans, fontSize: 18, fontWeight: 700, color: zoneColor, lineHeight: 1 }}>{item.influence_score || 0}</div>
+                              <div style={{ fontFamily: sans, fontSize: 9, color: T.dim, marginTop: 2 }}>SCORE</div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </>
+                )}
               </div>
             </>
           )}
