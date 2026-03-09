@@ -428,6 +428,8 @@ export default function ImportPage() {
   const [filterZone, setFilterZone] = useState("ALL");
   const [enriching, setEnriching] = useState(false);
   const [enrichProgress, setEnrichProgress] = useState(null);
+  const [wikiEnriching, setWikiEnriching] = useState(false);
+  const [wikiProgress, setWikiProgress] = useState(null);
   const [showManualAdd, setShowManualAdd] = useState(false);
   const [knownProfiles, setKnownProfiles] = useState({}); // handle → all previously seen accounts
 
@@ -755,6 +757,54 @@ export default function ImportPage() {
     setEnriching(false);
   };
 
+  const wikiFillBios = async () => {
+    // Only try accounts that have a name but no bio
+    const targets = allInteractions.filter(i => i.name && i.name !== i.handle && !i.bio?.trim());
+    if (!targets.length) { setWikiProgress("No accounts need bio lookup"); setTimeout(() => setWikiProgress(null), 2500); return; }
+    setWikiEnriching(true);
+    setWikiProgress(`Looking up ${targets.length} bios on Wikipedia…`);
+    try {
+      const BATCH = 8;
+      let filled = 0;
+      for (let i = 0; i < targets.length; i += BATCH) {
+        const batch = targets.slice(i, i + BATCH);
+        setWikiProgress(`Wikipedia: checking ${i + 1}–${Math.min(i + BATCH, targets.length)} of ${targets.length}…`);
+        const res = await fetch("/api/enrich/wikipedia", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ accounts: batch.map(t => ({ handle: t.handle, name: t.name })) }),
+        });
+        const data = await res.json();
+        if (data.results) {
+          setAllInteractions(prev => {
+            const updated = [...prev];
+            data.results.forEach(r => {
+              if (!r.found) return;
+              const idx = updated.findIndex(i => i.handle?.toLowerCase() === r.handle?.toLowerCase());
+              if (idx >= 0 && !updated[idx].bio?.trim()) {
+                updated[idx] = {
+                  ...updated[idx],
+                  bio: r.bio,
+                  _wikiBio: true,
+                  _wikiUrl: r.wikiUrl,
+                };
+                // Recompute zone — bio now present
+                updated[idx].zone = computeZone(updated[idx]);
+                filled++;
+              }
+            });
+            return updated;
+          });
+        }
+      }
+      setWikiProgress(`✓ Found ${filled} Wikipedia bio${filled !== 1 ? 's' : ''}`);
+      setTimeout(() => setWikiProgress(null), 3000);
+    } catch (e) {
+      setWikiProgress(`Error: ${e.message}`);
+    }
+    setWikiEnriching(false);
+  };
+
   const handleSave = async () => {
     // Save ALL interactions — not just filtered view
     const toSave = allInteractions.filter(i => i.handle);
@@ -901,6 +951,15 @@ export default function ImportPage() {
                   style={{ fontSize: F.xs }}>
                   {enriching ? enrichProgress || "Enriching…" : `🔍 Lookup ${allInteractions.length} profiles`}
                 </Btn>
+                <Btn variant="ghost" onClick={wikiFillBios}
+                  disabled={wikiEnriching || allInteractions.filter(i => i.name && i.name !== i.handle && !i.bio?.trim()).length === 0}
+                  style={{ fontSize: F.xs }}
+                  title="Auto-fill bios from Wikipedia for accounts with a name but no bio">
+                  {wikiEnriching ? wikiProgress || "Searching…" : `📖 Wiki bios (${allInteractions.filter(i => i.name && i.name !== i.handle && !i.bio?.trim()).length})`}
+                </Btn>
+                {wikiProgress && !wikiEnriching && (
+                  <span style={{ fontFamily: sans, fontSize: F.xs, color: T.green }}>{wikiProgress}</span>
+                )}
                 {saveResult?.saved > 0 && (
                   <span style={{ fontFamily: sans, fontSize: F.sm, color: T.green, fontWeight: 600 }}>
                     ✓ {saveResult.saved} saved to Audian
