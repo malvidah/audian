@@ -526,6 +526,7 @@ export default function Dashboard() {
   const [comments, setComments]     = useState([]);
   const [interactions, setInteractions] = useState([]);
   const [syncing, setSyncing]       = useState(null);
+  const [scoring, setScoring]       = useState(false);
   const [syncMsg, setSyncMsg]       = useState("");
   const [lastSynced, setLastSynced] = useState(null);
   const [urlMsg, setUrlMsg]         = useState("");
@@ -571,9 +572,28 @@ export default function Dashboard() {
       const res = await fetch(`/api/sync/${p}`, { method: "POST" });
       const data = await res.json();
       if (data.error) setSyncMsg(`✗ ${data.error}`);
-      else { setSyncMsg(`✓ ${p} synced — ${data.videos_synced || data.tweets_synced || data.posts || 0} posts`); await loadData(); }
+      else {
+        setSyncMsg(`✓ ${p} synced — ${data.videos_synced || data.tweets_synced || data.posts || 0} posts`);
+        await loadData();
+        // Auto-score after sync (non-blocking)
+        fetch("/api/score", { method: "POST" }).then(r => r.json()).then(d => {
+          if (d.scored?.total > 0) setSyncMsg(prev => prev + ` · ${d.scored.total} interactions scored`);
+          loadData();
+        }).catch(() => {});
+      }
     } catch (e) { setSyncMsg(`✗ ${e.message}`); }
     setSyncing(null);
+  }
+
+  async function triggerScore() {
+    setScoring(true); setSyncMsg("");
+    try {
+      const res = await fetch("/api/score", { method: "POST" });
+      const data = await res.json();
+      if (data.error) setSyncMsg(`✗ ${data.error}`);
+      else { setSyncMsg(`✓ ${data.message}`); await loadData(); }
+    } catch (e) { setSyncMsg(`✗ ${e.message}`); }
+    setScoring(false);
   }
 
   const tog = k => setOpen(s => ({ ...s, [k]: !s[k] }));
@@ -765,7 +785,7 @@ export default function Dashboard() {
 
         {/* ── Influential Interactions ─────────────────────────────────────── */}
         <Card style={{ marginBottom: 12, overflow: "hidden" }}>
-          <SectionHeader label="Influential Interactions" count={filteredInteractions.length} open={open.interactions} onToggle={() => tog("interactions")} />
+          <SectionHeader label="Influential Interactions" count={filteredInteractions.length} open={open.interactions} onToggle={() => tog("interactions")} action={<Btn variant="orange" onClick={triggerScore} disabled={scoring}>{scoring ? "Scoring…" : "⚡ Score Now"}</Btn>} />
           {open.interactions && (
             <>
               <Divider />
