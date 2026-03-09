@@ -206,16 +206,83 @@ export async function POST(req) {
       }
     }
 
+    let enriched = 0;
+    if (type === 'ig_followers') {
+      enriched = await enrichCommentersWithFollowerData(supabase);
+      console.log(`[webhook] enriched ${enriched} commenters with follower data`);
+    }
+
     return NextResponse.json({
       ok: true,
       type,
       platform,
       processed,
-      message: `Processed ${processed} ${type} interactions`,
+      enriched,
+      message: `Processed ${processed} ${type} interactions${enriched ? ` · enriched ${enriched} commenters` : ''}`,
     });
 
   } catch (err) {
     console.error('Apify webhook error:', err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
+}
+
+// ── Enrichment helper ─────────────────────────────────────────────────────────
+// After importing ig_followers, back-fills follower counts into commenters.
+// Called automatically after ig_followers import completes.
+async function enrichCommentersWithFollowerData(supabase) {
+  // Get all ig follower rows that have real follower counts
+  const { data: followers } = await supabase
+    .from('platform_interactions')
+    .select('handle, followers, bio, avatar_url, verified')
+    .eq('platform', 'instagram')
+    .not('followers', 'is', null)
+    .gt('followers', 0);
+
+  if (!followers?.length) return 0;
+
+  const followerMap = {};
+  for (const f of followers) followerMap[f.handle.toLowerCase()] = f;
+
+  // Get all IG interactions with missing follower counts
+  const { data: toEnrich } = await supabase
+    .from('platform_interactions')
+    .select('handle, followers, zone, influence_score, on_watchlist')
+    .eq('platform', 'instagram')
+    .or('followers.is.null,followers.eq.0');
+
+  let enriched = 0;
+  for (const row of (toEnrich || [])) {
+    const match = followerMap[row.handle.toLowerCase()];
+    if (!match?.followers) continue;
+
+    const watched = row.on_watchlist;
+    const niche = 0; // already scored
+    const followerPts =
+      match.followers >= 1_000_000 ? 60 :
+      match.followers >= 500_000   ? 52 :
+      match.followers >= 100_000   ? 42 :
+      match.followers >= 50_000    ? 34 :
+      match.followers >= 10_000    ? 26 :
+      match.followers >= 1_000     ? 16 :
+      match.followers >= 100       ? 8  : 2;
+    const newScore = Math.min(100, Math.max(row.influence_score || 0, followerPts));
+    const newZone = watched ? 'CORE' :
+                    match.followers >= 10000 ? 'INFLUENTIAL' :
+                    newScore >= 55 ? 'INFLUENTIAL' : 'RADAR';
+
+    await supabase.from('platform_interactions')
+      .update({
+        followers:       match.followers,
+        bio:             match.bio || null,
+        avatar_url:      match.avatar_url || null,
+        verified:        match.verified || false,
+        influence_score: watched ? Math.max(newScore, 75) : newScore,
+        zone:            newZone,
+      })
+      .eq('platform', 'instagram')
+      .eq('handle', row.handle);
+    enriched++;
+  }
+  return enriched;
 }
