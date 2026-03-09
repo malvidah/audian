@@ -845,6 +845,7 @@ export default function Dashboard() {
       else {
         setSyncMsg(`✓ ${p} synced — ${data.videos_synced || data.tweets_synced || data.posts || 0} posts`);
         await loadData();
+      }
     } catch (e) { setSyncMsg(`✗ ${e.message}`); }
     setSyncing(null);
   }
