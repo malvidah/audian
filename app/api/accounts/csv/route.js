@@ -107,11 +107,20 @@ export async function POST(req) {
 
     if (!rows.length) return NextResponse.json({ imported: 0, skipped, errors: 0 });
 
+    // Deduplicate by primary handle — last row wins (keeps most complete data)
+    const seen = new Map();
+    for (const row of rows) {
+      const key = row.handle_x || row.handle_instagram || row.handle_youtube || row.handle_linkedin;
+      seen.set(key, row);
+    }
+    const deduped = [...seen.values()];
+    const dupes = rows.length - deduped.length;
+
     // Bucket by primary platform handle, then bulk upsert each bucket in parallel
-    const xRows  = rows.filter(r => r.handle_x);
-    const igRows = rows.filter(r => !r.handle_x && r.handle_instagram);
-    const ytRows = rows.filter(r => !r.handle_x && !r.handle_instagram && r.handle_youtube);
-    const liRows = rows.filter(r => !r.handle_x && !r.handle_instagram && !r.handle_youtube && r.handle_linkedin);
+    const xRows  = deduped.filter(r => r.handle_x);
+    const igRows = deduped.filter(r => !r.handle_x && r.handle_instagram);
+    const ytRows = deduped.filter(r => !r.handle_x && !r.handle_instagram && r.handle_youtube);
+    const liRows = deduped.filter(r => !r.handle_x && !r.handle_instagram && !r.handle_youtube && r.handle_linkedin);
 
     const results = await Promise.all([
       xRows.length  ? bulkUpsert(xRows,  'handle_x')         : { imported: 0, errors: [] },
@@ -125,6 +134,7 @@ export async function POST(req) {
 
     return NextResponse.json({
       imported, skipped,
+      dupes,
       errors: errors.length,
       errorDetails: errors.slice(0, 5),
     });
