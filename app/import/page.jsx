@@ -426,12 +426,7 @@ export default function ImportPage() {
   const [saving, setSaving] = useState(false);
   const [saveResult, setSaveResult] = useState(null);
   const [filterZone, setFilterZone] = useState("ALL");
-  const [enriching, setEnriching] = useState(false);
-  const [enrichProgress, setEnrichProgress] = useState(null);
-  const [wikiEnriching, setWikiEnriching] = useState(false);
-  const [wikiProgress, setWikiProgress] = useState(null);
-  const [followerEnriching, setFollowerEnriching] = useState(false);
-  const [followerProgress, setFollowerProgress] = useState(null);
+  const [autoEnrichStatus, setAutoEnrichStatus] = useState(null);
   const [showManualAdd, setShowManualAdd] = useState(false);
   const [knownProfiles, setKnownProfiles] = useState({}); // handle → all previously seen accounts
 
@@ -602,6 +597,9 @@ export default function ImportPage() {
       }
       const detectedPlatform = Object.entries(platCounts).sort((a,b) => b[1]-a[1])[0]?.[0] || "instagram";
 
+      const newHandles = new Set(newInteractions.map(i =>
+        `${(i.platform || detectedPlatform)}:${i.handle?.toLowerCase()}`).filter(Boolean));
+      let freshList = [];
       setAllInteractions(prev => {
         // Deduplicate by platform:handle
         const map = new Map(prev.map(i => [`${i.platform||"instagram"}:${i.handle?.toLowerCase()}`, i]));
@@ -634,8 +632,10 @@ export default function ImportPage() {
             map.set(key, merged);
           }
         }
-        return Array.from(map.values());
+        freshList = Array.from(map.values());
+        return freshList;
       });
+      autoEnrich(freshList.filter(i => newHandles.has(`${i.platform||"instagram"}:${i.handle?.toLowerCase()}`)));
 
       // Store compressed thumbnails for each successfully-parsed screenshot
       for (const img of images) {
@@ -712,65 +712,45 @@ export default function ImportPage() {
     setAllInteractions(prev => [...prev, { ...item, _id: id, _source: "manual" }]);
   };
 
-  const enrichAll = async () => {
-    const handles = allInteractions.map(i => i.handle).filter(Boolean);
-    if (!handles.length) return;
-    setEnriching(true);
-    setEnrichProgress(`Looking up ${handles.length} profiles…`);
-    try {
-      // Batch into groups of 10 to show progress
-      const BATCH = 10;
-      for (let i = 0; i < handles.length; i += BATCH) {
-        const batch = handles.slice(i, i + BATCH);
-        setEnrichProgress(`Enriching ${i + 1}–${Math.min(i + BATCH, handles.length)} of ${handles.length}…`);
-        const res = await fetch("/api/enrich/lookup", {
+  const autoEnrich = async (targets) => {
+    if (!targets?.length) return;
+    const BATCH = 5;
+
+    // --- Follower counts ---
+    const noFollowers = targets.filter(i => !(parseInt(i.followers) > 0));
+    for (let i = 0; i < noFollowers.length; i += BATCH) {
+      const batch = noFollowers.slice(i, i + BATCH);
+      setAutoEnrichStatus(`Followers: ${i + 1}–${Math.min(i + BATCH, noFollowers.length)} of ${noFollowers.length}…`);
+      try {
+        const res = await fetch("/api/enrich/followers", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ handles: batch }),
+          body: JSON.stringify({ accounts: batch.map(t => ({ handle: t.handle, name: t.name || t.handle, platform: t.platform || "instagram" })) }),
         });
         const data = await res.json();
         if (data.results) {
           setAllInteractions(prev => {
             const updated = [...prev];
-            for (const r of data.results) {
-              const idx = updated.findIndex(i => i.handle?.toLowerCase() === r.handle);
-              if (idx >= 0) {
-                updated[idx] = {
-                  ...updated[idx],
-                  followers: r.followers ?? updated[idx].followers,
-                  name: r.name || updated[idx].name,
-                  verified: r.verified ?? updated[idx].verified,
-                  zone: r.zone,
-                  on_watchlist: r.on_watchlist,
-                  bio: r.bio || updated[idx].bio,
-                  avatar_url: r.avatar || updated[idx].avatar_url,
-                  _enriched: r.found,
-                };
+            data.results.forEach(r => {
+              if (!r.found || !r.followers) return;
+              const idx = updated.findIndex(u => u.handle?.toLowerCase() === r.handle?.toLowerCase());
+              if (idx >= 0 && !(parseInt(updated[idx].followers) > 0)) {
+                updated[idx] = { ...updated[idx], followers: r.followers, _followerSource: "web" };
+                if (updated[idx].zone !== "ELITE") updated[idx].zone = computeZone(updated[idx]);
               }
-            }
+            });
             return updated;
           });
         }
-      }
-      setEnrichProgress(null);
-    } catch (e) {
-      setEnrichProgress(`Error: ${e.message}`);
+      } catch (_) {}
     }
-    setEnriching(false);
-  };
 
-  const wikiFillBios = async () => {
-    // Only try accounts that have a name but no bio
-    const targets = allInteractions.filter(i => i.name && i.name !== i.handle && !i.bio?.trim());
-    if (!targets.length) { setWikiProgress("No accounts need bio lookup"); setTimeout(() => setWikiProgress(null), 2500); return; }
-    setWikiEnriching(true);
-    setWikiProgress(`Looking up ${targets.length} bios on Wikipedia…`);
-    try {
-      const BATCH = 8;
-      let filled = 0;
-      for (let i = 0; i < targets.length; i += BATCH) {
-        const batch = targets.slice(i, i + BATCH);
-        setWikiProgress(`Wikipedia: checking ${i + 1}–${Math.min(i + BATCH, targets.length)} of ${targets.length}…`);
+    // --- Wiki bios ---
+    const noBio = targets.filter(i => i.name && i.name !== i.handle && !i.bio?.trim());
+    for (let i = 0; i < noBio.length; i += BATCH) {
+      const batch = noBio.slice(i, i + BATCH);
+      setAutoEnrichStatus(`Bios: ${i + 1}–${Math.min(i + BATCH, noBio.length)} of ${noBio.length}…`);
+      try {
         const res = await fetch("/api/enrich/wikipedia", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -782,83 +762,22 @@ export default function ImportPage() {
             const updated = [...prev];
             data.results.forEach(r => {
               if (!r.found) return;
-              const idx = updated.findIndex(i => i.handle?.toLowerCase() === r.handle?.toLowerCase());
-              if (idx >= 0 && !updated[idx].bio?.trim()) {
-                updated[idx] = {
-                  ...updated[idx],
-                  bio: r.bio,
-                  _wikiBio: true,
-                  _wikiUrl: r.wikiUrl,
-                };
-                // Recompute zone — bio now present
-                updated[idx].zone = computeZone(updated[idx]);
-                filled++;
-              }
-            });
-            return updated;
-          });
-        }
-      }
-      setWikiProgress(`✓ Found ${filled} Wikipedia bio${filled !== 1 ? 's' : ''}`);
-      setTimeout(() => setWikiProgress(null), 3000);
-    } catch (e) {
-      setWikiProgress(`Error: ${e.message}`);
-    }
-    setWikiEnriching(false);
-  };
-
-  const followerFill = async () => {
-    // Only target accounts missing followers
-    const targets = allInteractions.filter(i => i.handle && !(parseInt(i.followers) > 0));
-    if (!targets.length) {
-      setFollowerProgress("All accounts already have follower counts");
-      setTimeout(() => setFollowerProgress(null), 2500);
-      return;
-    }
-    setFollowerEnriching(true);
-    setFollowerProgress(`Searching follower counts for ${targets.length} accounts…`);
-    try {
-      const BATCH = 5; // smaller batch — each request does a web search
-      let filled = 0;
-      for (let i = 0; i < targets.length; i += BATCH) {
-        const batch = targets.slice(i, i + BATCH);
-        setFollowerProgress(`Looking up ${i + 1}–${Math.min(i + BATCH, targets.length)} of ${targets.length}…`);
-        const res = await fetch("/api/enrich/followers", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            accounts: batch.map(t => ({ handle: t.handle, name: t.name || t.handle, platform: t.platform || "instagram" }))
-          }),
-        });
-        const data = await res.json();
-        if (data.results) {
-          setAllInteractions(prev => {
-            const updated = [...prev];
-            data.results.forEach(r => {
-              if (!r.found || !r.followers) return;
               const idx = updated.findIndex(u => u.handle?.toLowerCase() === r.handle?.toLowerCase());
-              if (idx >= 0) {
-                updated[idx] = { ...updated[idx], followers: r.followers, _followerSource: "web" };
-                // Recompute zone — followers may now qualify for INFLUENTIAL
-                if (updated[idx].zone !== "ELITE") {
-                  updated[idx].zone = computeZone(updated[idx]);
-                }
-                filled++;
+              if (idx >= 0 && !updated[idx].bio?.trim()) {
+                updated[idx] = { ...updated[idx], bio: r.bio, _wikiBio: true };
+                if (updated[idx].zone !== "ELITE") updated[idx].zone = computeZone(updated[idx]);
               }
             });
             return updated;
           });
         }
-      }
-      setFollowerProgress(`✓ Found follower counts for ${filled} account${filled !== 1 ? "s" : ""}`);
-      setTimeout(() => setFollowerProgress(null), 3500);
-    } catch (e) {
-      setFollowerProgress(`Error: ${e.message}`);
+      } catch (_) {}
     }
-    setFollowerEnriching(false);
+
+    setAutoEnrichStatus(null);
   };
 
-  const handleSave = async () => {
+    const handleSave = async () => {
     // Save ALL interactions — not just filtered view
     const toSave = allInteractions.filter(i => i.handle);
     if (!toSave.length) return;
@@ -1000,27 +919,13 @@ export default function ImportPage() {
                   style={{ fontSize: F.xs }}>
                   {showManualAdd ? "− Manual entry" : "+ Manual entry"}
                 </Btn>
-                <Btn variant="secondary" onClick={enrichAll} disabled={enriching || allInteractions.length === 0}
-                  style={{ fontSize: F.xs }}>
-                  {enriching ? enrichProgress || "Enriching…" : `🔍 Lookup ${allInteractions.length} profiles`}
-                </Btn>
-                <Btn variant="ghost" onClick={wikiFillBios}
-                  disabled={wikiEnriching || allInteractions.filter(i => i.name && i.name !== i.handle && !i.bio?.trim()).length === 0}
-                  style={{ fontSize: F.xs }}
-                  title="Auto-fill bios from Wikipedia for accounts with a name but no bio">
-                  {wikiEnriching ? wikiProgress || "Searching…" : `📖 Wiki bios (${allInteractions.filter(i => i.name && i.name !== i.handle && !i.bio?.trim()).length})`}
-                </Btn>
-                {wikiProgress && !wikiEnriching && (
-                  <span style={{ fontFamily: sans, fontSize: F.xs, color: T.green }}>{wikiProgress}</span>
-                )}
-                <Btn variant="ghost" onClick={followerFill}
-                  disabled={followerEnriching || allInteractions.filter(i => !(parseInt(i.followers) > 0)).length === 0}
-                  style={{ fontSize: F.xs }}
-                  title="Search the web for follower counts using AI">
-                  {followerEnriching ? followerProgress || "Searching…" : `👥 Follower counts (${allInteractions.filter(i => !(parseInt(i.followers) > 0)).length})`}
-                </Btn>
-                {followerProgress && !followerEnriching && (
-                  <span style={{ fontFamily: sans, fontSize: F.xs, color: T.green }}>{followerProgress}</span>
+                {autoEnrichStatus && (
+                  <span style={{ fontFamily: sans, fontSize: F.xs, color: T.sub,
+                    display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: T.accent,
+                      display: "inline-block", opacity: 0.8 }} />
+                    {autoEnrichStatus}
+                  </span>
                 )}
                 {saveResult?.saved > 0 && (
                   <span style={{ fontFamily: sans, fontSize: F.sm, color: T.green, fontWeight: 600 }}>
