@@ -95,15 +95,17 @@ export async function POST() {
     for (const post of posts.slice(0, 5)) {
       const commentsRes = await fetch(
         `https://graph.facebook.com/v19.0/${post.id}/comments?` +
-        `fields=id,text,username,timestamp&limit=10&access_token=${pageToken}`
+        `fields=id,text,username,from{username,id},timestamp,like_count&limit=25&access_token=${pageToken}`
       );
       const commentsData = await commentsRes.json();
       for (const c of (commentsData.data || [])) {
+        const authorName = c.username || c.from?.username || null;
+        if (!authorName) continue; // skip unattributable comments
         await supabase.from('platform_comments').upsert({
           platform:     'instagram',
-          video_id:     post.id,          // reuse video_id col for post id
+          video_id:     post.id,
           video_title:  post.caption?.slice(0, 100) || post.permalink,
-          author_name:  c.username,
+          author_name:  authorName,
           content:      c.text,
           published_at: c.timestamp,
           synced_at:    new Date().toISOString(),
