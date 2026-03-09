@@ -8,22 +8,50 @@ const supabase = createClient(
 
 export const dynamic = 'force-dynamic';
 
-// Apify actor IDs for Instagram scraping
+// Verified Apify actor IDs
 const ACTORS = {
-  followers:   'apify/instagram-followers-scraper',
-  likers:      'apify/instagram-post-likers-scraper',
-  mentions:    'apify/instagram-hashtag-scraper', // reused for @mention search
+  likers:   'instaprism/instagram-likers-scraper',   // who liked specific posts
+  profiles: 'apify/instagram-profile-scraper',        // enrich handles → follower count, bio, verified
+  comments: 'apify/instagram-comment-scraper',        // comments from post URLs
 };
+
+async function triggerActor(actorId, input, webhookData, apiKey, appUrl) {
+  const webhookUrl = `${appUrl}/api/apify/webhook`;
+  const res = await fetch(
+    `https://api.apify.com/v2/acts/${actorId}/runs?token=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...input,
+        webhooks: [{
+          eventTypes: ['ACTOR.RUN.SUCCEEDED', 'ACTOR.RUN.FAILED'],
+          requestUrl: webhookUrl,
+          payloadTemplate: JSON.stringify({
+            eventType: '{{eventType}}',
+            resource:  '{{resource}}',
+            webhookData,
+          }),
+        }],
+      }),
+    }
+  );
+  const data = await res.json();
+  if (!res.ok || data.error) throw new Error(data.error?.message || `Actor ${actorId} failed to start`);
+  return data.data?.id;
+}
 
 export async function POST(req) {
   try {
     const apiKey = process.env.APIFY_API_KEY;
-    if (!apiKey) return NextResponse.json({ error: 'APIFY_API_KEY not set' }, { status: 500 });
+    if (!apiKey) return NextResponse.json({ error: 'APIFY_API_KEY not set in Vercel env vars' }, { status: 500 });
 
-    // Get connected Instagram account
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.audian.app';
+
+    // ── Get connected Instagram account automatically ─────────────────────────
     const { data: conns } = await supabase
       .from('platform_connections')
-      .select('channel_name, channel_id, subscriber_count')
+      .select('channel_name, channel_id')
       .eq('platform', 'instagram')
       .order('connected_at', { ascending: false })
       .limit(1);
@@ -32,93 +60,81 @@ export async function POST(req) {
     if (!conn) return NextResponse.json({ error: 'No Instagram account connected' }, { status: 400 });
 
     const handle = conn.channel_name; // e.g. "freethink"
-    const webhookUrl = `${process.env.NEXT_PUBLIC_APP_URL}/api/apify/webhook`;
-
-    const body = await req.json().catch(() => ({}));
-    const types = body.types || ['followers', 'likers', 'mentions'];
-
     const runs = [];
+    const errors = [];
 
-    // ── 1. Followers scraper ─────────────────────────────────────────────────
-    if (types.includes('followers')) {
-      const res = await fetch(
-        `https://api.apify.com/v2/acts/${ACTORS.followers}/runs?token=${apiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            username: handle,
-            resultsLimit: 500,
-            webhookUrl,
-            webhookData: { type: 'followers', handle, source: 'apify' },
-          }),
-        }
-      );
-      const data = await res.json();
-      if (data.data?.id) runs.push({ type: 'followers', runId: data.data.id });
-      else console.error('Followers actor error:', JSON.stringify(data));
-    }
+    // ── 1. Post likers — who liked your recent posts ──────────────────────────
+    // Get recent post permalinks from stored metrics
+    const { data: metrics } = await supabase
+      .from('platform_metrics')
+      .select('videos')
+      .eq('platform', 'instagram')
+      .order('snapshot_at', { ascending: false })
+      .limit(1);
 
-    // ── 2. Post likers scraper ───────────────────────────────────────────────
-    if (types.includes('likers')) {
-      // Get recent post IDs from platform_metrics
-      const { data: metrics } = await supabase
-        .from('platform_metrics')
-        .select('videos')
-        .eq('platform', 'instagram')
-        .order('snapshot_at', { ascending: false })
-        .limit(1);
+    const posts    = metrics?.[0]?.videos || [];
+    const postUrls = posts.map(p => p.permalink).filter(Boolean).slice(0, 5);
 
-      const posts = metrics?.[0]?.videos?.slice(0, 5) || [];
-      const postUrls = posts.map(p => p.permalink).filter(Boolean);
-
-      if (postUrls.length > 0) {
-        const res = await fetch(
-          `https://api.apify.com/v2/acts/${ACTORS.likers}/runs?token=${apiKey}`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              directUrls: postUrls,
-              resultsLimit: 200,
-              webhookUrl,
-              webhookData: { type: 'likers', handle, source: 'apify' },
-            }),
-          }
+    if (postUrls.length > 0) {
+      try {
+        const runId = await triggerActor(
+          ACTORS.likers,
+          { postUrls, maxLikersPerPost: 300 },
+          { type: 'likers', handle, source: 'apify' },
+          apiKey, appUrl
         );
-        const data = await res.json();
-        if (data.data?.id) runs.push({ type: 'likers', runId: data.data.id });
-        else console.error('Likers actor error:', JSON.stringify(data));
-      }
+        runs.push({ type: 'likers', runId, posts: postUrls.length });
+      } catch (e) { errors.push(`likers: ${e.message}`); }
+    } else {
+      errors.push('likers: no post URLs found in metrics — run IG sync first');
     }
 
-    // ── 3. Mentions scraper (searches @handle in recent posts) ───────────────
-    if (types.includes('mentions')) {
-      const res = await fetch(
-        `https://api.apify.com/v2/acts/apify~instagram-scraper/runs?token=${apiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            directUrls: [`https://www.instagram.com/${handle}/`],
-            resultsType: 'posts',
-            resultsLimit: 20,
-            addParentData: false,
-            webhookUrl,
-            webhookData: { type: 'mentions', handle, source: 'apify' },
-          }),
-        }
-      );
-      const data = await res.json();
-      if (data.data?.id) runs.push({ type: 'mentions', runId: data.data.id });
-      else console.error('Mentions actor error:', JSON.stringify(data));
+    // ── 2. Enrich existing commenters with full profile data ──────────────────
+    // Pull unique handles from platform_comments (instagram) that lack follower counts
+    const { data: comments } = await supabase
+      .from('platform_comments')
+      .select('author_name')
+      .eq('platform', 'instagram')
+      .order('published_at', { ascending: false })
+      .limit(200);
+
+    const uniqueHandles = [...new Set((comments || []).map(c => c.author_name).filter(Boolean))];
+
+    if (uniqueHandles.length > 0) {
+      try {
+        const runId = await triggerActor(
+          ACTORS.profiles,
+          { usernames: uniqueHandles.slice(0, 100) },
+          { type: 'profiles', handle, source: 'apify' },
+          apiKey, appUrl
+        );
+        runs.push({ type: 'profiles', runId, accounts: uniqueHandles.length });
+      } catch (e) { errors.push(`profiles: ${e.message}`); }
     }
+
+    // ── 3. Deep comment scrape from recent posts (gets profile pics + likes) ──
+    if (postUrls.length > 0) {
+      try {
+        const runId = await triggerActor(
+          ACTORS.comments,
+          { directUrls: postUrls, resultsLimit: 100 },
+          { type: 'comments', handle, source: 'apify' },
+          apiKey, appUrl
+        );
+        runs.push({ type: 'comments', runId });
+      } catch (e) { errors.push(`comments: ${e.message}`); }
+    }
+
+    const msg = runs.length > 0
+      ? `✓ ${runs.length} scraper${runs.length > 1 ? 's' : ''} running for @${handle} — results arrive in ~2–3 min`
+      : `No scrapers started`;
 
     return NextResponse.json({
-      success: true,
+      success: runs.length > 0,
       handle,
       runs,
-      message: `Triggered ${runs.length} scrapers for @${handle}`,
+      errors: errors.length > 0 ? errors : undefined,
+      message: msg,
     });
 
   } catch (err) {

@@ -834,24 +834,34 @@ export default function Dashboard() {
 
   const loadData = useCallback(async () => {
     if (!session) return;
-    const [a, b, b2, c, d, wl] = await Promise.all([
+    const [a, b, b2, c, d] = await Promise.all([
       supabase.from("platform_connections").select("*"),
       supabase.from("platform_metrics").select("*").order("snapshot_at", { ascending: false }).limit(10),
       supabase.from("platform_metrics").select("*").order("snapshot_at", { ascending: true }).limit(200),
       supabase.from("platform_comments").select("*").order("published_at", { ascending: false }).limit(100),
       supabase.from("platform_interactions").select("*").order("interacted_at", { ascending: false }).limit(50),
-      supabase.auth.getSession().then(({ data: { session } }) => fetch("/api/watchlist", { headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {} }).then(r => r.json())).catch(() => ({ entries: [], total: 0 })),
     ]);
     if (a.data) setConnections(a.data);
     if (b.data) { setMetrics(b.data); if (b.data[0]) setLastSynced(b.data[0].snapshot_at); }
     if (b2.data) setAllMetrics(b2.data);
     if (c.data) setComments(c.data);
     if (d.data) setInteractions(d.data);
-    if (wl?.entries) setWatchlist(wl.entries);
-    if (wl?.total !== undefined) setWatchlistTotal(wl.total);
+  }, [session, supabase]);
+
+  // Watchlist fetched separately — only on mount and after explicit changes
+  const loadWatchlist = useCallback(async () => {
+    if (!session) return;
+    try {
+      const { data: { session: s } } = await supabase.auth.getSession();
+      const r = await fetch("/api/watchlist", { headers: s?.access_token ? { Authorization: `Bearer ${s.access_token}` } : {} });
+      const wl = await r.json();
+      if (wl?.entries) setWatchlist(wl.entries);
+      if (wl?.total !== undefined) setWatchlistTotal(wl.total);
+    } catch {}
   }, [session, supabase]);
 
   useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => { loadWatchlist(); }, [loadWatchlist]);
 
   async function triggerSync(p) {
     setSyncing(p); setSyncMsg("");
@@ -974,7 +984,7 @@ export default function Dashboard() {
           <ProfileMenu session={session} supabase={supabase} connections={connections}
             watchlist={watchlist}
             watchlistTotal={watchlistTotal}
-            onWatchlistUpdate={loadData}
+            onWatchlistUpdate={loadWatchlist}
             onDisconnect={async (platformId) => {
               const res = await fetch(`/api/disconnect/${platformId}`, { method: "DELETE", headers: await authHeaders() });
               const data = await res.json();
