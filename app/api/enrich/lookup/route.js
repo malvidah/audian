@@ -1,10 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
 export const dynamic = 'force-dynamic';
 
 // Looks up Instagram profiles for a batch of handles using the connected
@@ -29,12 +24,13 @@ export async function POST(req) {
       return NextResponse.json({ error: 'No Instagram connection', results: [] });
     }
 
-    // Load watchlist for ELITE detection
-    const { data: wlRows } = await supabase
-      .from('watchlist')
-      .select('handle')
-      .eq('platform', 'instagram');
-    const watchSet = new Set((wlRows || []).map(r => r.handle.toLowerCase().replace(/^@/, '')));
+    // Load ELITE handles for zone detection
+    const { data: eliteRows } = await supabase
+      .from('handles')
+      .select('handle_instagram')
+      .eq('zone', 'ELITE')
+      .not('handle_instagram', 'is', null);
+    const watchSet = new Set((eliteRows || []).map(r => r.handle_instagram.toLowerCase()));
 
     const results = [];
 

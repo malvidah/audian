@@ -1,49 +1,11 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { supabaseAdmin } from '@/lib/supabase';
+import { parseFollowers, wikiSearch } from '@/lib/utils';
+
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
-
 const PLATFORMS = ['instagram', 'x', 'youtube', 'linkedin'];
-
-async function wikiSearch(name) {
-  const searchRes = await fetch(
-    `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(name)}&srlimit=3&format=json&origin=*`,
-    { headers: { 'User-Agent': 'Audian/1.0' } }
-  );
-  const { query } = await searchRes.json();
-  const top = query?.search?.[0];
-  if (!top) return null;
-  const nameWords = name.toLowerCase().split(/\s+/).filter(w => w.length > 1);
-  const score = nameWords.filter(w => top.title.toLowerCase().includes(w)).length / nameWords.length;
-  if (score < 0.6) return null;
-  const sumRes = await fetch(
-    `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(top.title)}`,
-    { headers: { 'User-Agent': 'Audian/1.0' } }
-  );
-  if (!sumRes.ok) return null;
-  const summary = await sumRes.json();
-  if (summary.type === 'disambiguation') return null;
-  const first = summary.extract?.split(/\.\s+/)[0]?.trim();
-  if (!first || first.length < 20) return null;
-  return first.length > 160 ? first.slice(0, 157) + '…' : first;
-}
-
-function parseFollowers(str) {
-  if (!str) return null;
-  const m = str.replace(/,/g, '').match(/([\d.]+)\s*([KkMmBb]?)\+?/);
-  if (!m) return null;
-  const n = parseFloat(m[1]);
-  const s = m[2].toUpperCase();
-  if (s === 'K') return Math.round(n * 1_000);
-  if (s === 'M') return Math.round(n * 1_000_000);
-  if (s === 'B') return Math.round(n * 1_000_000_000);
-  return Math.round(n);
-}
 
 async function lookupFollowers(name, handle, platform, apiKey) {
   try {
@@ -58,11 +20,11 @@ async function lookupFollowers(name, handle, platform, apiKey) {
         messages: [{ role: 'user', content: `${platform} follower count for "@${handle}"${name && name !== handle ? ` (${name})` : ''}. JSON only.` }],
       }),
     });
-    const data = await res.json();
-    const text = data.content?.find(b => b.type === 'text')?.text?.trim() || '';
-    const match = text.match(/\{[\s\S]*?\}/);
-    if (match) {
-      const parsed = JSON.parse(match[0]);
+    const data      = await res.json();
+    const text      = data.content?.find(b => b.type === 'text')?.text?.trim() || '';
+    const jsonMatch = text.match(/\{[\s\S]*?\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
       if (parsed.found && parsed.followers) return typeof parsed.followers === 'string' ? parseFollowers(parsed.followers) : Math.round(parsed.followers);
     }
     const numMatch = text.match(/([\d.]+\s*[KkMmBb]?)\s*followers/i);
@@ -78,7 +40,7 @@ export async function POST(req) {
     if (!ids?.length) return NextResponse.json({ enriched: 0 });
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
-    const { data: handles, error } = await supabase
+    const { data: handles, error } = await supabaseAdmin
       .from('handles')
       .select('*')
       .in('id', ids.slice(0, 50));
@@ -91,8 +53,8 @@ export async function POST(req) {
       // Wiki bio — only if name exists and bio is empty
       if (h.name && !h.bio?.trim()) {
         try {
-          const bio = await wikiSearch(h.name);
-          if (bio) updates.bio = bio;
+          const wiki = await wikiSearch(h.name);
+          if (wiki) updates.bio = wiki.bio;
         } catch {}
         await new Promise(r => setTimeout(r, 120));
       }
@@ -108,7 +70,7 @@ export async function POST(req) {
 
       if (Object.keys(updates).length > 0) {
         updates.updated_at = new Date().toISOString();
-        await supabase.from('handles').update(updates).eq('id', h.id);
+        await supabaseAdmin.from('handles').update(updates).eq('id', h.id);
         enriched++;
       }
     }

@@ -177,7 +177,7 @@ function Toggle({ on, onClick }) {
   );
 }
 
-function ProfileMenu({ session, supabase, connections, onDisconnect, elite-list = [], elite-listTotal = 0, onElite listUpdate }) {
+function ProfileMenu({ session, supabase, connections, onDisconnect, eliteList = [], eliteListTotal = 0, onEliteListUpdate }) {
   const [open, setOpen] = useState(false);
   const [disconnecting, setDisconnecting] = useState(null);
   const menuRef = useRef(null);
@@ -297,7 +297,7 @@ function ProfileMenu({ session, supabase, connections, onDisconnect, elite-list 
               onMouseLeave={e => e.currentTarget.style.background = "none"}>
               <span style={{ fontFamily: sans, fontSize: F.sm, color: T.text, fontWeight: 500 }}>👤 Manage handles</span>
               <span style={{ marginLeft: "auto", fontFamily: sans, fontSize: F.xs, color: T.dim }}>
-                {elite-listTotal > 0 ? `${elite-listTotal.toLocaleString()} tracked` : "View & import"}
+                {eliteListTotal > 0 ? `${eliteListTotal.toLocaleString()} tracked` : "View & import"}
               </span>
               <span style={{ color: T.dim, fontSize: F.xs }}>↗</span>
             </a>
@@ -1200,8 +1200,8 @@ export default function Dashboard() {
   const [inlineEdit, setInlineEdit]      = useState(null); // {id, field}
   const [inlineVal, setInlineVal]        = useState("");
   const [syncing, setSyncing]       = useState(null);
-  const [elite-list, setElite list]     = useState([]);
-  const [elite-listTotal, setElite listTotal] = useState(0);
+  const [eliteList, setEliteList]     = useState([]);
+  const [eliteListTotal, setEliteListTotal] = useState(0);
   const [syncMsg, setSyncMsg]       = useState("");
   const [lastSynced, setLastSynced] = useState(null);
   const [urlMsg, setUrlMsg]         = useState("");
@@ -1264,10 +1264,10 @@ export default function Dashboard() {
     if (!session) return;
     try {
       const { data: { session: s } } = await supabase.auth.getSession();
-      const r = await fetch("/api/elite-list", { headers: s?.access_token ? { Authorization: `Bearer ${s.access_token}` } : {} });
+      const r = await fetch("/api/watchlist", { headers: s?.access_token ? { Authorization: `Bearer ${s.access_token}` } : {} });
       const wl = await r.json();
-      if (wl?.entries) setElite list(wl.entries);
-      if (wl?.total !== undefined) setElite listTotal(wl.total);
+      if (wl?.entries) setEliteList(wl.entries);
+      if (wl?.total !== undefined) setEliteListTotal(wl.total);
     } catch {}
   }, [session, supabase]);
 
@@ -1417,9 +1417,9 @@ export default function Dashboard() {
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
           {lastSynced && <span style={{ fontSize: F.xs, color: T.dim }}>synced {timeAgo(lastSynced)}</span>}
           <ProfileMenu session={session} supabase={supabase} connections={connections}
-            elite-list={elite-list}
-            elite-listTotal={elite-listTotal}
-            onElite listUpdate={loadElite list}
+            eliteList={eliteList}
+            eliteListTotal={eliteListTotal}
+            onEliteListUpdate={loadElite list}
             onDisconnect={async (platformId) => {
               const res = await fetch(`/api/disconnect/${platformId}`, { method: "DELETE", headers: await authHeaders() });
               const data = await res.json();

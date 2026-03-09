@@ -55,7 +55,7 @@ export async function POST(req) {
             'anthropic-version': '2023-06-01',
           },
           body: JSON.stringify({
-            model: 'claude-opus-4-5',
+            model: 'claude-opus-4-6',
             max_tokens: 2000,
             system: SYSTEM_PROMPT,
             messages: [{
@@ -71,7 +71,7 @@ export async function POST(req) {
                 },
                 {
                   type: 'text',
-                  text: 'Parse this Instagram screenshot and extract all visible account interactions. Return only the JSON array.',
+                  text: 'Parse this screenshot and extract all visible account interactions. Return only the JSON array.',
                 },
               ],
             }],

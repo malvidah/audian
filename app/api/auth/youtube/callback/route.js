@@ -1,10 +1,4 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
 
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
@@ -65,7 +59,10 @@ export async function GET(request) {
         connected_at: new Date().toISOString(),
       }, { onConflict: 'platform' });
 
-    if (dbError) console.error('DB error:', dbError);
+    if (dbError) {
+      console.error('DB error:', dbError);
+      return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}?error=db_write_failed`);
+    }
 
     return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}?connected=youtube`);
   } catch (err) {

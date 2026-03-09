@@ -1,19 +1,8 @@
 import { NextResponse } from 'next/server';
+import { parseFollowers } from '@/lib/utils';
+
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
-
-function parseFollowerCount(str) {
-  if (!str) return null;
-  const s = str.replace(/,/g, '').trim();
-  const m = s.match(/([\d.]+)\s*([KkMmBb]?)\+?/);
-  if (!m) return null;
-  const n = parseFloat(m[1]);
-  const suffix = m[2].toUpperCase();
-  if (suffix === 'K') return Math.round(n * 1_000);
-  if (suffix === 'M') return Math.round(n * 1_000_000);
-  if (suffix === 'B') return Math.round(n * 1_000_000_000);
-  return Math.round(n);
-}
 
 async function lookupOne(acc, apiKey) {
   const name     = acc.name || acc.handle;
@@ -26,7 +15,7 @@ async function lookupOne(acc, apiKey) {
       headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 1024,
+        max_tokens: 256,
         tools: [{ type: 'web_search_20250305', name: 'web_search' }],
         system: `Find the ${platform} follower count. Respond ONLY with raw JSON: {"followers": 125000, "found": true} or {"found": false}.`,
         messages: [{ role: 'user', content: `${platform} follower count for "@${handle}"${name && name !== handle ? ` (${name})` : ''}. JSON only.` }],
@@ -34,16 +23,17 @@ async function lookupOne(acc, apiKey) {
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error?.message || `API ${response.status}`);
-    const textBlock = data.content?.find(b => b.type === 'text');
-    const text = textBlock?.text?.trim() || '';
-    console.log(`[followers] ${handle}: ${text.slice(0, 100)}`);
+
+    const text      = data.content?.find(b => b.type === 'text')?.text?.trim() || '';
     const jsonMatch = text.match(/\{[\s\S]*?\}/);
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]);
-      if (parsed.found && parsed.followers) return { handle, found: true, followers: typeof parsed.followers === 'string' ? parseFollowerCount(parsed.followers) : Math.round(parsed.followers) };
+      if (parsed.found && parsed.followers) {
+        return { handle, found: true, followers: typeof parsed.followers === 'string' ? parseFollowers(parsed.followers) : Math.round(parsed.followers) };
+      }
     }
     const numMatch = text.match(/([\d.]+\s*[KkMmBb]?)\s*followers/i);
-    if (numMatch) return { handle, found: true, followers: parseFollowerCount(numMatch[1]) };
+    if (numMatch) return { handle, found: true, followers: parseFollowers(numMatch[1]) };
     return { handle, found: false };
   } catch (e) {
     return { handle, found: false, error: e.message };

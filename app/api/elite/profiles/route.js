@@ -1,20 +1,16 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { supabaseAdmin } from '@/lib/supabase';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
 export const dynamic = 'force-dynamic';
 
-// Returns all accounts as a lookup map keyed by "platform:handle".
-// Used by the import page for autofill — any previously seen account
-// on any platform will autofill name/bio/category.
+// Returns all handles as a lookup map keyed by "platform:handle".
+// Used by the import page for autofill — any previously seen handle on any
+// platform will autofill name/bio/zone.
 export async function GET() {
   try {
-    const { data, error } = await supabase
-      .from('people')
-      .select('*')
+    const { data, error } = await supabaseAdmin
+      .from('handles')
+      .select('id, name, bio, zone, avatar_url, handle_instagram, handle_x, handle_youtube, handle_linkedin, followers_instagram, followers_x, followers_youtube, followers_linkedin, verified_instagram, verified_x, verified_youtube, verified_linkedin')
       .order('updated_at', { ascending: false });
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -22,24 +18,23 @@ export async function GET() {
     const PLATFORMS = ['instagram', 'x', 'youtube', 'linkedin'];
     const profiles  = {};
 
-    for (const acct of (data || [])) {
+    for (const h of (data || [])) {
       for (const plat of PLATFORMS) {
-        const h = acct[`handle_${plat}`];
-        if (!h) continue;
-        const key = `${plat}:${h.toLowerCase()}`;
+        const handle = h[`handle_${plat}`];
+        if (!handle) continue;
+        const key = `${plat}:${handle.toLowerCase()}`;
         profiles[key] = {
-          account_id:  acct.id,
-          name:        acct.name,
-          bio:         acct.bio,
-          zone:        acct.category,
-          ignored:     acct.category === 'IGNORE',
-          on_watchlist: acct.category === 'ELITE',
-          followers:   acct[`followers_${plat}`],
-          verified:    acct[`verified_${plat}`] || false,
-          avatar_url:  acct.avatar_url,
-          // Also carry all handles so cross-platform display is possible
-          handles:     PLATFORMS.reduce((acc, p) => {
-            if (acct[`handle_${p}`]) acc[p] = acct[`handle_${p}`];
+          handle_id:    h.id,
+          name:         h.name,
+          bio:          h.bio,
+          zone:         h.zone,
+          ignored:      h.zone === 'IGNORE',
+          on_watchlist: h.zone === 'ELITE',
+          followers:    h[`followers_${plat}`],
+          verified:     h[`verified_${plat}`] || false,
+          avatar_url:   h.avatar_url,
+          handles:      PLATFORMS.reduce((acc, p) => {
+            if (h[`handle_${p}`]) acc[p] = h[`handle_${p}`];
             return acc;
           }, {}),
         };

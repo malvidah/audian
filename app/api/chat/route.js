@@ -1,10 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+import { supabaseAdmin } from '@/lib/supabase';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,20 +8,23 @@ export async function POST(request) {
     const { question } = await request.json();
     if (!question?.trim()) return NextResponse.json({ error: 'No question' }, { status: 400 });
 
-    // Load all data for context
-    const [metricsRes, commentsRes, connectionsRes] = await Promise.all([
-      supabase.from('platform_metrics').select('*').order('snapshot_at', { ascending: false }).limit(20),
-      supabase.from('interactions').select('*, people(*)').eq('type', 'comment').order('interacted_at', { ascending: false }).limit(30),
-      supabase.from('platform_connections').select('platform,channel_name,subscriber_count,metadata'),
+    const [metricsRes, interactionsRes, connectionsRes] = await Promise.all([
+      supabaseAdmin.from('platform_metrics').select('*').order('snapshot_at', { ascending: false }).limit(20),
+      supabaseAdmin.from('interactions')
+        .select('*, handles(name, handle_instagram, handle_x, handle_youtube, handle_linkedin, followers_instagram, followers_x, followers_youtube, followers_linkedin)')
+        .eq('interaction_type', 'comment')
+        .order('interacted_at', { ascending: false })
+        .limit(30),
+      supabaseAdmin.from('platform_connections').select('platform, channel_name, subscriber_count'),
     ]);
 
     const metrics     = metricsRes.data || [];
-    const comments    = commentsRes.data || [];
+    const interactions = interactionsRes.data || [];
     const connections = connectionsRes.data || [];
 
     let context = 'CONNECTED PLATFORMS:\n';
     connections.forEach(c => {
-      context += `- ${c.platform}: ${c.channel_name} (${(c.subscriber_count || c.metadata?.followers_count || 0).toLocaleString()} followers)\n`;
+      context += `- ${c.platform}: ${c.channel_name} (${(c.subscriber_count || 0).toLocaleString()} followers)\n`;
     });
     context += '\n';
 
@@ -36,10 +34,10 @@ export async function POST(request) {
     context += 'LATEST METRICS:\n';
     Object.entries(latestPerPlatform).forEach(([p, m]) => {
       context += `${p.toUpperCase()}: ${m.followers?.toLocaleString()} followers`;
-      if (m.total_views) context += `, ${m.total_views?.toLocaleString()} total views`;
-      if (m.metadata?.impressions) context += `, ${m.metadata.impressions?.toLocaleString()} impressions (7d)`;
-      if (m.metadata?.reach) context += `, ${m.metadata.reach?.toLocaleString()} reach (7d)`;
-      if (m.metadata?.total_likes) context += `, ${m.metadata.total_likes} likes on recent posts`;
+      if (m.total_views)  context += `, ${m.total_views?.toLocaleString()} total views`;
+      if (m.impressions)  context += `, ${m.impressions?.toLocaleString()} impressions`;
+      if (m.reach)        context += `, ${m.reach?.toLocaleString()} reach`;
+      if (m.likes)        context += `, ${m.likes?.toLocaleString()} likes`;
       context += '\n';
       if (m.videos?.length) {
         context += `  Recent videos:\n`;
@@ -47,19 +45,15 @@ export async function POST(request) {
           context += `    - "${v.title}" — ${v.views?.toLocaleString()} views, ${v.likes} likes\n`;
         });
       }
-      if (m.metadata?.recent_posts?.length) {
-        context += `  Recent posts:\n`;
-        m.metadata.recent_posts.slice(0, 5).forEach(p2 => {
-          context += `    - "${p2.caption?.slice(0, 60) || '[post]'}" — ${p2.likes} likes, ${p2.comments} comments\n`;
-        });
-      }
     });
     context += '\n';
 
-    if (comments.length > 0) {
-      context += `RECENT COMMENTS (${comments.length}):\n`;
-      comments.slice(0, 15).forEach(c => {
-        context += `- ${c.author_name} on ${c.platform}${c.video_title ? ` ("${c.video_title?.slice(0, 40)}")` : ''}: "${c.content?.slice(0, 120)}"\n`;
+    if (interactions.length > 0) {
+      context += `RECENT COMMENTS (${interactions.length}):\n`;
+      interactions.slice(0, 15).forEach(i => {
+        const h      = i.handles || {};
+        const handle = h[`handle_${i.platform}`] || h.handle_instagram || '?';
+        context += `- @${handle} on ${i.platform}: "${i.content?.slice(0, 120)}"\n`;
       });
     }
 
@@ -71,7 +65,7 @@ export async function POST(request) {
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-6',
         max_tokens: 600,
         system: `You are Audian AI, a social media intelligence assistant for Big Think — a media company focused on ideas, science, philosophy, and human potential. You have access to their real social data and answer questions about performance, trends, content strategy, and audience insights.
 
@@ -80,7 +74,7 @@ Be specific, direct, and editorial. Reference actual numbers and content from th
       }),
     });
 
-    const data = await res.json();
+    const data   = await res.json();
     const answer = data.content?.[0]?.text || 'No response.';
     return NextResponse.json({ answer });
   } catch (err) {

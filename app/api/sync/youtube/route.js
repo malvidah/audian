@@ -1,10 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+import { supabaseAdmin as supabase } from '@/lib/supabase';
 
 async function refreshYouTubeToken(refreshToken) {
   const res = await fetch('https://oauth2.googleapis.com/token', {
@@ -118,27 +113,27 @@ export async function POST() {
     await supabase.from('platform_metrics').insert(metrics);
 
     // Store comments
+    const now = new Date().toISOString();
     if (comments.length > 0) {
       // Write YouTube comments to interactions table
       for (const comment of comments) {
         // Upsert person by name/handle
-        const authorHandle = (comment.author_handle || comment.author_name || '').toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g,'');
+      const authorHandle = (comment.author_name || '').toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
         if (!authorHandle) continue;
-        const { data: existingPerson } = await supabase.from('people').select('id').eq('handle_youtube', authorHandle).maybeSingle();
-        let personId = existingPerson?.id;
-        if (!personId) {
-          const { data: newPerson } = await supabase.from('people').insert({
-            name: comment.author_name, handle_youtube: authorHandle, category: 'SIGNAL',
-            added_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+        const { data: existing } = await supabase.from('handles').select('id').eq('handle_youtube', authorHandle).maybeSingle();
+        let handleId = existing?.id;
+        if (!handleId) {
+          const { data: created } = await supabase.from('handles').insert({
+            name: comment.author_name, handle_youtube: authorHandle, zone: 'SIGNAL',
+            added_at: now, updated_at: now,
           }).select('id').single();
-          personId = newPerson?.id;
+          handleId = created?.id;
         }
-        if (personId) {
+        if (handleId) {
           await supabase.from('interactions').insert({
-            person_id: personId, platform: 'youtube', type: 'comment',
-            content: comment.content, content_title: comment.video_title, likes: comment.likes || 0,
-            interacted_at: comment.published_at || new Date().toISOString(),
-            synced_at: new Date().toISOString(),
+            handle_id: handleId, platform: 'youtube', interaction_type: 'comment',
+            content: comment.content, interacted_at: comment.published_at || now,
+            synced_at: now,
           });
         }
       }

@@ -1,17 +1,9 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { supabaseAdmin as supabase } from '@/lib/supabase';
 export const dynamic = 'force-dynamic';
-
-function getClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) throw new Error(`Missing env: url=${!!url} key=${!!key}`);
-  return createClient(url, key);
-}
 
 export async function GET() {
   try {
-    const supabase = getClient();
 
     // Paginate to get all handles past Supabase's 1000-row default cap
     let handles = [];
@@ -77,7 +69,6 @@ export async function GET() {
 
 export async function PATCH(req) {
   try {
-    const supabase = getClient();
     const { id, updates } = await req.json();
     if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
     const allowed = ['name','bio','zone','followed_by','avatar_url',
@@ -95,7 +86,6 @@ export async function PATCH(req) {
 
 export async function DELETE(req) {
   try {
-    const supabase = getClient();
     const { id } = await req.json();
     if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
     const { error } = await supabase.from('handles').delete().eq('id', id);
