@@ -7,7 +7,6 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-// Upsert into handles table, return handle id
 async function upsertHandle(item, platform, cleanHandle, now) {
   const handleCol    = `handle_${platform}`;
   const followersCol = `followers_${platform}`;
@@ -21,9 +20,8 @@ async function upsertHandle(item, platform, cleanHandle, now) {
     .maybeSingle();
 
   if (existing) {
-    const newZone = existing.zone === 'ELITE' ? 'ELITE' : zone;
     await supabase.from('handles').update({
-      zone: newZone,
+      zone:          existing.zone === 'ELITE' ? 'ELITE' : zone,
       [followersCol]: item.followers || null,
       [verifiedCol]:  item.verified  || false,
       ...(item.name && !existing.name ? { name: item.name } : {}),
@@ -45,7 +43,7 @@ async function upsertHandle(item, platform, cleanHandle, now) {
     updated_at: now,
   }).select('id').single();
 
-  if (error) { console.error('upsertHandle error:', error.message); return null; }
+  if (error) { console.error('[save] upsertHandle error:', error.message); return null; }
   return created.id;
 }
 
@@ -57,40 +55,31 @@ export async function POST(req) {
     const now = new Date().toISOString();
     let saved = 0;
     const errors = [];
-
     const toSave = interactions.filter(i => i.handle && i.zone !== 'IGNORE');
 
     for (const item of toSave) {
       const platform    = (item.platform || 'instagram').toLowerCase();
       const cleanHandle = item.handle.toLowerCase().replace(/^@/, '');
 
-      // 1. Upsert handle
+      // 1. Upsert handle (person/org identity)
       const handleId = await upsertHandle(item, platform, cleanHandle, now);
+      if (!handleId) { errors.push(`${cleanHandle}: could not upsert handle`); continue; }
 
-      // 2. Upsert into platform_interactions
-      const { error: intErr } = await supabase
-        .from('platform_interactions')
-        .upsert({
+      // 2. Insert interaction event(s)
+      const types = (item.interaction_type || 'unknown').split(',').map(t => t.trim()).filter(Boolean);
+      for (const type of types) {
+        const { error } = await supabase.from('interactions').insert({
+          handle_id:        handleId,
           platform,
-          handle:           cleanHandle,
-          name:             item.name || cleanHandle,
-          followers:        item.followers || null,
-          verified:         item.verified  || false,
-          bio:              item.bio || null,
-          interaction_type: item.interaction_type || 'unknown',
+          interaction_type: type,
           content:          item.content?.slice(0, 2000) || null,
-          influence_score:  item.influence_score || null,
-          zone:             item.zone || 'SIGNAL',
-          profile_url:      item.profile_url || null,
-          avatar_url:       item.avatar_url || null,
           screenshot_id:    item.screenshot_id || null,
-          handle_id:        handleId || null,
           interacted_at:    now,
           synced_at:        now,
-        }, { onConflict: 'platform,handle' });
-
-      if (intErr) errors.push(`${cleanHandle}: ${intErr.message}`);
-      else saved++;
+        });
+        if (error) errors.push(`${cleanHandle}/${type}: ${error.message}`);
+        else saved++;
+      }
     }
 
     return NextResponse.json({

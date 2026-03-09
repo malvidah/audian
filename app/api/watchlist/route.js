@@ -1,89 +1,67 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-
 export const dynamic = 'force-dynamic';
 
-const adminClient = () => createClient(
+const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-async function getUser(req) {
-  const authHeader = req.headers.get('authorization') || '';
-  const token = authHeader.replace('Bearer ', '');
-  if (!token) return null;
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-    { global: { headers: { Authorization: `Bearer ${token}` } } }
-  );
-  const { data: { user } } = await supabase.auth.getUser();
-  return user;
+// GET — returns ELITE handles (replaces old watchlist table)
+export async function GET() {
+  const { data, error } = await supabase
+    .from('handles')
+    .select('id, name, zone, handle_instagram, handle_x, handle_youtube, handle_linkedin, updated_at')
+    .eq('zone', 'ELITE')
+    .order('updated_at', { ascending: false })
+    .limit(100);
+
+  if (error) return NextResponse.json({ entries: [], total: 0, _error: error.message });
+  return NextResponse.json({ entries: data || [], total: data?.length || 0 });
 }
 
-export async function GET(req) {
-  const user = await getUser(req);
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  // Get total count + first 30 for preview display
-  const [countResult, previewResult] = await Promise.all([
-    adminClient().from('watchlist').select('*', { count: 'exact', head: true }),
-    adminClient().from('watchlist').select('platform,handle,label').order('added_at', { ascending: false }).limit(30),
-  ]);
-
-  return NextResponse.json({
-    entries: previewResult.data || [],
-    total: countResult.count || 0,
-  });
-}
-
+// POST — add/update handles as ELITE
 export async function POST(req) {
-  const user = await getUser(req);
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  try {
+    const { entries } = await req.json();
+    if (!entries?.length) return NextResponse.json({ error: 'No entries' }, { status: 400 });
+    const now = new Date().toISOString();
 
-  const { entries } = await req.json();
-  if (!entries?.length) return NextResponse.json({ error: 'No entries provided' }, { status: 400 });
+    await Promise.all(entries.map(async e => {
+      const platform = (e.platform || 'instagram').toLowerCase();
+      const handle   = e.handle?.replace(/^@/, '').toLowerCase().trim();
+      if (!handle) return;
+      const handleCol = `handle_${platform}`;
 
-  const normalized = entries.map(e => ({
-    platform: e.platform?.toLowerCase() || 'instagram',
-    handle: e.handle?.replace(/^@/, '').toLowerCase().trim(),
-    label: e.label || null,
-  })).filter(e => e.handle);
+      const { data: existing } = await supabase.from('handles').select('id').eq(handleCol, handle).maybeSingle();
+      if (existing) {
+        await supabase.from('handles').update({ zone: 'ELITE', updated_at: now }).eq('id', existing.id);
+      } else {
+        await supabase.from('handles').insert({ [handleCol]: handle, name: handle, zone: 'ELITE', added_at: now, updated_at: now });
+      }
+    }));
 
-  // Batch in chunks of 500 to stay under Supabase row limit
-  const CHUNK = 500;
-  let totalAdded = 0;
-  for (let i = 0; i < normalized.length; i += CHUNK) {
-    const chunk = normalized.slice(i, i + CHUNK);
-    const { error, count } = await adminClient()
-      .from('watchlist')
-      .upsert(chunk, { onConflict: 'platform,handle', count: 'exact' });
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    totalAdded += count || chunk.length;
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
-
-  return NextResponse.json({ success: true, added: totalAdded });
 }
 
+// DELETE — demote from ELITE back to SIGNAL (not delete the handle)
 export async function DELETE(req) {
-  const user = await getUser(req);
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  const text = await req.text();
-  if (!text || text === '{}') {
-    // Empty body = clear entire watchlist
-    const { error } = await adminClient().from('watchlist').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({ success: true, cleared: true });
+  try {
+    const text = await req.text();
+    if (!text || text === '{}') {
+      // Demote all ELITE → SIGNAL
+      await supabase.from('handles').update({ zone: 'SIGNAL' }).eq('zone', 'ELITE');
+      return NextResponse.json({ success: true, cleared: true });
+    }
+    const { platform, handle } = JSON.parse(text);
+    const handleCol = `handle_${platform || 'instagram'}`;
+    const clean = handle?.replace(/^@/, '').toLowerCase();
+    await supabase.from('handles').update({ zone: 'SIGNAL' }).eq(handleCol, clean);
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
-
-  const { platform, handle } = JSON.parse(text);
-  const { error } = await adminClient()
-    .from('watchlist')
-    .delete()
-    .eq('platform', platform)
-    .eq('handle', handle.replace(/^@/, '').toLowerCase());
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ success: true });
 }

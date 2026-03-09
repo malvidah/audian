@@ -9,30 +9,31 @@ const supabase = createClient(
 
 export async function PATCH(req) {
   try {
-    const { id, updates } = await req.json(); // id = interaction id
+    const { id, updates } = await req.json();
 
-    // First resolve person_id from interaction
+    // Get handle_id + platform from this interaction
     const { data: interaction, error: fetchErr } = await supabase
-      .from('interactions').select('person_id, platform').eq('id', id).single();
+      .from('interactions')
+      .select('handle_id, platform')
+      .eq('id', id)
+      .single();
     if (fetchErr) return NextResponse.json({ error: fetchErr.message }, { status: 404 });
 
-    // Build safe people updates
     const plat = interaction.platform;
-    const allowed = ['bio', 'name', 'followed_by', 'notes', 'category'];
-    const peopleUpdates = Object.fromEntries(Object.entries(updates).filter(([k]) => allowed.includes(k)));
+    const allowed = ['bio', 'name', 'followed_by', 'zone', 'avatar_url'];
+    const handleUpdates = Object.fromEntries(Object.entries(updates).filter(([k]) => allowed.includes(k)));
 
-    // Handle per-platform followers update
     if (updates.followers != null) {
-      peopleUpdates[`followers_${plat}`] = parseInt(updates.followers) || null;
+      handleUpdates[`followers_${plat}`] = parseInt(updates.followers) || null;
     }
-    peopleUpdates.updated_at = new Date().toISOString();
+    handleUpdates.updated_at = new Date().toISOString();
 
-    const { error: updateErr } = await supabase
-      .from('people')
-      .update(peopleUpdates)
-      .eq('id', interaction.person_id);
+    const { error } = await supabase
+      .from('handles')
+      .update(handleUpdates)
+      .eq('id', interaction.handle_id);
 
-    if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 });
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ ok: true });
   } catch (err) {
     return NextResponse.json({ error: err.message }, { status: 500 });

@@ -20,43 +20,39 @@ export async function GET() {
       .limit(1000);
 
     if (error) {
-      console.error('[handles GET] supabase error:', error.message, error.code, error.details);
-      return NextResponse.json({ handles: [], _error: error.message, _code: error.code });
+      console.error('[handles GET]', error.message, error.code);
+      return NextResponse.json({ handles: [], _error: error.message });
     }
 
+    // Count interactions per handle
     const ids = (handles || []).map(h => h.id).filter(Boolean);
     let interactionMap = {};
 
     if (ids.length > 0) {
-      const { data: counts, error: cErr } = await supabase
-        .from('platform_interactions')
+      const { data: counts } = await supabase
+        .from('interactions')
         .select('handle_id, interacted_at')
         .in('handle_id', ids)
         .order('interacted_at', { ascending: false });
 
-      if (cErr) {
-        console.error('[handles GET] interaction count error:', cErr.message);
-      } else if (counts) {
-        counts.forEach(r => {
-          if (!interactionMap[r.handle_id]) {
-            interactionMap[r.handle_id] = { count: 0, last: r.interacted_at };
-          }
-          interactionMap[r.handle_id].count++;
-        });
-      }
+      (counts || []).forEach(r => {
+        if (!interactionMap[r.handle_id]) {
+          interactionMap[r.handle_id] = { count: 0, last: r.interacted_at };
+        }
+        interactionMap[r.handle_id].count++;
+      });
     }
 
     const enriched = (handles || []).map(h => ({
       ...h,
       interaction_count: interactionMap[h.id]?.count || 0,
-      last_interaction: interactionMap[h.id]?.last || null,
+      last_interaction:  interactionMap[h.id]?.last  || null,
     }));
 
     return NextResponse.json({ handles: enriched });
-
   } catch (err) {
-    console.error('[handles GET] caught exception:', err.message, err.stack);
-    return NextResponse.json({ handles: [], _error: err.message }, { status: 200 });
+    console.error('[handles GET] exception:', err.message);
+    return NextResponse.json({ handles: [], _error: err.message });
   }
 }
 
