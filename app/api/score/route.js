@@ -197,7 +197,7 @@ export async function POST() {
           on_watchlist:     watched,
           interacted_at:    comments[0].published_at,
           synced_at:        new Date().toISOString(),
-        }, { onConflict: 'platform,handle,content' });
+        }, { onConflict: 'platform,handle' });
 
         results.youtube++;
       }
@@ -250,7 +250,7 @@ export async function POST() {
           on_watchlist:     watched,
           interacted_at:    comments[0].published_at,
           synced_at:        new Date().toISOString(),
-        }, { onConflict: 'platform,handle,content' });
+        }, { onConflict: 'platform,handle' });
 
         results.instagram++;
       }

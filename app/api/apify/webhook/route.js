@@ -109,7 +109,7 @@ export async function POST(req) {
           on_watchlist:     watched,
           interacted_at:    now,
           synced_at:        now,
-        }, { onConflict: 'platform,handle,interaction_type' });
+        }, { onConflict: 'platform,handle' });
 
         processed++;
       }
@@ -149,7 +149,7 @@ export async function POST(req) {
           profile_url:      `https://instagram.com/${username}`,
           on_watchlist:     watched,
           synced_at:        now,
-        }, { onConflict: 'platform,handle,interaction_type' });
+        }, { onConflict: 'platform,handle' });
 
         processed++;
       }
@@ -189,7 +189,7 @@ export async function POST(req) {
           on_watchlist:     watched,
           interacted_at:    timestamp,
           synced_at:        now,
-        }, { onConflict: 'platform,handle,interaction_type' });
+        }, { onConflict: 'platform,handle' });
 
         processed++;
       }
