@@ -1135,6 +1135,7 @@ export default function Dashboard() {
                     {scraping ? "Syncing…" : "↻ Sync"}
                   </Btn>
                 )}
+                <Btn variant="ghost" onClick={() => window.open("/import", "_blank")} style={{ fontSize: F.xs }}>📸 Import</Btn>
                 <Btn variant="orange" onClick={triggerScore} disabled={scoring}>{scoring ? "Scoring…" : "⚡ Score Now"}</Btn>
               </div>
             } />
