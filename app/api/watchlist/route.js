@@ -47,12 +47,19 @@ export async function POST(req) {
     label: e.label || null,
   })).filter(e => e.handle);
 
-  const { error, count } = await adminClient()
-    .from('watchlist')
-    .upsert(normalized, { onConflict: 'platform,handle', count: 'exact' });
+  // Batch in chunks of 500 to stay under Supabase row limit
+  const CHUNK = 500;
+  let totalAdded = 0;
+  for (let i = 0; i < normalized.length; i += CHUNK) {
+    const chunk = normalized.slice(i, i + CHUNK);
+    const { error, count } = await adminClient()
+      .from('watchlist')
+      .upsert(chunk, { onConflict: 'platform,handle', count: 'exact' });
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    totalAdded += count || chunk.length;
+  }
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ success: true, added: count || normalized.length });
+  return NextResponse.json({ success: true, added: totalAdded });
 }
 
 export async function DELETE(req) {
