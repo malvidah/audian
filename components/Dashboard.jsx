@@ -177,7 +177,7 @@ function Toggle({ on, onClick }) {
   );
 }
 
-function ProfileMenu({ session, supabase, connections, onDisconnect, watchlist = [], onWatchlistUpdate }) {
+function ProfileMenu({ session, supabase, connections, onDisconnect, watchlist = [], watchlistTotal = 0, onWatchlistUpdate }) {
   const [open, setOpen] = useState(false);
   const [disconnecting, setDisconnecting] = useState(null);
   const [watchlistOpen, setWatchlistOpen] = useState(false);
@@ -961,6 +961,7 @@ export default function Dashboard() {
           {lastSynced && <span style={{ fontSize: F.xs, color: T.dim }}>synced {timeAgo(lastSynced)}</span>}
           <ProfileMenu session={session} supabase={supabase} connections={connections}
             watchlist={watchlist}
+            watchlistTotal={watchlistTotal}
             onWatchlistUpdate={loadData}
             onDisconnect={async (platformId) => {
               const res = await fetch(`/api/disconnect/${platformId}`, { method: "DELETE", headers: await authHeaders() });
