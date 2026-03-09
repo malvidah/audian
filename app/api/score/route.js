@@ -71,11 +71,15 @@ function computeScore({
   return Math.max(1, Math.min(100, score));
 }
 
-function assignZone(onWatchlist, followers = null, score = 0, commentCount = 1) {
-  if (onWatchlist)                         return 'CORE';
+function assignZone(onWatchlist, followers = null, score = 0, commentCount = 1, verified = false) {
+  if (onWatchlist) return 'CORE';
+  // Follower count is the primary signal
+  if (followers !== null && followers >= 50000) return 'INFLUENTIAL';
   if (followers !== null && followers >= 10000) return 'INFLUENTIAL';
-  // Without followers: use engagement signals for INFLUENTIAL
-  if (score >= 40 || commentCount >= 3)    return 'INFLUENTIAL';
+  // Verified + meaningful audience (1K+) = INFLUENTIAL
+  if (verified && followers !== null && followers >= 1000) return 'INFLUENTIAL';
+  // Without follower data: use strong engagement signals only
+  if (followers === null && (score >= 40 || commentCount >= 3)) return 'INFLUENTIAL';
   return 'RADAR';
 }
 

@@ -477,7 +477,7 @@ export default function ImportPage() {
               followers: item.followers || existing.followers,
               verified: item.verified || existing.verified,
               interaction_type: allTypes,
-              zone: (item.verified || (item.followers || 0) >= 10000) ? "INFLUENTIAL" : existing.zone,
+              zone: ((item.followers || 0) >= 10000 || (item.verified && (item.followers || 0) >= 1000)) ? "INFLUENTIAL" : existing.zone,
             });
           }
         }
@@ -500,9 +500,11 @@ export default function ImportPage() {
       // Auto-update zone if followers or verified changes
       if (key === "followers" || key === "verified") {
         const item = updated[index];
-        const followers = key === "followers" ? value : item.followers;
+        const followers = parseInt(key === "followers" ? value : item.followers) || 0;
         const verified = key === "verified" ? value : item.verified;
-        updated[index].zone = (verified || (followers || 0) >= 10000) ? "INFLUENTIAL" : "RADAR";
+        // Follower count is primary; verified alone (with tiny audience) = RADAR
+        updated[index].zone = followers >= 10000 ? "INFLUENTIAL" :
+          (verified && followers >= 1000) ? "INFLUENTIAL" : "RADAR";
       }
       return updated;
     });

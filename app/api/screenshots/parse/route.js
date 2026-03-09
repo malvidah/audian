@@ -21,7 +21,7 @@ For each person extract:
 - interaction_type: one of "like", "follow", "comment", "mention", "tag", "view"
 - content: The comment text if it's a comment (optional)
 - platform: always "instagram"
-- zone: INFLUENTIAL if verified OR followers >= 10000, otherwise RADAR. NEVER assign CORE — that comes from an internal watchlist check done separately.
+- zone: follower count is the PRIMARY signal. Use INFLUENTIAL if followers >= 10000 (verified or not). Use INFLUENTIAL if verified AND followers >= 1000. Use RADAR for everyone else — including verified accounts with tiny followings. Never assign CORE (that's determined by an internal watchlist separately).
 - notes: anything notable
 
 Return ONLY a valid JSON array, no markdown fences, no explanation:

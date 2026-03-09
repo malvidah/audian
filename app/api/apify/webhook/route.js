@@ -35,10 +35,11 @@ function computeScore(onWatchlist, followers = 0, niche = 0) {
   return Math.min(100, followerPts + Math.min(15, niche * 4));
 }
 
-function assignZone(onWatchlist, followers = 0, score = 0) {
-  if (onWatchlist)        return 'CORE';
-  if (followers >= 10000) return 'INFLUENTIAL';
-  if (score >= 55)        return 'INFLUENTIAL';
+function assignZone(onWatchlist, followers = 0, score = 0, verified = false) {
+  if (onWatchlist)                          return 'CORE';
+  if (followers >= 10000)                   return 'INFLUENTIAL';
+  if (verified && followers >= 1000)        return 'INFLUENTIAL';
+  if (!followers && score >= 55)            return 'INFLUENTIAL';
   return 'RADAR';
 }
 
