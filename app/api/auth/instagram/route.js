@@ -8,7 +8,7 @@ export async function GET() {
 
   const scope = [
     'instagram_business_basic',
-    'instagram_manage_comments',
+    'instagram_business_manage_comments',
     'instagram_business_manage_messages',
   ].join(',');
 
