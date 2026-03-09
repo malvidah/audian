@@ -1,16 +1,13 @@
 import { NextResponse } from 'next/server';
-import Anthropic from '@anthropic-ai/sdk';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
-
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 const SYSTEM_PROMPT = `You are parsing Instagram screenshots to extract social interaction data for a brand analytics dashboard.
 
 From each screenshot, extract every visible person/account that has interacted with the brand. This includes:
 - Notifications feed (likes, follows, comments, mentions, tags)
-- Likers list on a post  
+- Likers list on a post
 - Followers/following list
 - Comments section
 - Story viewers
@@ -20,38 +17,22 @@ For each person extract:
 - handle: Instagram username without @ (required — skip if not visible)
 - name: Display name if shown (optional)
 - followers: Follower count as integer if visible (optional — null if not shown)
-- verified: true/false — look for blue checkmark ✓ badge
+- verified: true/false — look for blue checkmark badge
 - interaction_type: one of "like", "follow", "comment", "mention", "tag", "view"
 - content: The comment text if it's a comment (optional)
 - platform: always "instagram"
-- notes: anything notable (e.g. "verified creator", "blue badge", "business account")
+- zone: CORE if verified, INFLUENTIAL if followers >= 10000 or verified, otherwise RADAR
+- notes: anything notable
 
-Zone assignment rules:
-- CORE: if they have a blue verification badge
-- INFLUENTIAL: if followers >= 10000, OR verified
-- RADAR: everyone else
+Return ONLY a valid JSON array, no markdown fences, no explanation:
+[{"handle":"username","name":"Display Name","followers":45200,"verified":true,"interaction_type":"like","content":null,"platform":"instagram","zone":"INFLUENTIAL","notes":"verified creator"}]
 
-Return ONLY valid JSON array, no markdown, no explanation:
-[
-  {
-    "handle": "username",
-    "name": "Display Name",
-    "followers": 45200,
-    "verified": true,
-    "interaction_type": "like",
-    "content": null,
-    "platform": "instagram",
-    "zone": "INFLUENTIAL",
-    "notes": "verified creator account"
-  }
-]
-
-If no interactions are found or the image is not an Instagram screenshot, return [].`;
+If no interactions are visible or this is not an Instagram screenshot, return [].`;
 
 export async function POST(req) {
   try {
     const body = await req.json();
-    const { images } = body; // array of { base64, mediaType, filename }
+    const { images } = body;
 
     if (!images?.length) {
       return NextResponse.json({ error: 'No images provided' }, { status: 400 });
@@ -59,44 +40,60 @@ export async function POST(req) {
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
-      return NextResponse.json({ error: 'ANTHROPIC_API_KEY not set' }, { status: 500 });
+      return NextResponse.json({ error: 'ANTHROPIC_API_KEY not set in environment' }, { status: 500 });
     }
 
     const results = [];
 
     for (const img of images) {
       try {
-        const response = await anthropic.messages.create({
-          model: 'claude-opus-4-5',
-          max_tokens: 2000,
-          messages: [{
-            role: 'user',
-            content: [
-              {
-                type: 'image',
-                source: {
-                  type: 'base64',
-                  media_type: img.mediaType || 'image/jpeg',
-                  data: img.base64,
+        const response = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey,
+            'anthropic-version': '2023-06-01',
+          },
+          body: JSON.stringify({
+            model: 'claude-opus-4-5',
+            max_tokens: 2000,
+            system: SYSTEM_PROMPT,
+            messages: [{
+              role: 'user',
+              content: [
+                {
+                  type: 'image',
+                  source: {
+                    type: 'base64',
+                    media_type: img.mediaType || 'image/jpeg',
+                    data: img.base64,
+                  },
                 },
-              },
-              {
-                type: 'text',
-                text: 'Parse this Instagram screenshot and extract all visible account interactions. Return only the JSON array.',
-              },
-            ],
-          }],
-          system: SYSTEM_PROMPT,
+                {
+                  type: 'text',
+                  text: 'Parse this Instagram screenshot and extract all visible account interactions. Return only the JSON array.',
+                },
+              ],
+            }],
+          }),
         });
 
-        const text = response.content[0]?.text || '[]';
-        // Strip any accidental markdown fences
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error?.message || `API error ${response.status}`);
+        }
+
+        const text = data.content?.[0]?.text || '[]';
         const clean = text.replace(/```json\n?|```\n?/g, '').trim();
+
         let parsed;
         try {
           parsed = JSON.parse(clean);
         } catch {
-          parsed = [];
+          // Try to extract JSON array if there's surrounding text
+          const match = clean.match(/\[[\s\S]*\]/);
+          parsed = match ? JSON.parse(match[0]) : [];
         }
 
         results.push({
@@ -105,6 +102,7 @@ export async function POST(req) {
           error: null,
         });
       } catch (e) {
+        console.error(`Parse error for ${img.filename}:`, e.message);
         results.push({
           filename: img.filename,
           interactions: [],
@@ -115,6 +113,7 @@ export async function POST(req) {
 
     return NextResponse.json({ results });
   } catch (err) {
+    console.error('Screenshots parse route error:', err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
