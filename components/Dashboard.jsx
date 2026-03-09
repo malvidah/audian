@@ -208,7 +208,7 @@ function ProfileMenu({ session, supabase, connections, onDisconnect, watchlist =
     setDisconnecting(null);
   }
 
-  const [csvCategory, setCsvCategory] = React.useState("ELITE");
+  const [csvCategory, setCsvCategory] = useState("ELITE");
 
   async function handleCSV(file) {
     if (!file) return;
