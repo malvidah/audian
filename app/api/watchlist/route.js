@@ -1,7 +1,5 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { cookies } from 'next/headers';
-import { createServerClient } from '@supabase/ssr';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,20 +8,21 @@ const adminClient = () => createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-async function getUser() {
-  const cookieStore = cookies();
-  const supabase = createServerClient(
+async function getUser(req) {
+  const authHeader = req.headers.get('authorization') || '';
+  const token = authHeader.replace('Bearer ', '');
+  if (!token) return null;
+  const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-    { cookies: { get: (name) => cookieStore.get(name)?.value } }
+    { global: { headers: { Authorization: `Bearer ${token}` } } }
   );
   const { data: { user } } = await supabase.auth.getUser();
   return user;
 }
 
-// GET — fetch all watchlist entries
-export async function GET() {
-  const user = await getUser();
+export async function GET(req) {
+  const user = await getUser(req);
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { data, error } = await adminClient()
@@ -35,16 +34,13 @@ export async function GET() {
   return NextResponse.json({ entries: data });
 }
 
-// POST — upsert entries from CSV upload
-// Body: { entries: [{ platform, handle, label }] }
 export async function POST(req) {
-  const user = await getUser();
+  const user = await getUser(req);
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { entries } = await req.json();
   if (!entries?.length) return NextResponse.json({ error: 'No entries provided' }, { status: 400 });
 
-  // Normalize handles (strip @, lowercase)
   const normalized = entries.map(e => ({
     platform: e.platform?.toLowerCase() || 'instagram',
     handle: e.handle?.replace(/^@/, '').toLowerCase().trim(),
@@ -59,9 +55,8 @@ export async function POST(req) {
   return NextResponse.json({ success: true, added: count || normalized.length });
 }
 
-// DELETE — remove a handle
 export async function DELETE(req) {
-  const user = await getUser();
+  const user = await getUser(req);
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { platform, handle } = await req.json();

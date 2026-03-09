@@ -226,7 +226,9 @@ function ProfileMenu({ session, supabase, connections, onDisconnect, watchlist =
       else if (parts.length >= 3)  entries.push({ platform: parts[0] === "twitter" ? "x" : parts[0], handle: parts[1], label: parts[2] });
     }
     try {
-      const res = await fetch("/api/watchlist", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ entries }) });
+      const sess = await supabase.auth.getSession();
+      const tok = sess.data?.session?.access_token;
+      const res = await fetch("/api/watchlist", { method: "POST", headers: { "Content-Type": "application/json", ...(tok ? { Authorization: `Bearer ${tok}` } : {}) }, body: JSON.stringify({ entries }) });
       const data = await res.json();
       if (data.error) setUploadMsg("✗ " + data.error);
       else { setUploadMsg(`✓ ${data.added || entries.length} accounts added`); onWatchlistUpdate?.(); }
@@ -349,7 +351,7 @@ function ProfileMenu({ session, supabase, connections, onDisconnect, watchlist =
                         <PlatDot platform={w.platform} size={6} />
                         <span style={{ fontFamily: sans, fontSize: F.xs, color: T.sub, flex: 1 }}>@{w.handle}</span>
                         {w.label && <span style={{ fontFamily: sans, fontSize: 10, color: T.dim }}>{w.label}</span>}
-                        <button onClick={async () => { await fetch("/api/watchlist", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ platform: w.platform, handle: w.handle }) }); onWatchlistUpdate?.(); }}
+                        <button onClick={async () => { const s = await supabase.auth.getSession(); const t = s.data?.session?.access_token; await fetch("/api/watchlist", { method: "DELETE", headers: { "Content-Type": "application/json", ...(t ? { Authorization: `Bearer ${t}` } : {}) }, body: JSON.stringify({ platform: w.platform, handle: w.handle }) }); onWatchlistUpdate?.(); }}
                           style={{ background: "none", border: "none", cursor: "pointer", color: T.dim, fontSize: 12, padding: "0 2px", lineHeight: 1 }}>×</button>
                       </div>
                     ))}
@@ -748,6 +750,11 @@ function AudianAIBar() {
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 export default function Dashboard() {
   const [supabase] = useState(() => createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY));
+
+  async function authHeaders() {
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.access_token ? { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
+  }
   const [session, setSession]       = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [connections, setConnections] = useState([]);
@@ -787,7 +794,7 @@ export default function Dashboard() {
       supabase.from("platform_metrics").select("*").order("snapshot_at", { ascending: true }).limit(200),
       supabase.from("platform_comments").select("*").order("published_at", { ascending: false }).limit(100),
       supabase.from("platform_interactions").select("*").order("interacted_at", { ascending: false }).limit(50),
-      fetch("/api/watchlist").then(r => r.json()).catch(() => ({ entries: [] })),
+      supabase.auth.getSession().then(({ data: { session } }) => fetch("/api/watchlist", { headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {} }).then(r => r.json())).catch(() => ({ entries: [] })),
     ]);
     if (a.data) setConnections(a.data);
     if (b.data) { setMetrics(b.data); if (b.data[0]) setLastSynced(b.data[0].snapshot_at); }
@@ -910,7 +917,7 @@ export default function Dashboard() {
             watchlist={watchlist}
             onWatchlistUpdate={loadData}
             onDisconnect={async (platformId) => {
-              const res = await fetch(`/api/disconnect/${platformId}`, { method: "DELETE" });
+              const res = await fetch(`/api/disconnect/${platformId}`, { method: "DELETE", headers: await authHeaders() });
               const data = await res.json();
               if (!res.ok) console.error("Disconnect error:", data.error);
               await loadData();
