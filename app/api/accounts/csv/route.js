@@ -14,7 +14,6 @@ function mapZone(label, sourceList, fallback) {
   if (raw.includes('influential')) return 'INFLUENTIAL';
   if (raw.includes('ignore'))      return 'IGNORE';
   if (raw.includes('signal'))      return 'SIGNAL';
-  if (raw.includes('watch'))       return 'SIGNAL';
   return fallback;
 }
 
@@ -25,31 +24,31 @@ export async function POST(req) {
 
     const VALID = new Set(['ELITE','INFLUENTIAL','SIGNAL','IGNORE']);
     const defaultZone = VALID.has(category) ? category : 'SIGNAL';
+    const now = new Date().toISOString();
 
     const rawLines = csv.trim().split('\n').map(l => l.trim().replace(/\r$/, ''));
-    const headerLine = rawLines[0];
-    const headers = headerLine.split(',').map(h => h.trim().toLowerCase().replace(/[^\w ]/g, ''));
+    const headers  = rawLines[0].split(',').map(h => h.trim().toLowerCase().replace(/[^\w ]/g, ''));
 
     const col = (...names) => {
       for (const n of names) {
-        const idx = headers.findIndex(h => h.includes(n));
-        if (idx >= 0) return idx;
+        const i = headers.findIndex(h => h.includes(n));
+        if (i >= 0) return i;
       }
       return -1;
     };
 
-    const iName     = col('name');
-    const iXHandle  = col('x handle', 'twitter handle', 'x_handle');
-    const iIg       = col('instagram handle', 'instagram_handle', 'ig handle');
-    const iYt       = col('youtube handle', 'youtube_handle');
-    const iLi       = col('linkedin handle', 'linkedin_handle');
-    const iHandle   = col('handle');
-    const iPlatform = col('platform');
-    const iLabel    = col('label');
-    const iSource   = col('source list');
-    const iBio      = col('bio', 'description');
+    const iName    = col('name');
+    const iXHandle = col('x handle', 'twitter handle', 'x_handle', 'twitter_handle');
+    const iIg      = col('instagram handle', 'instagram_handle', 'ig handle');
+    const iYt      = col('youtube handle', 'youtube_handle');
+    const iLi      = col('linkedin handle', 'linkedin_handle');
+    const iHandle  = col('handle');
+    const iPlat    = col('platform');
+    const iLabel   = col('label');
+    const iSource  = col('source list');
+    const iBio     = col('bio', 'description');
 
-    const now = new Date().toISOString();
+    // Parse all rows first
     const rows = [];
     let skipped = 0;
 
@@ -59,11 +58,9 @@ export async function POST(req) {
       const parts = line.split(',').map(p => p.trim().replace(/^["']|["']$/g, ''));
       const get = idx => (idx >= 0 && idx < parts.length ? parts[idx]?.trim() || null : null);
 
-      const name    = get(iName);
-      const label   = get(iLabel);
-      const source  = get(iSource);
-      const bio     = get(iBio);
-      const zone    = mapZone(label, source, defaultZone);
+      const name   = get(iName);
+      const zone   = mapZone(get(iLabel), get(iSource), defaultZone);
+      const bio    = get(iBio);
 
       let xH  = get(iXHandle)?.replace(/^@/, '').toLowerCase() || null;
       let igH = get(iIg)?.replace(/^@/, '').toLowerCase() || null;
@@ -72,12 +69,10 @@ export async function POST(req) {
 
       if (!xH && !igH && !ytH && !liH) {
         const h = get(iHandle)?.replace(/^@/, '').toLowerCase();
-        const p = (get(iPlatform) || 'instagram').toLowerCase().replace('twitter','x');
+        const p = (get(iPlat) || 'instagram').toLowerCase().replace('twitter', 'x');
         if (h) {
-          if (p === 'x') xH = h;
-          else if (p === 'youtube') ytH = h;
-          else if (p === 'linkedin') liH = h;
-          else igH = h;
+          if (p === 'x') xH = h; else if (p === 'youtube') ytH = h;
+          else if (p === 'linkedin') liH = h; else igH = h;
         }
       }
 
@@ -85,7 +80,7 @@ export async function POST(req) {
 
       rows.push({
         name: name || xH || igH || ytH || liH,
-        bio:  bio || null,
+        bio:  bio  || null,
         zone,
         handle_x:         xH  || null,
         handle_instagram: igH || null,
@@ -98,36 +93,28 @@ export async function POST(req) {
 
     if (!rows.length) return NextResponse.json({ imported: 0, skipped, errors: 0 });
 
-    // Bulk upsert — Supabase will use the unique indexes to detect conflicts.
-    // We chunk to avoid hitting payload limits (1000 rows per call).
-    const CHUNK = 500;
+    // Upsert each row matching on whichever handle column is set.
+    // Run in parallel batches of 20 to avoid Vercel timeout.
+    const BATCH = 20;
     let imported = 0;
     const errors = [];
 
-    for (let i = 0; i < rows.length; i += CHUNK) {
-      const chunk = rows.slice(i, i + CHUNK);
-      const { error, count } = await supabase
-        .from('handles')
-        .upsert(chunk, {
-          onConflict: 'handle_x',          // primary match key
-          ignoreDuplicates: false,          // merge on conflict
-          count: 'exact',
-        });
+    for (let i = 0; i < rows.length; i += BATCH) {
+      const batch = rows.slice(i, i + BATCH);
+      await Promise.all(batch.map(async row => {
+        // Pick conflict column — must be non-null
+        const conflictCol = row.handle_x ? 'handle_x'
+          : row.handle_instagram ? 'handle_instagram'
+          : row.handle_youtube   ? 'handle_youtube'
+          : 'handle_linkedin';
 
-      if (error) {
-        // Supabase partial errors — fall back to individual upserts for this chunk
-        for (const row of chunk) {
-          // Try x handle conflict first, then instagram
-          const conflictCol = row.handle_x ? 'handle_x' : 'handle_instagram';
-          const { error: e2 } = await supabase
-            .from('handles')
-            .upsert(row, { onConflict: conflictCol, ignoreDuplicates: false });
-          if (e2) errors.push(e2.message);
-          else imported++;
-        }
-      } else {
-        imported += count ?? chunk.length;
-      }
+        const { error } = await supabase
+          .from('handles')
+          .upsert(row, { onConflict: conflictCol, ignoreDuplicates: false });
+
+        if (error) errors.push(error.message);
+        else imported++;
+      }));
     }
 
     return NextResponse.json({ imported, skipped, errors: errors.length, errorDetails: errors.slice(0, 5) });
