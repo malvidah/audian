@@ -12,7 +12,7 @@ const T = {
   blue: "#60A5FA",
 };
 const F = { xl: 26, lg: 17, md: 14, sm: 12, xs: 11 };
-const ZONES = ["ALL","ELITE","INFLUENTIAL","SIGNAL","IGNORE"];
+const LISTS = ["ALL","ELITE","INFLUENTIAL","SIGNAL","IGNORE"];
 const ZC = {
   ELITE:       { color: T.purple, bg: T.purpleBg, border: "#3D3060" },
   INFLUENTIAL: { color: T.accent, bg: T.accentBg, border: T.accentBorder },
@@ -351,7 +351,7 @@ export default function HandlesPage() {
     const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n;
   });
 
-  const ZONE_ORDER = ["ELITE","INFLUENTIAL","SIGNAL","IGNORE"];
+  const LIST_ORDER = ["ELITE","INFLUENTIAL","SIGNAL","IGNORE"];
 
   return (
     <div style={{ minHeight:"100vh", background:T.bg, fontFamily:sans, padding:"36px 40px" }}>
@@ -392,7 +392,7 @@ export default function HandlesPage() {
       {/* Filters + search + bulk actions */}
       <div style={{ display:"flex", gap:10, marginBottom:14, alignItems:"center", flexWrap:"wrap" }}>
         <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
-          {ZONES.map(z => {
+          {LISTS.map(z => {
             const active = filter===z; const zc = ZC[z];
             return (
               <button key={z} onClick={()=>setFilter(z)} style={{
@@ -510,12 +510,12 @@ export default function HandlesPage() {
                   )}
                 </div>
 
-                {/* Zone — click to cycle */}
+                {/* List — click to cycle */}
                 <div style={{ padding:"0 6px" }}>
                   <span
                     onClick={e => {
                       e.stopPropagation();
-                      const next = ZONE_ORDER[(ZONE_ORDER.indexOf(h.zone)+1) % ZONE_ORDER.length];
+                      const next = LIST_ORDER[(LIST_ORDER.indexOf(h.zone)+1) % LIST_ORDER.length];
                       saveField(h.id, { zone: next });
                     }}
                     title="Click to change list"

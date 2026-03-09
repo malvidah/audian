@@ -177,7 +177,7 @@ function Toggle({ on, onClick }) {
   );
 }
 
-function ProfileMenu({ session, supabase, connections, onDisconnect, watchlist = [], watchlistTotal = 0, onWatchlistUpdate }) {
+function ProfileMenu({ session, supabase, connections, onDisconnect, elite-list = [], elite-listTotal = 0, onElite listUpdate }) {
   const [open, setOpen] = useState(false);
   const [disconnecting, setDisconnecting] = useState(null);
   const menuRef = useRef(null);
@@ -297,7 +297,7 @@ function ProfileMenu({ session, supabase, connections, onDisconnect, watchlist =
               onMouseLeave={e => e.currentTarget.style.background = "none"}>
               <span style={{ fontFamily: sans, fontSize: F.sm, color: T.text, fontWeight: 500 }}>👤 Manage handles</span>
               <span style={{ marginLeft: "auto", fontFamily: sans, fontSize: F.xs, color: T.dim }}>
-                {watchlistTotal > 0 ? `${watchlistTotal.toLocaleString()} tracked` : "View & import"}
+                {elite-listTotal > 0 ? `${elite-listTotal.toLocaleString()} tracked` : "View & import"}
               </span>
               <span style={{ color: T.dim, fontSize: F.xs }}>↗</span>
             </a>
@@ -906,7 +906,7 @@ function AccountsSection({ open, onToggle }) {
               <>
                 {/* Header */}
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 110px 1fr 1fr 90px", padding: "6px 20px", borderBottom: `1px solid ${T.border}` }}>
-                  {["Name / Handle","Category","Platforms","Followed By","Added"].map(h => (
+                  {["Name / Handle","List","Platforms","Followed By","Added"].map(h => (
                     <div key={h} style={{ fontFamily: sans, fontSize: 10, fontWeight: 700, color: T.dim, textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</div>
                   ))}
                 </div>
@@ -926,7 +926,7 @@ function AccountsSection({ open, onToggle }) {
                             overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{acc.bio}</div>
                         )}
                       </div>
-                      {/* Category badge */}
+                      {/* List badge */}
                       <div>
                         <span style={{ fontFamily: sans, fontSize: 10, fontWeight: 700, padding: "2px 8px",
                           borderRadius: 4, background: zc.bg, color: zc.color, border: `1px solid ${zc.color}30` }}>
@@ -1200,8 +1200,8 @@ export default function Dashboard() {
   const [inlineEdit, setInlineEdit]      = useState(null); // {id, field}
   const [inlineVal, setInlineVal]        = useState("");
   const [syncing, setSyncing]       = useState(null);
-  const [watchlist, setWatchlist]     = useState([]);
-  const [watchlistTotal, setWatchlistTotal] = useState(0);
+  const [elite-list, setElite list]     = useState([]);
+  const [elite-listTotal, setElite listTotal] = useState(0);
   const [syncMsg, setSyncMsg]       = useState("");
   const [lastSynced, setLastSynced] = useState(null);
   const [urlMsg, setUrlMsg]         = useState("");
@@ -1259,20 +1259,20 @@ export default function Dashboard() {
     })));
   }, [session, supabase]);
 
-  // Watchlist fetched separately — only on mount and after explicit changes
-  const loadWatchlist = useCallback(async () => {
+  // Elite list fetched separately — only on mount and after explicit changes
+  const loadElite list = useCallback(async () => {
     if (!session) return;
     try {
       const { data: { session: s } } = await supabase.auth.getSession();
-      const r = await fetch("/api/watchlist", { headers: s?.access_token ? { Authorization: `Bearer ${s.access_token}` } : {} });
+      const r = await fetch("/api/elite-list", { headers: s?.access_token ? { Authorization: `Bearer ${s.access_token}` } : {} });
       const wl = await r.json();
-      if (wl?.entries) setWatchlist(wl.entries);
-      if (wl?.total !== undefined) setWatchlistTotal(wl.total);
+      if (wl?.entries) setElite list(wl.entries);
+      if (wl?.total !== undefined) setElite listTotal(wl.total);
     } catch {}
   }, [session, supabase]);
 
   useEffect(() => { loadData(); }, [loadData]);
-  useEffect(() => { loadWatchlist(); }, [loadWatchlist]);
+  useEffect(() => { loadElite list(); }, [loadElite list]);
 
   async function triggerSync(p) {
     setSyncing(p); setSyncMsg("");
@@ -1417,9 +1417,9 @@ export default function Dashboard() {
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
           {lastSynced && <span style={{ fontSize: F.xs, color: T.dim }}>synced {timeAgo(lastSynced)}</span>}
           <ProfileMenu session={session} supabase={supabase} connections={connections}
-            watchlist={watchlist}
-            watchlistTotal={watchlistTotal}
-            onWatchlistUpdate={loadWatchlist}
+            elite-list={elite-list}
+            elite-listTotal={elite-listTotal}
+            onElite listUpdate={loadElite list}
             onDisconnect={async (platformId) => {
               const res = await fetch(`/api/disconnect/${platformId}`, { method: "DELETE", headers: await authHeaders() });
               const data = await res.json();

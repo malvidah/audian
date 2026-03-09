@@ -61,7 +61,7 @@ function fmtDateTime(ts) {
 }
 
 function computeZone(item) {
-  if (item.zone === "ELITE" || item.on_watchlist) return "ELITE";
+  if (item.zone === "ELITE" || item.on_elite-list) return "ELITE";
   const followers = parseInt(item.followers) || 0;
   const hasWiki   = !!item._wikiBio;
   const high      = followers >= 100000;
@@ -358,7 +358,7 @@ export default function InteractionsPage() {
     if (!k) return item;
     return { ...item, name:k.name||item.name, followers:k.followers??item.followers,
       verified:k.verified??item.verified, bio:k.bio||item.bio,
-      zone:k.zone||item.zone, on_watchlist:k.on_watchlist||false, _autofilled:true };
+      zone:k.zone||item.zone, on_elite-list:k.on_elite-list||false, _autofilled:true };
   };
 
   const toDataUrl  = f => new Promise(res=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.readAsDataURL(f); });

@@ -47,7 +47,7 @@ const INTERACTION_ICONS = {
 // manual bio (not wiki), any followers → SIGNAL
 // neither → IGNORE
 function computeZone(item) {
-  if (item.zone === "ELITE" || item.on_watchlist) return "ELITE";
+  if (item.zone === "ELITE" || item.on_elite-list) return "ELITE";
   const followers    = parseInt(item.followers) || 0;
   const hasWiki      = !!item._wikiBio;
   const hasManualBio = !!(item.bio?.trim()) && !item._wikiBio;
@@ -463,7 +463,7 @@ export default function ImportPage() {
       bio:          known.bio        || interaction.bio,
       avatar_url:   known.avatar_url || interaction.avatar_url,
       zone:         known.zone || interaction.zone,
-      on_watchlist: known.on_watchlist || false,
+      on_elite-list: known.on_elite-list || false,
       ignored:      known.ignored || false,
       account_id:   known.account_id || null,
       _autofilled:  true,
@@ -629,7 +629,7 @@ export default function ImportPage() {
               interaction_type: allTypes,
             };
             merged.zone = computeZone({ ...merged,
-              on_watchlist: item.on_watchlist || existing.on_watchlist });
+              on_elite-list: item.on_elite-list || existing.on_elite-list });
             merged.ignored = item.ignored || false;
             merged.account_id = item.account_id || existing.account_id || null;
             merged._knownHandles = item._knownHandles || existing._knownHandles || {};
@@ -701,8 +701,8 @@ export default function ImportPage() {
       const updated = [...prev];
       updated[index] = { ...updated[index], [key]: value };
       if (key === "zone") {
-        // Explicit zone override (Elite button) — mark on_watchlist
-        updated[index].on_watchlist = value === "ELITE";
+        // Explicit zone override (Elite button) — mark on_elite-list
+        updated[index].on_elite-list = value === "ELITE";
       } else if (["name","bio","followers","verified"].includes(key)) {
         // Recompute zone from data (unless already Elite)
         if (updated[index].zone !== "ELITE") {
@@ -965,7 +965,7 @@ export default function ImportPage() {
                 <thead>
                   <tr style={{ background: T.well }}>
                     <th style={{ width: 4, padding: 0 }} />
-                    {["Handle","Category","Followers","Type",""].map(h => (
+                    {["Handle","List","Followers","Type",""].map(h => (
                       <th key={h} style={{ padding: "8px 12px", textAlign: "left",
                         fontFamily: sans, fontSize: F.xs, fontWeight: 600,
                         color: T.dim, textTransform: "uppercase", letterSpacing: "0.05em",
