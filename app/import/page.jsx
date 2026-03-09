@@ -110,152 +110,120 @@ function DropZone({ onFiles, disabled }) {
 }
 
 // ── Single interaction row (editable) ────────────────────────────────────────
-function InteractionRow({ item, index, onChange, onRemove }) {
-  const [editing, setEditing] = useState(false);
-
-  const field = (key, value, type = "text", options = null) => {
-    if (!editing) {
-      if (key === "followers") return value
-        ? <span style={{ fontFamily: sans, fontSize: F.sm, color: T.text, fontWeight: 500 }}>
-            {value >= 1000000 ? (value/1000000).toFixed(1)+"M" : value >= 1000 ? (value/1000).toFixed(1)+"K" : value}
-          </span>
-        : <span style={{ color: T.dim, fontSize: F.xs }}>—</span>;
-      if (key === "zone") return <ZoneBadge zone={value} />;
-      if (key === "interaction_type") return (
-        <span style={{ fontFamily: sans, fontSize: F.sm, color: T.sub }}>
-          {INTERACTION_ICONS[value] || "?"} {value}
-        </span>
-      );
-      if (key === "verified") return value ?
-        <span style={{ color: "#1D9BF0", fontSize: 14 }}>✓</span> :
-        <span style={{ color: T.dim, fontSize: 12 }}>—</span>;
-      return <span style={{ fontFamily: sans, fontSize: F.sm, color: T.text }}>{value || <span style={{ color: T.dim }}>—</span>}</span>;
-    }
-
-    if (options) return (
-      <select
-        value={value || ""}
-        onChange={e => onChange(index, key, e.target.value)}
-        style={{ fontFamily: sans, fontSize: F.sm, padding: "3px 6px", borderRadius: 6, border: `1px solid ${T.border2}`, background: T.card, color: T.text }}
-      >
-        {options.map(o => <option key={o} value={o}>{o}</option>)}
-      </select>
-    );
-
-    if (type === "checkbox") return (
-      <input type="checkbox" checked={!!value}
-        onChange={e => onChange(index, key, e.target.checked)}
-        style={{ width: 16, height: 16, cursor: "pointer" }}
-      />
-    );
-
-    return (
-      <input
-        type={type} value={value || ""}
-        onChange={e => onChange(index, key, type === "number" ? parseInt(e.target.value) || null : e.target.value)}
-        style={{
-          fontFamily: sans, fontSize: F.sm, padding: "3px 8px",
-          borderRadius: 6, border: `1px solid ${T.border2}`,
-          background: T.card, color: T.text, width: key === "handle" ? 130 : key === "content" ? 200 : 90,
-        }}
-      />
-    );
-  };
-
-  const zoneColor = ZONE_COLORS[item.zone] || ZONE_COLORS.RADAR;
-
+// ── Inline editable cell ─────────────────────────────────────────────────────
+function EditableCell({ value, onChange, type = "text", placeholder = "—", width, options }) {
+  const [focused, setFocused] = useState(false);
+  if (options) return (
+    <select value={value || ""} onChange={e => onChange(e.target.value)}
+      onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+      style={{ fontFamily: sans, fontSize: F.sm, padding: "4px 6px", borderRadius: 6,
+        border: `1px solid ${focused ? T.accent : T.border}`,
+        background: T.card, color: T.text, cursor: "pointer" }}>
+      {options.map(o => <option key={o} value={o}>{o}</option>)}
+    </select>
+  );
+  if (type === "checkbox") return (
+    <input type="checkbox" checked={!!value} onChange={e => onChange(e.target.checked)}
+      style={{ width: 16, height: 16, cursor: "pointer", accentColor: T.accent }} />
+  );
+  const empty = value === null || value === undefined || value === "";
   return (
-    <tr style={{ borderBottom: `1px solid ${T.border}`, background: item._removed ? T.redBg : "transparent" }}>
-      {/* Zone indicator strip */}
+    <input
+      type={type} value={value ?? ""} placeholder={placeholder}
+      onChange={e => onChange(type === "number"
+        ? (e.target.value === "" ? null : parseInt(e.target.value) || null)
+        : e.target.value)}
+      onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+      style={{ fontFamily: sans, fontSize: F.sm, padding: "4px 8px", borderRadius: 6,
+        border: `1px solid ${focused ? T.accent : empty ? "transparent" : T.border}`,
+        background: focused ? T.card : empty ? "transparent" : T.well,
+        color: empty ? T.dim : T.text, width: width || (type === "number" ? 80 : 130),
+        outline: "none", transition: "border 0.12s, background 0.12s", cursor: "text" }}
+    />
+  );
+}
+
+// ── Single interaction row — all fields always editable inline ────────────────
+function InteractionRow({ item, index, onChange, onRemove }) {
+  const zoneColor = ZONE_COLORS[item.zone] || ZONE_COLORS.RADAR;
+  return (
+    <tr style={{ borderBottom: `1px solid ${T.border}` }}>
       <td style={{ width: 4, padding: 0, background: zoneColor.color }} />
 
-      {/* Handle */}
-      <td style={{ padding: "10px 12px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+      {/* Handle — always a link */}
+      <td style={{ padding: "8px 12px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
           <span style={{ color: T.dim, fontSize: F.xs }}>@</span>
-          {editing ? field("handle", item.handle) : (
-            <a
-              href={`https://instagram.com/${item.handle}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{ fontFamily: sans, fontSize: F.sm, color: T.accent,
-                textDecoration: "none", fontWeight: 500 }}
-              onMouseEnter={e => e.target.style.textDecoration = "underline"}
-              onMouseLeave={e => e.target.style.textDecoration = "none"}
-            >
-              {item.handle}
-            </a>
-          )}
+          <a href={`https://instagram.com/${item.handle}`} target="_blank" rel="noopener noreferrer"
+            style={{ fontFamily: sans, fontSize: F.sm, color: T.accent,
+              textDecoration: "none", fontWeight: 500 }}
+            onMouseEnter={e => e.target.style.textDecoration = "underline"}
+            onMouseLeave={e => e.target.style.textDecoration = "none"}>
+            {item.handle}
+          </a>
         </div>
       </td>
 
-      {/* Name */}
-      <td style={{ padding: "10px 12px" }}>{field("name", item.name)}</td>
+      {/* Name — click to edit */}
+      <td style={{ padding: "8px 12px" }}>
+        <EditableCell value={item.name} placeholder="add name"
+          onChange={v => onChange(index, "name", v)} width={130} />
+      </td>
 
-      {/* Followers */}
-      <td style={{ padding: "10px 12px" }}>
+      {/* Followers — click to edit */}
+      <td style={{ padding: "8px 12px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-          {field("followers", item.followers, "number")}
-          {item._enriched === true && item.followers && (
-            <span title="Verified from Instagram" style={{ fontSize: 9, color: T.green }}>✓</span>
-          )}
-          {item._enriched === false && (
-            <span title="Profile not found / private" style={{ fontSize: 9, color: T.dim }}>?</span>
-          )}
+          <EditableCell value={item.followers} type="number" placeholder="—"
+            onChange={v => onChange(index, "followers", v)} width={75} />
+          {item._enriched === true && item.followers &&
+            <span title="Looked up from Instagram" style={{ fontSize: 9, color: T.green }}>✓</span>}
+          {item._enriched === false &&
+            <span title="Profile not found / private" style={{ fontSize: 9, color: T.dim }}>?</span>}
         </div>
       </td>
 
       {/* Verified */}
-      <td style={{ padding: "10px 12px", textAlign: "center" }}>
-        {field("verified", item.verified, "checkbox")}
+      <td style={{ padding: "8px 12px", textAlign: "center" }}>
+        <EditableCell value={item.verified} type="checkbox"
+          onChange={v => onChange(index, "verified", v)} />
       </td>
 
-      {/* Interaction */}
-      <td style={{ padding: "10px 12px" }}>
-        {field("interaction_type", item.interaction_type, "text",
-          editing ? ["like","follow","comment","mention","tag","view"] : null)}
+      {/* Interaction type */}
+      <td style={{ padding: "8px 12px" }}>
+        <EditableCell value={item.interaction_type}
+          onChange={v => onChange(index, "interaction_type", v)}
+          options={["like","follow","comment","mention","tag","view"]} />
       </td>
 
       {/* Zone */}
-      <td style={{ padding: "10px 12px" }}>
-        {field("zone", item.zone, "text",
-          editing ? ["CORE","INFLUENTIAL","RADAR"] : null)}
+      <td style={{ padding: "8px 12px" }}>
+        <EditableCell value={item.zone}
+          onChange={v => onChange(index, "zone", v)}
+          options={["CORE","INFLUENTIAL","RADAR"]} />
       </td>
 
-      {/* Content preview */}
-      <td style={{ padding: "10px 12px", maxWidth: 220 }}>
-        {item.content ? (
-          <span style={{ fontFamily: sans, fontSize: F.xs, color: T.sub,
-            overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2,
-            WebkitBoxOrient: "vertical" }}>
-            "{item.content}"
-          </span>
-        ) : <span style={{ color: T.dim, fontSize: F.xs }}>—</span>}
+      {/* Comment preview */}
+      <td style={{ padding: "8px 12px", maxWidth: 220 }}>
+        {item.content
+          ? <span style={{ fontFamily: sans, fontSize: F.xs, color: T.sub,
+              overflow: "hidden", display: "-webkit-box",
+              WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>"{item.content}"</span>
+          : <span style={{ color: T.dim, fontSize: F.xs }}>—</span>}
       </td>
 
-      {/* Actions */}
-      <td style={{ padding: "10px 12px", whiteSpace: "nowrap" }}>
-        <div style={{ display: "flex", gap: 4 }}>
-          <button
-            onClick={() => setEditing(!editing)}
-            style={{ background: editing ? T.accentBg : T.well, border: `1px solid ${editing ? T.accentBorder : T.border}`,
-              color: editing ? T.accent : T.sub, borderRadius: 6, padding: "3px 8px",
-              fontSize: F.xs, fontFamily: sans, cursor: "pointer", fontWeight: 600 }}>
-            {editing ? "Done" : "Edit"}
-          </button>
-          <button
-            onClick={() => onRemove(index)}
-            style={{ background: "transparent", border: "none", color: T.dim,
-              cursor: "pointer", fontSize: 16, padding: "0 4px", lineHeight: 1 }}>
-            ×
-          </button>
-        </div>
+      {/* Remove */}
+      <td style={{ padding: "8px 12px" }}>
+        <button onClick={() => onRemove(index)}
+          onMouseEnter={e => e.currentTarget.style.color = T.red}
+          onMouseLeave={e => e.currentTarget.style.color = T.dim}
+          style={{ background: "transparent", border: "none", color: T.dim,
+            cursor: "pointer", fontSize: 18, padding: "0 4px", lineHeight: 1,
+            transition: "color 0.1s" }}>×</button>
       </td>
     </tr>
   );
 }
 
-// ── Screenshot card (thumbnail + parsed results) ──────────────────────────────
 function ScreenshotCard({ result, onRemoveScreenshot }) {
   const [expanded, setExpanded] = useState(true);
   const count = result.interactions.length;
