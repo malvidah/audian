@@ -41,11 +41,13 @@ const INTERACTION_ICONS = {
 };
 
 // Zone is fully computed from profile data — never set manually except Elite button
+// Requires bio OR followers to graduate from IGNORE. Name alone is not enough.
 function computeZone(item) {
   if (item.zone === "ELITE" || item.on_watchlist) return "ELITE";
   const followers = parseInt(item.followers) || 0;
-  const hasProfile = !!(item.name?.trim() || item.bio?.trim());
-  if (!hasProfile) return "IGNORE";
+  const hasBio      = !!(item.bio?.trim());
+  const hasFollowers = followers > 0;
+  if (!hasBio && !hasFollowers) return "IGNORE";
   if (followers >= 10000) return "INFLUENTIAL";
   if (item.verified && followers >= 1000) return "INFLUENTIAL";
   return "SIGNAL";

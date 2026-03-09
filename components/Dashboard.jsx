@@ -778,6 +778,8 @@ export default function Dashboard() {
   const [allMetrics, setAllMetrics] = useState([]);
   const [comments, setComments]     = useState([]);
   const [interactions, setInteractions] = useState([]);
+  const [selectedIds, setSelectedIds]   = useState(new Set());
+  const [deleting, setDeleting]         = useState(false);
   const [syncing, setSyncing]       = useState(null);
   const [watchlist, setWatchlist]     = useState([]);
   const [watchlistTotal, setWatchlistTotal] = useState(0);
@@ -871,6 +873,25 @@ export default function Dashboard() {
 
   const ytVideos = latestPerPlatform["youtube"]?.videos || [];
   const filteredComments = comments.filter(c => platform === "All" || c.platform === platform);
+  const deleteSelected = async () => {
+    if (!selectedIds.size) return;
+    if (!confirm(`Delete ${selectedIds.size} interaction${selectedIds.size !== 1 ? 's' : ''}? This cannot be undone.`)) return;
+    setDeleting(true);
+    try {
+      const res = await fetch('/api/interactions/delete', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: [...selectedIds] }),
+      });
+      const data = await res.json();
+      if (data.deleted) {
+        setInteractions(prev => prev.filter(i => !selectedIds.has(i.id)));
+        setSelectedIds(new Set());
+      }
+    } catch (e) { console.error('Delete failed', e); }
+    setDeleting(false);
+  };
+
   const filteredInteractions = interactions.filter(i =>
     (platform === "All" || i.platform === platform) && !i.ignored
   );
@@ -1050,7 +1071,13 @@ export default function Dashboard() {
         {/* ── Interactions ─────────────────────────────────────── */}
         <Card style={{ marginBottom: 12, overflow: "hidden" }}>
           <SectionHeader label="Interactions" count={filteredInteractions.length} open={open.interactions} onToggle={() => tog("interactions")} action={
-              <div style={{ display: "flex", gap: 6 }}>
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                {selectedIds.size > 0 && (
+                  <Btn variant="ghost" onClick={deleteSelected} disabled={deleting}
+                    style={{ fontSize: F.xs, color: "#EF4444", borderColor: "#EF444430" }}>
+                    {deleting ? "Deleting…" : `🗑 Delete ${selectedIds.size}`}
+                  </Btn>
+                )}
                 <Btn variant="ghost" onClick={() => window.open("/import", "_blank")} style={{ fontSize: F.xs }}>📸 Import</Btn>
               </div>
             } />
@@ -1077,7 +1104,11 @@ export default function Dashboard() {
                     </div>
                     <Divider />
                     {/* Table header */}
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 100px 80px 100px", gap: 0, padding: "6px 20px 6px", borderBottom: `1px solid ${T.border}` }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "28px 1fr 100px 80px 80px", gap: 0, padding: "6px 20px 6px", borderBottom: `1px solid ${T.border}`, alignItems: "center" }}>
+                      <input type="checkbox"
+                        checked={selectedIds.size > 0 && selectedIds.size === filteredInteractions.length}
+                        onChange={e => setSelectedIds(e.target.checked ? new Set(filteredInteractions.map(i => i.id)) : new Set())}
+                        style={{ cursor: "pointer", accentColor: T.accent }} />
                       {["Handle", "Category", "Followers", "Type"].map(h => (
                         <div key={h} style={{ fontFamily: sans, fontSize: 10, fontWeight: 700, color: T.dim, textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</div>
                       ))}
@@ -1090,7 +1121,11 @@ export default function Dashboard() {
                         const profileUrl = item.profile_url || (item.platform === "instagram" ? `https://instagram.com/${item.handle}` : null);
                         const typeParts = (item.interaction_type || "").split(",").map(t => t.trim()).filter(Boolean);
                         return (
-                          <div key={item.id} style={{ display: "grid", gridTemplateColumns: "1fr 100px 80px 100px", gap: 0, padding: "10px 20px", borderBottom: `1px solid ${T.border}`, alignItems: "center" }}>
+                          <div key={item.id} style={{ display: "grid", gridTemplateColumns: "28px 1fr 100px 80px 80px", gap: 0, padding: "10px 20px", borderBottom: `1px solid ${T.border}`, alignItems: "center", background: selectedIds.has(item.id) ? `${T.accent}10` : "transparent" }}>
+                            <input type="checkbox"
+                              checked={selectedIds.has(item.id)}
+                              onChange={e => setSelectedIds(prev => { const s = new Set(prev); e.target.checked ? s.add(item.id) : s.delete(item.id); return s; })}
+                              style={{ cursor: "pointer", accentColor: T.accent }} />
 
                             {/* Handle */}
                             <div style={{ display: "flex", flexDirection: "column", gap: 1, minWidth: 0 }}>
