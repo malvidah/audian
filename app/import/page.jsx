@@ -452,6 +452,22 @@ export default function ImportPage() {
     r.readAsDataURL(file);
   });
 
+  // Compress image for sending to Claude Vision — max 1200px wide, keeps detail
+  const compressForParse = (dataUrl) => new Promise((res) => {
+    const img = new Image();
+    img.onload = () => {
+      const MAX_W = 1200;
+      const scale = Math.min(1, MAX_W / img.width);
+      const canvas = document.createElement("canvas");
+      canvas.width  = Math.round(img.width  * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+      const full = canvas.toDataURL("image/jpeg", 0.82);
+      res({ base64: full.split(",")[1], mediaType: "image/jpeg" });
+    };
+    img.src = dataUrl;
+  });
+
   // Compress image to ~300px wide JPEG thumbnail (~15-25KB)
   const compressThumbnail = (dataUrl) => new Promise((res) => {
     const img = new Image();
@@ -474,14 +490,18 @@ export default function ImportPage() {
     setParsing(true);
     setSaveResult(null);
 
-    // Build image objects
+    // Build image objects — compress before sending to stay under Vercel 4.5MB body limit
     const images = await Promise.all(
-      Array.from(files).map(async (f) => ({
-        filename: f.name,
-        base64: await toBase64(f),
-        preview: await toPreview(f),
-        mediaType: f.type || "image/jpeg",
-      }))
+      Array.from(files).map(async (f) => {
+        const preview = await toPreview(f);
+        const compressed = await compressForParse(preview);
+        return {
+          filename: f.name,
+          base64:    compressed.base64,
+          mediaType: compressed.mediaType,
+          preview,   // full res kept locally for thumbnail generation
+        };
+      })
     );
 
     // Optimistically add to screenshots list as "parsing"
@@ -502,7 +522,17 @@ export default function ImportPage() {
           images: images.map(i => ({ base64: i.base64, mediaType: i.mediaType, filename: i.filename }))
         }),
       });
-      const data = await res.json();
+
+      let data;
+      const rawText = await res.text();
+      try {
+        data = JSON.parse(rawText);
+      } catch {
+        // Non-JSON response — likely Vercel size limit or server error
+        const preview = rawText.slice(0, 120);
+        if (!res.ok) throw new Error(`Server error ${res.status}: ${preview}`);
+        throw new Error(`Unexpected response: ${preview}`);
+      }
 
       if (data.error) throw new Error(data.error);
 
