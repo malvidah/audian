@@ -1,44 +1,52 @@
 "use client";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
-import {
-  AreaChart, Area, XAxis, YAxis, Tooltip,
-  ResponsiveContainer, CartesianGrid
-} from "recharts";
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 
-// ─── Theme ───────────────────────────────────────────────────────────────────
-const THEMES = {
-  dark: {
-    bg: "#141412", surface: "#1C1B19", card: "#222120",
-    well: "#1A1918", border: "#2C2A28", border2: "#383532",
-    text: "#D8CEC2", muted: "#6E6860", dim: "#363230",
-    accent: "#D08828", green: "#4A9A68", blue: "#4878A8",
-    purple: "#886088", red: "#B04840",
-    shadow: "0 1px 3px rgba(0,0,0,0.5),0 4px 16px rgba(0,0,0,0.3)",
-    shadowSm: "0 1px 3px rgba(0,0,0,0.35)",
-    chartGrid: "#2C2A28",
-  },
-  light: {
-    bg: "#D4CCB8", surface: "#EAE3D6", card: "#EAE3D6",
-    well: "#CBBFB0", border: "#D4CCBE", border2: "#BEB6A8",
-    text: "#4A3C2E", muted: "#887870", dim: "#ACA49A",
-    accent: "#887018", green: "#38684A", blue: "#386088",
-    purple: "#604888", red: "#843830",
-    shadow: "0 1px 2px rgba(36,24,12,0.08)",
-    shadowSm: "0 1px 2px rgba(36,24,12,0.06)",
-    chartGrid: "#C8C0B0",
-  },
+// ─── Design tokens ────────────────────────────────────────────────────────────
+const T = {
+  // Neutral scale
+  bg:       "#F8F7F5",
+  surface:  "#FFFFFF",
+  card:     "#FFFFFF",
+  well:     "#F3F2F0",
+  border:   "#E8E6E1",
+  border2:  "#D6D3CC",
+  // Text
+  text:     "#1A1816",
+  sub:      "#6B6560",
+  dim:      "#A8A39C",
+  // Brand
+  accent:   "#FF6B35",   // warm orange — distinctive, not generic blue
+  accentBg: "#FFF3EE",
+  accentBorder: "#FFD4C2",
+  // Semantic
+  green:    "#16A34A",
+  greenBg:  "#F0FDF4",
+  red:      "#DC2626",
+  redBg:    "#FEF2F2",
+  blue:     "#2563EB",
+  blueBg:   "#EFF6FF",
+  purple:   "#7C3AED",
+  purpleBg: "#F5F3FF",
+  // Platform
+  yt:    "#FF0000",
+  ig:    "#E1306C",
+  x:     "#000000",
+  li:    "#0077B5",
+  // Shadow
+  shadow:   "0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04)",
+  shadowSm: "0 1px 2px rgba(0,0,0,0.05)",
+  shadowMd: "0 4px 24px rgba(0,0,0,0.08)",
 };
 
-let C = THEMES.dark;
-const serif = "Georgia,'Times New Roman',serif";
-const mono  = "'SF Mono','Fira Code',ui-monospace,monospace";
-const F     = { xl: 32, lg: 20, md: 15, sm: 12, xs: 10 };
+const PLAT_COLORS = { youtube: T.yt, x: T.x, instagram: T.ig, linkedin: T.li };
 
-const PLAT_COLORS = {
-  youtube: "#B04840", x: "#D8CEC2", instagram: "#886088", linkedin: "#4878A8",
-};
+const sans  = "-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif";
+const mono  = "'SF Mono', 'Fira Code', ui-monospace, monospace";
+const F     = { xl: 36, lg: 22, md: 15, sm: 13, xs: 11 };
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmt(n) {
   if (!n && n !== 0) return "—";
   n = parseInt(n);
@@ -46,58 +54,100 @@ function fmt(n) {
   if (n >= 1000) return (n / 1000).toFixed(1) + "K";
   return n.toLocaleString();
 }
-
 function fmtDate(iso) {
   if (!iso) return "";
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
-
 function timeAgo(iso) {
   if (!iso) return "";
   const diff = Date.now() - new Date(iso).getTime();
-  const h = Math.floor(diff / 3600000);
   const d = Math.floor(diff / 86400000);
+  const h = Math.floor(diff / 3600000);
+  const m = Math.floor(diff / 60000);
   if (d > 0) return `${d}d ago`;
   if (h > 0) return `${h}h ago`;
+  if (m > 0) return `${m}m ago`;
   return "just now";
 }
-
-function deltaVal(current, previous) {
-  if (!previous || previous === 0) return null;
-  return ((current - previous) / previous) * 100;
+function pctDelta(curr, prev) {
+  if (!prev || prev === 0) return null;
+  return ((curr - prev) / prev) * 100;
 }
 
-function Card({ children, style = {} }) {
+// ─── Base components ──────────────────────────────────────────────────────────
+function Card({ children, style = {}, hover = false }) {
+  const [hov, setHov] = useState(false);
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 6, padding: "14px 16px", boxShadow: C.shadowSm, ...style }}>
+    <div
+      onMouseEnter={() => hover && setHov(true)}
+      onMouseLeave={() => hover && setHov(false)}
+      style={{
+        background: T.card, borderRadius: 12, border: `1px solid ${T.border}`,
+        boxShadow: hov ? T.shadowMd : T.shadowSm,
+        transition: "box-shadow 0.15s, transform 0.15s",
+        transform: hov ? "translateY(-1px)" : "none",
+        ...style
+      }}
+    >{children}</div>
+  );
+}
+
+function Badge({ children, color = T.accent, bg = T.accentBg }) {
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, background: bg, color, borderRadius: 6, padding: "2px 8px", fontSize: F.xs, fontWeight: 600, fontFamily: sans }}>
       {children}
-    </div>
+    </span>
   );
 }
 
-function SecHead({ label, count, open, onToggle, accent, action }) {
+function PlatDot({ platform, size = 8 }) {
+  return <span style={{ display: "inline-block", width: size, height: size, borderRadius: "50%", background: PLAT_COLORS[platform?.toLowerCase()] || T.dim, flexShrink: 0 }} />;
+}
+
+function Divider() {
+  return <div style={{ height: 1, background: T.border, margin: "0" }} />;
+}
+
+function SectionHeader({ label, count, open, onToggle, action }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", borderBottom: `1px solid ${C.border}` }}>
-      <button onClick={onToggle} style={{ flex: 1, display: "flex", alignItems: "center", gap: 10, background: "none", border: "none", cursor: "pointer", padding: "14px 0 10px" }}>
-        <span style={{ fontFamily: mono, fontSize: F.sm, letterSpacing: "0.12em", color: accent || C.accent, textTransform: "uppercase", fontWeight: 600 }}>{label}</span>
-        {count !== undefined && <span style={{ fontFamily: mono, fontSize: F.sm, color: C.muted, background: C.well, padding: "1px 7px", borderRadius: 3 }}>{count}</span>}
-        <span style={{ marginLeft: "auto", fontFamily: mono, fontSize: F.sm, color: C.muted, transform: open ? "rotate(180deg)" : "none", transition: "transform 0.2s" }}>▾</span>
-      </button>
-      {action && <div style={{ paddingBottom: 10, paddingLeft: 12 }}>{action}</div>}
+    <div style={{ display: "flex", alignItems: "center", padding: "16px 20px", cursor: "pointer" }} onClick={onToggle}>
+      <span style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text, letterSpacing: "-0.01em" }}>{label}</span>
+      {count !== undefined && count > 0 && (
+        <span style={{ marginLeft: 8, background: T.well, color: T.sub, borderRadius: 20, padding: "1px 8px", fontSize: F.xs, fontFamily: sans, fontWeight: 500 }}>{count}</span>
+      )}
+      <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
+        {action && <div onClick={e => e.stopPropagation()}>{action}</div>}
+        <span style={{ color: T.dim, fontSize: F.xs, transform: open ? "rotate(180deg)" : "none", transition: "transform 0.2s", display: "inline-block" }}>▾</span>
+      </div>
     </div>
   );
 }
 
-function Dot({ platform }) {
-  return <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: PLAT_COLORS[platform?.toLowerCase()] || C.muted, marginRight: 5, verticalAlign: "middle" }} />;
+function Btn({ children, onClick, disabled, variant = "ghost", size = "sm" }) {
+  const [hov, setHov] = useState(false);
+  const base = {
+    fontFamily: sans, fontWeight: 500, cursor: disabled ? "not-allowed" : "pointer",
+    border: "none", outline: "none", borderRadius: 8, transition: "all 0.12s",
+    opacity: disabled ? 0.5 : 1, display: "inline-flex", alignItems: "center", gap: 6,
+  };
+  const sizes = { sm: { fontSize: F.xs, padding: "5px 12px" }, md: { fontSize: F.sm, padding: "8px 16px" }, lg: { fontSize: F.md, padding: "10px 20px" } };
+  const variants = {
+    primary:  { background: T.accent, color: "#fff", boxShadow: hov ? "0 2px 8px rgba(255,107,53,0.35)" : "none" },
+    secondary:{ background: T.well, color: T.text, border: `1px solid ${T.border}` },
+    ghost:    { background: hov ? T.well : "transparent", color: T.sub, border: `1px solid ${hov ? T.border : "transparent"}` },
+    orange:   { background: hov ? T.accentBg : "transparent", color: T.accent, border: `1px solid ${hov ? T.accentBorder : T.accentBorder}` },
+    purple:   { background: hov ? T.purpleBg : "transparent", color: T.purple, border: `1px solid ${T.purple}33` },
+  };
+  return (
+    <button onClick={onClick} disabled={disabled}
+      onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
+      style={{ ...base, ...sizes[size], ...variants[variant] }}>
+      {children}
+    </button>
+  );
 }
 
-function DeltaBadge({ value }) {
-  if (value === null || value === undefined) return null;
-  const up = value >= 0;
-  return <span style={{ fontFamily: mono, fontSize: F.xs, color: up ? C.green : C.red, marginLeft: 6 }}>{up ? "▲" : "▼"} {Math.abs(value).toFixed(1)}%</span>;
-}
-
+// ─── Sign In ──────────────────────────────────────────────────────────────────
 function SignIn({ supabase }) {
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
@@ -110,153 +160,223 @@ function SignIn({ supabase }) {
     setLoading(false);
   }
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: "40px 48px", maxWidth: 380, width: "100%", boxShadow: C.shadow }}>
-        <div style={{ fontFamily: serif, fontSize: 28, color: C.text, letterSpacing: "-0.02em", marginBottom: 6 }}>Audian</div>
-        <div style={{ fontFamily: mono, fontSize: F.sm, color: C.muted, letterSpacing: "0.04em", marginBottom: 32 }}>SOCIAL INTELLIGENCE</div>
-        {sent ? <div style={{ fontSize: F.md, color: C.green, fontFamily: mono }}>Check your email — magic link sent.</div> : <>
-          <input type="email" placeholder="your@email.com" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && go()} style={{ width: "100%", background: C.well, border: `1px solid ${C.border2}`, borderRadius: 4, padding: "10px 12px", color: C.text, fontFamily: mono, fontSize: F.md, outline: "none", boxSizing: "border-box", marginBottom: 12 }} />
-          <button onClick={go} disabled={loading} style={{ width: "100%", background: C.accent, border: "none", borderRadius: 4, padding: "10px 12px", color: C.bg, fontFamily: mono, fontSize: F.sm, fontWeight: 700, letterSpacing: "0.08em", cursor: "pointer", textTransform: "uppercase" }}>{loading ? "SENDING..." : "SIGN IN →"}</button>
-        </>}
+    <div style={{ minHeight: "100vh", background: T.bg, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: sans }}>
+      <div style={{ background: T.card, borderRadius: 16, border: `1px solid ${T.border}`, padding: "40px 44px", maxWidth: 380, width: "100%", boxShadow: T.shadowMd }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 28 }}>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: T.accent, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <span style={{ color: "#fff", fontSize: 16, fontWeight: 700 }}>A</span>
+          </div>
+          <div>
+            <div style={{ fontSize: F.md, fontWeight: 700, color: T.text, letterSpacing: "-0.02em" }}>Audian</div>
+            <div style={{ fontSize: F.xs, color: T.sub }}>Social Intelligence</div>
+          </div>
+        </div>
+        <div style={{ fontSize: F.lg, fontWeight: 600, color: T.text, marginBottom: 6, letterSpacing: "-0.02em" }}>Welcome back</div>
+        <div style={{ fontSize: F.sm, color: T.sub, marginBottom: 24 }}>Sign in to your workspace</div>
+        {sent ? (
+          <div style={{ background: T.greenBg, border: `1px solid #BBF7D0`, borderRadius: 8, padding: "12px 14px", fontSize: F.sm, color: T.green }}>
+            ✓ Check your email — magic link sent.
+          </div>
+        ) : (
+          <>
+            <input type="email" placeholder="you@company.com" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && go()}
+              style={{ width: "100%", background: T.well, border: `1px solid ${T.border}`, borderRadius: 8, padding: "10px 12px", color: T.text, fontFamily: sans, fontSize: F.sm, outline: "none", boxSizing: "border-box", marginBottom: 10 }} />
+            <button onClick={go} disabled={loading}
+              style={{ width: "100%", background: T.accent, border: "none", borderRadius: 8, padding: "11px", color: "#fff", fontFamily: sans, fontSize: F.sm, fontWeight: 600, cursor: "pointer", letterSpacing: "-0.01em" }}>
+              {loading ? "Sending…" : "Continue with email →"}
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
 }
 
-function KPICard({ label, value, prev, color, selected, onClick }) {
-  const d = deltaVal(value, prev);
+// ─── KPI Card ─────────────────────────────────────────────────────────────────
+function KPICard({ label, value, prev, color, icon, selected, onClick }) {
+  const d = pctDelta(value, prev);
+  const [hov, setHov] = useState(false);
   return (
-    <button onClick={onClick} style={{ flex: 1, minWidth: 120, background: selected ? (color + "18") : C.card, border: `1px solid ${selected ? color + "55" : C.border}`, borderRadius: 6, padding: "14px 16px", cursor: "pointer", textAlign: "left", boxShadow: C.shadowSm }}>
-      <div style={{ fontFamily: mono, fontSize: F.xs, color: C.muted, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6 }}>{label}</div>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
-        <span style={{ fontFamily: mono, fontSize: 28, color: selected ? color : C.text, fontWeight: 700, letterSpacing: "-0.02em" }}>{fmt(value)}</span>
-        {d !== null && <DeltaBadge value={d} />}
+    <button onClick={onClick} onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
+      style={{
+        flex: 1, minWidth: 140, background: selected ? color + "0A" : T.card,
+        border: `1.5px solid ${selected ? color + "40" : (hov ? T.border2 : T.border)}`,
+        borderRadius: 12, padding: "16px 18px", cursor: "pointer", textAlign: "left",
+        boxShadow: selected ? `0 0 0 3px ${color}15` : T.shadowSm, transition: "all 0.12s",
+      }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+        <span style={{ fontFamily: sans, fontSize: F.xs, fontWeight: 500, color: selected ? color : T.sub, letterSpacing: "0.01em" }}>{label}</span>
+        <span style={{ fontSize: 16, opacity: 0.7 }}>{icon}</span>
       </div>
+      <div style={{ fontFamily: sans, fontSize: F.xl, fontWeight: 700, color: selected ? color : T.text, letterSpacing: "-0.03em", lineHeight: 1 }}>{fmt(value)}</div>
+      {d !== null && (
+        <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 4 }}>
+          <span style={{ fontSize: F.xs, fontWeight: 600, color: d >= 0 ? T.green : T.red }}>{d >= 0 ? "↑" : "↓"} {Math.abs(d).toFixed(1)}%</span>
+          <span style={{ fontSize: F.xs, color: T.dim }}>vs prev</span>
+        </div>
+      )}
     </button>
   );
 }
 
+// ─── Chart ────────────────────────────────────────────────────────────────────
 function MetricsChart({ allMetrics, activeMetric, activePlatform }) {
-  const metricExtract = {
+  const extract = {
     followers:   m => m.followers || 0,
     impressions: m => m.impressions || m.total_views || 0,
     reach:       m => m.reach || 0,
     likes:       m => m.likes || 0,
     comments:    m => m.comments_count || 0,
-  };
+  }[activeMetric] || (m => m.followers || 0);
 
-  const extract = metricExtract[activeMetric] || metricExtract.followers;
-  const filtered = allMetrics.filter(m => activePlatform === "All" || m.platform === activePlatform)
+  const filtered = allMetrics
+    .filter(m => activePlatform === "All" || m.platform === activePlatform)
     .sort((a, b) => new Date(a.snapshot_at) - new Date(b.snapshot_at));
 
   const platforms = [...new Set(filtered.map(m => m.platform))];
 
-  // Group by date
   const grouped = {};
   filtered.forEach(m => {
     const key = fmtDate(m.snapshot_at);
     if (!grouped[key]) grouped[key] = { date: key };
     grouped[key][m.platform] = (grouped[key][m.platform] || 0) + extract(m);
   });
-  const chartData = Object.values(grouped);
+  const data = Object.values(grouped);
 
-  if (chartData.length === 0) {
-    return <div style={{ height: 160, display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ fontFamily: mono, fontSize: F.sm, color: C.muted }}>No data yet — sync a platform.</span></div>;
-  }
-  if (chartData.length === 1) {
-    const val = platforms.reduce((s, p) => s + (chartData[0][p] || 0), 0);
+  if (data.length === 0) return (
+    <div style={{ height: 160, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 8 }}>
+      <span style={{ fontSize: 32 }}>📊</span>
+      <span style={{ fontFamily: sans, fontSize: F.sm, color: T.dim }}>Sync a platform to start tracking</span>
+    </div>
+  );
+
+  if (data.length === 1) {
+    const val = platforms.reduce((s, p) => s + (data[0][p] || 0), 0);
     return (
-      <div style={{ height: 100, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6 }}>
-        <div style={{ fontFamily: mono, fontSize: 36, color: C.text, fontWeight: 700 }}>{fmt(val)}</div>
-        <div style={{ fontFamily: mono, fontSize: F.xs, color: C.muted, letterSpacing: "0.06em" }}>SYNC REGULARLY TO BUILD TREND HISTORY</div>
+      <div style={{ height: 120, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6 }}>
+        <div style={{ fontFamily: sans, fontSize: 42, fontWeight: 700, color: T.text, letterSpacing: "-0.03em" }}>{fmt(val)}</div>
+        <div style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>Sync again tomorrow to build your trend line</div>
       </div>
     );
   }
 
-  const CustomTooltip = ({ active, payload, label }) => {
+  const TT = ({ active, payload, label }) => {
     if (!active || !payload?.length) return null;
     return (
-      <div style={{ background: C.surface, border: `1px solid ${C.border2}`, borderRadius: 4, padding: "8px 12px" }}>
-        <div style={{ fontFamily: mono, fontSize: F.xs, color: C.muted, marginBottom: 4 }}>{label}</div>
-        {payload.map(p => <div key={p.dataKey} style={{ fontFamily: mono, fontSize: F.sm, color: p.color }}>{p.dataKey}: {fmt(p.value)}</div>)}
+      <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 8, padding: "10px 14px", boxShadow: T.shadowMd }}>
+        <div style={{ fontFamily: sans, fontSize: F.xs, color: T.sub, marginBottom: 6, fontWeight: 500 }}>{label}</div>
+        {payload.map(p => (
+          <div key={p.dataKey} style={{ display: "flex", alignItems: "center", gap: 6, fontFamily: sans, fontSize: F.sm }}>
+            <PlatDot platform={p.dataKey} size={6} />
+            <span style={{ color: T.sub }}>{p.dataKey}:</span>
+            <span style={{ color: T.text, fontWeight: 600 }}>{fmt(p.value)}</span>
+          </div>
+        ))}
       </div>
     );
   };
 
   return (
-    <ResponsiveContainer width="100%" height={180}>
-      <AreaChart data={chartData} margin={{ top: 5, right: 0, left: 0, bottom: 0 }}>
+    <ResponsiveContainer width="100%" height={200}>
+      <AreaChart data={data} margin={{ top: 5, right: 4, left: 0, bottom: 0 }}>
         <defs>
           {platforms.map(p => (
-            <linearGradient key={p} id={`grad_${p}`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor={PLAT_COLORS[p] || C.accent} stopOpacity={0.35} />
-              <stop offset="95%" stopColor={PLAT_COLORS[p] || C.accent} stopOpacity={0} />
+            <linearGradient key={p} id={`g_${p}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={PLAT_COLORS[p] || T.accent} stopOpacity={0.2} />
+              <stop offset="100%" stopColor={PLAT_COLORS[p] || T.accent} stopOpacity={0} />
             </linearGradient>
           ))}
         </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke={C.chartGrid} vertical={false} />
-        <XAxis dataKey="date" tick={{ fontFamily: mono, fontSize: 10, fill: C.muted }} axisLine={false} tickLine={false} />
-        <YAxis tick={{ fontFamily: mono, fontSize: 10, fill: C.muted }} axisLine={false} tickLine={false} tickFormatter={fmt} width={42} />
-        <Tooltip content={<CustomTooltip />} />
+        <CartesianGrid strokeDasharray="3 3" stroke={T.border} vertical={false} />
+        <XAxis dataKey="date" tick={{ fontFamily: sans, fontSize: 11, fill: T.dim }} axisLine={false} tickLine={false} />
+        <YAxis tick={{ fontFamily: sans, fontSize: 11, fill: T.dim }} axisLine={false} tickLine={false} tickFormatter={fmt} width={44} />
+        <Tooltip content={<TT />} />
         {platforms.map(p => (
-          <Area key={p} type="monotone" dataKey={p} stroke={PLAT_COLORS[p] || C.accent} strokeWidth={2} fill={`url(#grad_${p})`} dot={false} />
+          <Area key={p} type="monotone" dataKey={p} stroke={PLAT_COLORS[p] || T.accent}
+            strokeWidth={2.5} fill={`url(#g_${p})`} dot={false} activeDot={{ r: 4, strokeWidth: 0 }} />
         ))}
       </AreaChart>
     </ResponsiveContainer>
   );
 }
 
+// ─── Outliers ─────────────────────────────────────────────────────────────────
 function OutlierContent({ latestMetrics, activePlatform }) {
   const allPosts = [];
   latestMetrics.forEach(m => {
     if (activePlatform !== "All" && m.platform !== activePlatform) return;
     if (m.videos) {
-      m.videos.forEach(v => allPosts.push({ platform: "youtube", title: v.title?.slice(0, 80), engagement: (v.likes || 0) + (v.comments || 0), likes: v.likes || 0, comments: v.comments || 0, views: v.views || 0, url: `https://youtube.com/watch?v=${v.id}` }));
-    }
-    if (m.platform === "instagram" && m.videos) {
-      m.videos.forEach(p => allPosts.push({ platform: "instagram", title: p.caption?.slice(0, 80) || `[${p.type || "post"}]`, engagement: (p.likes || 0) + (p.comments || 0), likes: p.likes || 0, comments: p.comments || 0, url: p.permalink }));
+      m.videos.forEach(v => {
+        const isYT = m.platform === "youtube";
+        allPosts.push({
+          platform: m.platform,
+          title: isYT ? v.title?.slice(0, 80) : (v.caption?.slice(0, 80) || `[${v.type || "post"}]`),
+          engagement: (v.likes || 0) + (v.comments || 0),
+          likes: v.likes || 0,
+          comments: v.comments || 0,
+          views: v.views || 0,
+          url: isYT ? `https://youtube.com/watch?v=${v.id}` : v.permalink,
+        });
+      });
     }
   });
 
-  if (allPosts.length < 3) return <div style={{ fontFamily: mono, fontSize: F.sm, color: C.muted, padding: "20px 0" }}>Not enough posts to detect outliers — sync YouTube or Instagram.</div>;
+  if (allPosts.length < 3) return (
+    <div style={{ padding: "24px 20px", textAlign: "center" }}>
+      <div style={{ fontSize: 28, marginBottom: 8 }}>📈</div>
+      <div style={{ fontFamily: sans, fontSize: F.sm, color: T.dim }}>Sync YouTube or Instagram to detect content outliers</div>
+    </div>
+  );
 
   const avg = allPosts.reduce((s, p) => s + p.engagement, 0) / allPosts.length;
-  const over  = allPosts.filter(p => p.engagement > avg * 1.5).sort((a, b) => b.engagement - a.engagement).slice(0, 4);
-  const under = allPosts.filter(p => p.engagement < avg * 0.5 && p.engagement >= 0).sort((a, b) => a.engagement - b.engagement).slice(0, 4);
+  const over  = allPosts.filter(p => p.engagement > avg * 1.5).sort((a, b) => b.engagement - a.engagement).slice(0, 5);
+  const under = allPosts.filter(p => p.engagement < avg * 0.5).sort((a, b) => a.engagement - b.engagement).slice(0, 5);
 
   const Row = ({ post, isOver }) => (
-    <div style={{ background: C.well, border: `1px solid ${isOver ? C.green + "33" : C.border}`, borderRadius: 5, padding: "10px 12px", marginBottom: 6 }}>
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 6, marginBottom: 6 }}>
-        <Dot platform={post.platform} />
-        <div style={{ flex: 1, fontFamily: serif, fontSize: F.sm, color: C.text, lineHeight: 1.4 }}>
-          {post.url ? <a href={post.url} target="_blank" rel="noreferrer" style={{ color: C.text, textDecoration: "none" }}>{post.title || "Untitled"}</a> : (post.title || "Untitled")}
+    <div style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "12px 20px", borderBottom: `1px solid ${T.border}` }}>
+      <div style={{ width: 32, height: 32, borderRadius: 8, background: isOver ? T.greenBg : T.well, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 14 }}>
+        {isOver ? "🚀" : "📉"}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontFamily: sans, fontSize: F.sm, color: T.text, fontWeight: 500, marginBottom: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {post.url ? <a href={post.url} target="_blank" rel="noreferrer" style={{ color: T.text, textDecoration: "none" }}>{post.title || "Untitled"}</a> : (post.title || "Untitled")}
+        </div>
+        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+          <PlatDot platform={post.platform} size={6} />
+          <span style={{ fontFamily: sans, fontSize: F.xs, color: T.sub }}>♥ {fmt(post.likes)}</span>
+          <span style={{ fontFamily: sans, fontSize: F.xs, color: T.sub }}>✦ {fmt(post.comments)}</span>
+          {post.views > 0 && <span style={{ fontFamily: sans, fontSize: F.xs, color: T.sub }}>▶ {fmt(post.views)}</span>}
         </div>
       </div>
-      <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
-        <span style={{ fontFamily: mono, fontSize: F.xs, color: C.muted }}>♥ {fmt(post.likes)}</span>
-        <span style={{ fontFamily: mono, fontSize: F.xs, color: C.muted }}>✦ {fmt(post.comments)}</span>
-        {post.views > 0 && <span style={{ fontFamily: mono, fontSize: F.xs, color: C.muted }}>▶ {fmt(post.views)}</span>}
-        <span style={{ marginLeft: "auto", fontFamily: mono, fontSize: F.xs, color: isOver ? C.green : C.red, fontWeight: 600 }}>
-          {isOver ? "+" : ""}{avg > 0 ? Math.round((post.engagement / avg - 1) * 100) : 0}% vs avg
-        </span>
-      </div>
+      <Badge color={isOver ? T.green : T.red} bg={isOver ? T.greenBg : T.redBg}>
+        {isOver ? "+" : ""}{avg > 0 ? Math.round((post.engagement / avg - 1) * 100) : 0}%
+      </Badge>
     </div>
   );
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, paddingTop: 12 }}>
-      <div>
-        <div style={{ fontFamily: mono, fontSize: F.xs, color: C.green, letterSpacing: "0.1em", marginBottom: 10, textTransform: "uppercase" }}>▲ Overperforming ({over.length})</div>
-        {over.length === 0 ? <div style={{ fontFamily: mono, fontSize: F.sm, color: C.muted }}>No outliers above 1.5× average.</div> : over.map((p, i) => <Row key={i} post={p} isOver={true} />)}
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr" }}>
+      <div style={{ borderRight: `1px solid ${T.border}` }}>
+        <div style={{ padding: "12px 20px 8px", display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ fontFamily: sans, fontSize: F.xs, fontWeight: 600, color: T.green }}>↑ OVERPERFORMING</span>
+          <span style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>{over.length} posts</span>
+        </div>
+        {over.length === 0 ? <div style={{ padding: "12px 20px", fontFamily: sans, fontSize: F.sm, color: T.dim }}>No outliers above 1.5× avg yet</div>
+          : over.map((p, i) => <Row key={i} post={p} isOver={true} />)}
       </div>
       <div>
-        <div style={{ fontFamily: mono, fontSize: F.xs, color: C.muted, letterSpacing: "0.1em", marginBottom: 10, textTransform: "uppercase" }}>▼ Underperforming ({under.length})</div>
-        {under.length === 0 ? <div style={{ fontFamily: mono, fontSize: F.sm, color: C.muted }}>No outliers below 0.5× average.</div> : under.map((p, i) => <Row key={i} post={p} isOver={false} />)}
+        <div style={{ padding: "12px 20px 8px", display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ fontFamily: sans, fontSize: F.xs, fontWeight: 600, color: T.red }}>↓ UNDERPERFORMING</span>
+          <span style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>{under.length} posts</span>
+        </div>
+        {under.length === 0 ? <div style={{ padding: "12px 20px", fontFamily: sans, fontSize: F.sm, color: T.dim }}>No outliers below 0.5× avg yet</div>
+          : under.map((p, i) => <Row key={i} post={p} isOver={false} />)}
       </div>
     </div>
   );
 }
 
+// ─── Stories ──────────────────────────────────────────────────────────────────
 function StoriesSection({ open, onToggle }) {
   const [stories, setStories] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -271,121 +391,147 @@ function StoriesSection({ open, onToggle }) {
     setLoading(false);
   }
 
-  const action = (
-    <button onClick={load} disabled={loading} style={{ fontFamily: mono, fontSize: F.sm, padding: "3px 12px", borderRadius: 3, border: `1px solid ${C.purple}66`, background: C.purple + "18", color: C.purple, cursor: loading ? "default" : "pointer", letterSpacing: "0.06em" }}>
-      {loading ? "Analyzing…" : stories ? "↻ Refresh" : "✦ Generate"}
-    </button>
-  );
-
   return (
-    <section style={{ marginBottom: 28 }}>
-      <SecHead label="Audience Stories" open={open} onToggle={onToggle} accent={C.purple} action={action} />
+    <Card style={{ marginBottom: 12, overflow: "hidden" }}>
+      <SectionHeader label="Audience Stories" open={open} onToggle={onToggle}
+        action={<Btn variant="purple" onClick={load} disabled={loading}>{loading ? "Analyzing…" : stories ? "↻ Refresh" : "✦ Generate"}</Btn>}
+      />
       {open && (
-        <div style={{ paddingTop: 12 }}>
-          {!stories && !loading && <div style={{ fontFamily: mono, fontSize: F.sm, color: C.muted, padding: "16px 0" }}>Click Generate to surface themes from your audience comments — what they loved, debated, and found valuable.</div>}
-          {loading && <div style={{ fontFamily: mono, fontSize: F.sm, color: C.muted, padding: "16px 0" }}>Reading your audience…</div>}
-          {stories?.length === 0 && !loading && <div style={{ fontFamily: mono, fontSize: F.sm, color: C.muted, padding: "16px 0" }}>Not enough comments yet — sync platforms to build your comment history.</div>}
-          {stories?.map((story, i) => (
-            <Card key={i} style={{ marginBottom: 12 }}>
-              <div style={{ fontFamily: mono, fontSize: F.xs, color: C.purple, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6 }}>{story.theme}</div>
-              <div style={{ fontFamily: serif, fontSize: F.lg, color: C.text, lineHeight: 1.4, marginBottom: 8, fontStyle: "italic" }}>"{story.headline}"</div>
-              <div style={{ fontFamily: serif, fontSize: F.sm, color: C.muted, lineHeight: 1.6, marginBottom: 14 }}>{story.insight}</div>
-              <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 10, display: "flex", flexDirection: "column", gap: 6 }}>
-                {story.evidence?.map((c, j) => (
-                  <div key={j} style={{ background: C.well, borderRadius: 4, padding: "8px 10px" }}>
-                    <span style={{ fontFamily: mono, fontSize: F.xs, color: C.muted }}><Dot platform={c.platform} />{c.author_name} · </span>
-                    <span style={{ fontFamily: serif, fontSize: F.sm, color: C.text, lineHeight: 1.5 }}>"{c.content}"</span>
-                  </div>
-                ))}
+        <>
+          <Divider />
+          <div style={{ padding: "16px 20px" }}>
+            {!stories && !loading && <div style={{ fontFamily: sans, fontSize: F.sm, color: T.dim, padding: "8px 0" }}>Click Generate to surface audience themes from your comments — what they loved, debated, and found most valuable.</div>}
+            {loading && <div style={{ fontFamily: sans, fontSize: F.sm, color: T.sub, padding: "8px 0" }}>Reading your audience…</div>}
+            {stories?.length === 0 && !loading && <div style={{ fontFamily: sans, fontSize: F.sm, color: T.dim, padding: "8px 0" }}>Not enough comments yet — sync platforms to build your comment history.</div>}
+            {stories?.map((s, i) => (
+              <div key={i} style={{ background: T.well, borderRadius: 10, padding: "16px", marginBottom: 12 }}>
+                <Badge color={T.purple} bg={T.purpleBg}>{s.theme}</Badge>
+                <div style={{ fontFamily: sans, fontSize: F.md, fontWeight: 600, color: T.text, letterSpacing: "-0.01em", margin: "10px 0 6px", lineHeight: 1.4 }}>{s.headline}</div>
+                <div style={{ fontFamily: sans, fontSize: F.sm, color: T.sub, lineHeight: 1.6, marginBottom: 14 }}>{s.insight}</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {s.evidence?.map((c, j) => (
+                    <div key={j} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 8, padding: "10px 12px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 5 }}>
+                        <PlatDot platform={c.platform} size={6} />
+                        <span style={{ fontFamily: sans, fontSize: F.xs, fontWeight: 500, color: T.sub }}>{c.author_name}</span>
+                        {c.video_title && <span style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>on "{c.video_title?.slice(0, 40)}"</span>}
+                      </div>
+                      <div style={{ fontFamily: sans, fontSize: F.sm, color: T.text, lineHeight: 1.55 }}>"{c.content}"</div>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </Card>
-          ))}
-        </div>
+            ))}
+          </div>
+        </>
       )}
-    </section>
+    </Card>
   );
 }
 
+// ─── AI Bar ───────────────────────────────────────────────────────────────────
 function AudianAIBar() {
   const [open, setOpen] = useState(false);
-  const [question, setQuestion] = useState("");
-  const [messages, setMessages] = useState([]);
+  const [q, setQ] = useState("");
+  const [msgs, setMsgs] = useState([]);
   const [loading, setLoading] = useState(false);
   const inputRef = useRef(null);
   const endRef = useRef(null);
 
   useEffect(() => { if (open && inputRef.current) inputRef.current.focus(); }, [open]);
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs]);
 
   async function ask() {
-    if (!question.trim() || loading) return;
-    const q = question.trim();
-    setQuestion("");
-    setMessages(m => [...m, { role: "user", content: q }]);
+    if (!q.trim() || loading) return;
+    const question = q.trim();
+    setQ("");
+    setMsgs(m => [...m, { role: "user", content: question }]);
     setLoading(true);
     try {
-      const res = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: q }) });
+      const res = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question }) });
       const data = await res.json();
-      setMessages(m => [...m, { role: "assistant", content: data.answer || data.error || "No response." }]);
-    } catch { setMessages(m => [...m, { role: "assistant", content: "Something went wrong." }]); }
+      setMsgs(m => [...m, { role: "assistant", content: data.answer || data.error || "No response." }]);
+    } catch { setMsgs(m => [...m, { role: "assistant", content: "Something went wrong." }]); }
     setLoading(false);
   }
 
   return (
-    <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 200, background: C.surface, borderTop: `1px solid ${C.border}`, boxShadow: "0 -4px 24px rgba(0,0,0,0.4)" }}>
+    <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 300, background: T.card, borderTop: `1px solid ${T.border}`, boxShadow: "0 -4px 20px rgba(0,0,0,0.07)" }}>
       {open && (
-        <div style={{ maxWidth: 960, margin: "0 auto", padding: "12px 24px 0", height: 280, display: "flex", flexDirection: "column" }}>
-          <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10, paddingBottom: 8 }}>
-            {messages.length === 0 && <div style={{ fontFamily: mono, fontSize: F.sm, color: C.muted, padding: "16px 0" }}>Ask anything about your social data — performance, trends, what's working, what to try next.</div>}
-            {messages.map((m, i) => (
-              <div key={i} style={{ alignSelf: m.role === "user" ? "flex-end" : "flex-start", maxWidth: "80%", background: m.role === "user" ? C.accent + "22" : C.well, border: `1px solid ${m.role === "user" ? C.accent + "44" : C.border}`, borderRadius: 5, padding: "8px 12px", fontFamily: m.role === "user" ? mono : serif, fontSize: F.sm, color: C.text, lineHeight: 1.6 }}>
-                {m.content}
+        <div style={{ maxWidth: 880, margin: "0 auto", padding: "16px 24px 0", height: 300, display: "flex", flexDirection: "column" }}>
+          <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 8, paddingBottom: 8 }}>
+            {msgs.length === 0 && (
+              <div style={{ padding: "12px 0" }}>
+                <div style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text, marginBottom: 4 }}>Ask Audian AI anything</div>
+                <div style={{ fontFamily: sans, fontSize: F.sm, color: T.sub }}>Performance trends, content strategy, audience insights — powered by your real data.</div>
+                <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+                  {["What's my best-performing content?", "How is my Instagram growing?", "What topics resonate most?"].map(s => (
+                    <button key={s} onClick={() => { setQ(s); inputRef.current?.focus(); }}
+                      style={{ background: T.well, border: `1px solid ${T.border}`, borderRadius: 8, padding: "6px 12px", fontFamily: sans, fontSize: F.xs, color: T.sub, cursor: "pointer" }}>
+                      {s}
+                    </button>
+                  ))}
+                </div>
               </div>
+            )}
+            {msgs.map((m, i) => (
+              <div key={i} style={{
+                alignSelf: m.role === "user" ? "flex-end" : "flex-start", maxWidth: "75%",
+                background: m.role === "user" ? T.accent : T.well,
+                color: m.role === "user" ? "#fff" : T.text,
+                borderRadius: m.role === "user" ? "12px 12px 3px 12px" : "12px 12px 12px 3px",
+                padding: "10px 14px", fontFamily: sans, fontSize: F.sm, lineHeight: 1.6,
+              }}>{m.content}</div>
             ))}
-            {loading && <div style={{ alignSelf: "flex-start", fontFamily: mono, fontSize: F.sm, color: C.muted }}>Thinking…</div>}
+            {loading && (
+              <div style={{ alignSelf: "flex-start", background: T.well, borderRadius: "12px 12px 12px 3px", padding: "10px 14px" }}>
+                <div style={{ display: "flex", gap: 4 }}>
+                  {[0, 1, 2].map(i => <span key={i} style={{ width: 6, height: 6, borderRadius: "50%", background: T.dim, display: "inline-block", animation: `pulse 1.2s ${i * 0.2}s infinite` }} />)}
+                </div>
+              </div>
+            )}
             <div ref={endRef} />
           </div>
         </div>
       )}
-      <div style={{ maxWidth: 960, margin: "0 auto", padding: "10px 24px", display: "flex", alignItems: "center", gap: 10 }}>
-        <span style={{ fontFamily: mono, fontSize: F.xs, color: C.accent, letterSpacing: "0.1em", whiteSpace: "nowrap" }}>✦ AUDIAN AI</span>
-        <input ref={inputRef} value={question} onChange={e => setQuestion(e.target.value)} onKeyDown={e => e.key === "Enter" && ask()} onFocus={() => setOpen(true)} placeholder={open ? "Ask about your data…" : "Ask Audian anything about your social performance…"} style={{ flex: 1, background: "none", border: `1px solid ${C.border2}`, borderRadius: 4, padding: "7px 12px", color: C.text, fontFamily: mono, fontSize: F.sm, outline: "none" }} />
-        {open && <button onClick={ask} disabled={loading || !question.trim()} style={{ fontFamily: mono, fontSize: F.sm, padding: "6px 14px", borderRadius: 3, border: `1px solid ${C.accent}66`, background: C.accent + "18", color: C.accent, cursor: "pointer" }}>→</button>}
-        <button onClick={() => setOpen(o => !o)} style={{ fontFamily: mono, fontSize: F.sm, color: C.muted, background: "none", border: `1px solid ${C.border}`, borderRadius: 3, padding: "6px 10px", cursor: "pointer" }}>{open ? "✕" : "▲"}</button>
+      <div style={{ maxWidth: 880, margin: "0 auto", padding: "10px 24px", display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ width: 28, height: 28, borderRadius: 8, background: T.accent, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <span style={{ color: "#fff", fontSize: 12, fontWeight: 700 }}>A</span>
+        </div>
+        <input ref={inputRef} value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => e.key === "Enter" && ask()}
+          onFocus={() => setOpen(true)}
+          placeholder="Ask about your social data…"
+          style={{ flex: 1, background: open ? T.well : "transparent", border: `1px solid ${open ? T.border : "transparent"}`, borderRadius: 8, padding: "8px 12px", color: T.text, fontFamily: sans, fontSize: F.sm, outline: "none", transition: "all 0.15s" }} />
+        {open && q.trim() && (
+          <button onClick={ask} disabled={loading}
+            style={{ background: T.accent, border: "none", borderRadius: 8, padding: "8px 14px", color: "#fff", fontFamily: sans, fontSize: F.sm, cursor: "pointer", fontWeight: 500 }}>↑</button>
+        )}
+        <button onClick={() => setOpen(o => !o)}
+          style={{ background: T.well, border: `1px solid ${T.border}`, borderRadius: 8, padding: "7px 10px", cursor: "pointer", fontFamily: sans, fontSize: F.xs, color: T.sub, fontWeight: 500 }}>
+          {open ? "✕ Close" : "▲ Expand"}
+        </button>
       </div>
     </div>
   );
 }
 
+// ─── Main Dashboard ───────────────────────────────────────────────────────────
 export default function Dashboard() {
   const [supabase] = useState(() => createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY));
-  const [session, setSession]         = useState(null);
+  const [session, setSession]       = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const [theme, setTheme]             = useState("dark");
   const [connections, setConnections] = useState([]);
-  const [metrics, setMetrics]         = useState([]);
-  const [allMetrics, setAllMetrics]   = useState([]);
-  const [comments, setComments]       = useState([]);
+  const [metrics, setMetrics]       = useState([]);
+  const [allMetrics, setAllMetrics] = useState([]);
+  const [comments, setComments]     = useState([]);
   const [interactions, setInteractions] = useState([]);
-  const [syncing, setSyncing]         = useState(false);
-  const [syncMsg, setSyncMsg]         = useState("");
-  const [lastSynced, setLastSynced]   = useState(null);
-  const [urlMsg, setUrlMsg]           = useState("");
-  const [platform, setPlatform]       = useState("All");
+  const [syncing, setSyncing]       = useState(null);
+  const [syncMsg, setSyncMsg]       = useState("");
+  const [lastSynced, setLastSynced] = useState(null);
+  const [urlMsg, setUrlMsg]         = useState("");
+  const [platform, setPlatform]     = useState("All");
   const [activeMetric, setActiveMetric] = useState("followers");
-  const [open, setOpen]               = useState({ metrics: true, outliers: true, channels: true, stories: true, interactions: true, comments: true, videos: false });
-
-  useEffect(() => {
-    const saved = localStorage.getItem("theme") || "dark";
-    setTheme(saved); C = THEMES[saved] || THEMES.dark;
-  }, []);
-
-  function toggleTheme() {
-    const next = theme === "dark" ? "light" : "dark";
-    setTheme(next); C = THEMES[next];
-    localStorage.setItem("theme", next);
-    window.location.reload();
-  }
+  const [open, setOpen]             = useState({ metrics: true, outliers: true, stories: true, channels: true, interactions: true, comments: true, videos: false });
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => { setSession(session); setAuthLoading(false); });
@@ -396,8 +542,8 @@ export default function Dashboard() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const conn = params.get("connected"), err = params.get("error");
-    if (conn) setUrlMsg(`✓ ${conn} connected successfully`);
-    if (err)  setUrlMsg(`✗ ${err.replace(/_/g, " ")}`);
+    if (conn) setSyncMsg(`✓ ${conn} connected`);
+    if (err)  setSyncMsg(`✗ ${err.replace(/_/g, " ")}`);
     if (conn || err) window.history.replaceState({}, "", "/");
   }, []);
 
@@ -420,44 +566,34 @@ export default function Dashboard() {
   useEffect(() => { loadData(); }, [loadData]);
 
   async function triggerSync(p) {
-    setSyncing(true); setSyncMsg("");
+    setSyncing(p); setSyncMsg("");
     try {
       const res = await fetch(`/api/sync/${p}`, { method: "POST" });
       const data = await res.json();
       if (data.error) setSyncMsg(`✗ ${data.error}`);
-      else { setSyncMsg(`✓ ${p} synced — ${data.videos_synced || data.tweets_synced || data.posts || 0} posts, ${data.comments_synced || data.comments || 0} comments`); await loadData(); }
+      else { setSyncMsg(`✓ ${p} synced — ${data.videos_synced || data.tweets_synced || data.posts || 0} posts`); await loadData(); }
     } catch (e) { setSyncMsg(`✗ ${e.message}`); }
-    setSyncing(false);
+    setSyncing(null);
   }
 
   const tog = k => setOpen(s => ({ ...s, [k]: !s[k] }));
 
   const latestPerPlatform = {};
   metrics.forEach(m => { if (!latestPerPlatform[m.platform]) latestPerPlatform[m.platform] = m; });
-
   const prevPerPlatform = {};
   const seen = {};
-  metrics.forEach(m => {
-    if (!seen[m.platform]) { seen[m.platform] = true; return; }
-    if (!prevPerPlatform[m.platform]) prevPerPlatform[m.platform] = m;
-  });
+  metrics.forEach(m => { if (!seen[m.platform]) { seen[m.platform] = true; return; } if (!prevPerPlatform[m.platform]) prevPerPlatform[m.platform] = m; });
 
   const kpis = { followers: { v: 0, p: 0 }, impressions: { v: 0, p: 0 }, reach: { v: 0, p: 0 }, likes: { v: 0, p: 0 }, comments: { v: 0, p: 0 } };
   const toAgg = platform === "All" ? Object.keys(latestPerPlatform) : [platform].filter(p => latestPerPlatform[p]);
   toAgg.forEach(p => {
     const m = latestPerPlatform[p], prev = prevPerPlatform[p];
     if (!m) return;
-    kpis.followers.v   += m.followers || 0;
-    kpis.followers.p   += prev?.followers || 0;
-    // impressions: real column for IG, total_views for YT
-    kpis.impressions.v += m.impressions || m.total_views || 0;
-    kpis.impressions.p += prev?.impressions || prev?.total_views || 0;
-    kpis.reach.v       += m.reach || 0;
-    kpis.reach.p       += prev?.reach || 0;
-    kpis.likes.v       += m.likes || 0;
-    kpis.likes.p       += prev?.likes || 0;
-    kpis.comments.v    += m.comments_count || 0;
-    kpis.comments.p    += prev?.comments_count || 0;
+    kpis.followers.v += m.followers || 0;     kpis.followers.p += prev?.followers || 0;
+    kpis.impressions.v += m.impressions || m.total_views || 0; kpis.impressions.p += prev?.impressions || prev?.total_views || 0;
+    kpis.reach.v    += m.reach || 0;           kpis.reach.p += prev?.reach || 0;
+    kpis.likes.v    += m.likes || 0;           kpis.likes.p += prev?.likes || 0;
+    kpis.comments.v += m.comments_count || 0;  kpis.comments.p += prev?.comments_count || 0;
   });
 
   const ytVideos = latestPerPlatform["youtube"]?.videos || [];
@@ -465,173 +601,232 @@ export default function Dashboard() {
   const filteredInteractions = interactions.filter(i => platform === "All" || i.platform === platform);
 
   const KPIS_DEF = [
-    { key: "followers",   label: "Followers",   color: C.accent },
-    { key: "impressions", label: "Impressions", color: C.blue },
-    { key: "reach",       label: "Reach",       color: C.purple },
-    { key: "likes",       label: "Likes",       color: C.green },
-    { key: "comments",    label: "Comments",    color: C.red },
+    { key: "followers",   label: "Followers",   icon: "👥", color: T.accent },
+    { key: "impressions", label: "Impressions", icon: "👁",  color: T.blue },
+    { key: "reach",       label: "Reach",       icon: "📡", color: T.purple },
+    { key: "likes",       label: "Likes",       icon: "♥",  color: T.red },
+    { key: "comments",    label: "Comments",    icon: "💬", color: T.green },
   ];
 
   const PLATS = ["All", "youtube", "x", "instagram", "linkedin"];
-  const col = { fontFamily: mono, fontSize: F.sm, color: C.muted, letterSpacing: "0.06em" };
 
-  if (authLoading) return <div style={{ minHeight: "100vh", background: C.bg }} />;
+  if (authLoading) return <div style={{ minHeight: "100vh", background: T.bg }} />;
   if (!session) return <SignIn supabase={supabase} />;
 
+  const Banner = ({ msg }) => {
+    if (!msg) return null;
+    const ok = msg.startsWith("✓");
+    return (
+      <div style={{ background: ok ? T.greenBg : T.redBg, border: `1px solid ${ok ? "#BBF7D0" : "#FECACA"}`, borderRadius: 8, padding: "10px 16px", display: "flex", alignItems: "center", gap: 8, fontFamily: sans, fontSize: F.sm, color: ok ? T.green : T.red, marginBottom: 12 }}>
+        {msg}
+      </div>
+    );
+  };
+
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, color: C.text, paddingBottom: 120 }}>
-      {/* Nav */}
-      <div style={{ background: C.surface, borderBottom: `1px solid ${C.border}`, padding: "0 24px", display: "flex", alignItems: "center", height: 48, position: "sticky", top: 0, zIndex: 100 }}>
-        <span style={{ fontFamily: serif, fontSize: 18, color: C.text, letterSpacing: "-0.01em" }}>Audian</span>
-        <span style={{ fontFamily: mono, fontSize: F.sm, color: C.muted, marginLeft: 10, letterSpacing: "0.08em" }}>— SOCIAL INTELLIGENCE</span>
-        <div style={{ marginLeft: 24, display: "flex", gap: 4 }}>
+    <div style={{ minHeight: "100vh", background: T.bg, fontFamily: sans, paddingBottom: 120 }}>
+
+      {/* ── Nav ─────────────────────────────────────────────────────────────── */}
+      <div style={{ background: T.card, borderBottom: `1px solid ${T.border}`, height: 56, display: "flex", alignItems: "center", padding: "0 24px", position: "sticky", top: 0, zIndex: 100, boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+        {/* Logo */}
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginRight: 32 }}>
+          <div style={{ width: 28, height: 28, borderRadius: 8, background: T.accent, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <span style={{ color: "#fff", fontSize: 13, fontWeight: 700 }}>A</span>
+          </div>
+          <span style={{ fontSize: F.md, fontWeight: 700, color: T.text, letterSpacing: "-0.02em" }}>Audian</span>
+        </div>
+        {/* Platform tabs */}
+        <div style={{ display: "flex", gap: 2, background: T.well, borderRadius: 8, padding: 3 }}>
           {PLATS.map(p => (
-            <button key={p} onClick={() => setPlatform(p)} style={{ background: platform === p ? C.accent + "22" : "none", border: `1px solid ${platform === p ? C.accent + "66" : C.border}`, borderRadius: 3, padding: "3px 10px", cursor: "pointer", fontFamily: mono, fontSize: F.sm, color: platform === p ? C.accent : C.muted, letterSpacing: "0.06em" }}>
+            <button key={p} onClick={() => setPlatform(p)} style={{
+              background: platform === p ? T.card : "transparent",
+              color: platform === p ? T.text : T.sub,
+              border: "none", borderRadius: 6, padding: "4px 12px",
+              fontFamily: sans, fontSize: F.xs, fontWeight: platform === p ? 600 : 400,
+              cursor: "pointer", boxShadow: platform === p ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
+              transition: "all 0.12s",
+            }}>
               {p === "All" ? "All" : p.charAt(0).toUpperCase() + p.slice(1)}
             </button>
           ))}
         </div>
-        <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
-          {lastSynced && <span style={{ fontFamily: mono, fontSize: F.sm, color: C.dim }}>synced {timeAgo(lastSynced)}</span>}
-          <button onClick={toggleTheme} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 3, padding: "3px 8px", cursor: "pointer", fontFamily: mono, fontSize: F.sm, color: C.muted }}>{theme === "dark" ? "☀" : "◑"}</button>
-          <button onClick={() => supabase.auth.signOut()} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 3, padding: "3px 8px", cursor: "pointer", fontFamily: mono, fontSize: F.sm, color: C.muted }}>OUT</button>
+        {/* Right side */}
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+          {lastSynced && <span style={{ fontSize: F.xs, color: T.dim }}>synced {timeAgo(lastSynced)}</span>}
+          <button onClick={() => supabase.auth.signOut()} style={{ background: T.well, border: `1px solid ${T.border}`, borderRadius: 8, padding: "5px 12px", cursor: "pointer", fontFamily: sans, fontSize: F.xs, color: T.sub, fontWeight: 500 }}>Sign out</button>
         </div>
       </div>
 
-      {urlMsg && <div style={{ background: urlMsg.startsWith("✓") ? C.green + "18" : C.red + "18", border: `1px solid ${urlMsg.startsWith("✓") ? C.green + "44" : C.red + "44"}`, borderRadius: 6, padding: "10px 24px", margin: "16px 24px 0", fontFamily: mono, fontSize: F.sm, color: urlMsg.startsWith("✓") ? C.green : C.red }}>{urlMsg}</div>}
-      {syncMsg && <div style={{ background: syncMsg.startsWith("✓") ? C.green + "18" : C.red + "18", border: `1px solid ${syncMsg.startsWith("✓") ? C.green + "44" : C.red + "44"}`, borderRadius: 6, padding: "10px 24px", margin: "8px 24px 0", fontFamily: mono, fontSize: F.sm, color: syncMsg.startsWith("✓") ? C.green : C.red }}>{syncMsg}</div>}
+      <div style={{ maxWidth: 1000, margin: "0 auto", padding: "20px 20px 0" }}>
+        <Banner msg={urlMsg || syncMsg} />
 
-      <div style={{ maxWidth: 960, margin: "0 auto", padding: "24px 24px 0" }}>
-
-        {/* Engagement Overview */}
-        <section style={{ marginBottom: 28 }}>
-          <SecHead label="Engagement Overview" open={open.metrics} onToggle={() => tog("metrics")} accent={C.green} />
+        {/* ── Engagement Overview ───────────────────────────────────────────── */}
+        <Card style={{ marginBottom: 12, overflow: "hidden" }}>
+          <SectionHeader label="Engagement Overview" open={open.metrics} onToggle={() => tog("metrics")} />
           {open.metrics && (
-            <div style={{ paddingTop: 12 }}>
-              <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
-                {KPIS_DEF.map(k => (
-                  <KPICard key={k.key} label={k.label} value={kpis[k.key].v} prev={kpis[k.key].p || null} color={k.color} selected={activeMetric === k.key} onClick={() => setActiveMetric(k.key)} />
-                ))}
-              </div>
-              <Card style={{ marginBottom: 0 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
-                  <span style={{ fontFamily: mono, fontSize: F.xs, color: C.muted, letterSpacing: "0.08em", textTransform: "uppercase" }}>{activeMetric} over time</span>
-                  <span style={{ fontFamily: mono, fontSize: F.xs, color: C.dim }}>{allMetrics.length} snapshot{allMetrics.length !== 1 ? "s" : ""}</span>
+            <>
+              <Divider />
+              <div style={{ padding: "16px 20px" }}>
+                <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+                  {KPIS_DEF.map(k => (
+                    <KPICard key={k.key} label={k.label} value={kpis[k.key].v} prev={kpis[k.key].p || null}
+                      color={k.color} icon={k.icon} selected={activeMetric === k.key} onClick={() => setActiveMetric(k.key)} />
+                  ))}
                 </div>
-                <MetricsChart allMetrics={allMetrics} activeMetric={activeMetric} activePlatform={platform} />
-              </Card>
-            </div>
+                <div style={{ background: T.well, borderRadius: 10, padding: "16px 16px 8px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                    <span style={{ fontSize: F.xs, fontWeight: 500, color: T.sub, textTransform: "uppercase", letterSpacing: "0.05em" }}>{activeMetric} trend</span>
+                    <span style={{ fontSize: F.xs, color: T.dim }}>{allMetrics.length} snapshots</span>
+                  </div>
+                  <MetricsChart allMetrics={allMetrics} activeMetric={activeMetric} activePlatform={platform} />
+                </div>
+              </div>
+            </>
           )}
-        </section>
+        </Card>
 
-        {/* Content Outliers */}
-        <section style={{ marginBottom: 28 }}>
-          <SecHead label="Content Outliers" open={open.outliers} onToggle={() => tog("outliers")} accent={C.accent} />
-          {open.outliers && <OutlierContent latestMetrics={Object.values(latestPerPlatform)} activePlatform={platform} />}
-        </section>
+        {/* ── Content Outliers ─────────────────────────────────────────────── */}
+        <Card style={{ marginBottom: 12, overflow: "hidden" }}>
+          <SectionHeader label="Content Outliers" open={open.outliers} onToggle={() => tog("outliers")} />
+          {open.outliers && (
+            <>
+              <Divider />
+              <OutlierContent latestMetrics={Object.values(latestPerPlatform)} activePlatform={platform} />
+            </>
+          )}
+        </Card>
 
-        {/* Audience Stories */}
+        {/* ── Audience Stories ─────────────────────────────────────────────── */}
         <StoriesSection open={open.stories} onToggle={() => tog("stories")} />
 
-        {/* Connected Channels */}
-        <section style={{ marginBottom: 28 }}>
-          <SecHead label="Connected Channels" open={open.channels} onToggle={() => tog("channels")} accent={C.muted} />
+        {/* ── Connected Channels ───────────────────────────────────────────── */}
+        <Card style={{ marginBottom: 12, overflow: "hidden" }}>
+          <SectionHeader label="Connected Channels" open={open.channels} onToggle={() => tog("channels")} />
           {open.channels && (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8, paddingTop: 12 }}>
-              {[{ id: "youtube", label: "YouTube", color: "#B04840" }, { id: "x", label: "X / Twitter", color: "#D8CEC2" }, { id: "instagram", label: "Instagram", color: "#886088" }, { id: "linkedin", label: "LinkedIn", color: "#4878A8" }].map(({ id, label, color }) => {
-                const conn = connections.find(c => c.platform === id);
-                return (
-                  <Card key={id} style={{ textAlign: "center" }}>
-                    <div style={{ fontFamily: mono, fontSize: F.sm, color, letterSpacing: "0.08em", marginBottom: 8, fontWeight: 600 }}>{label}</div>
-                    {conn ? <>
-                      <div style={{ fontFamily: mono, fontSize: F.sm, color: C.green, marginBottom: 4 }}>✓ Connected</div>
-                      {(conn.channel_name || conn.username) && <div style={{ fontFamily: mono, fontSize: F.sm, color: C.muted, marginBottom: 6, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{conn.channel_name || `@${conn.username}`}</div>}
-                      {(conn.subscriber_count > 0 || conn.metadata?.followers_count > 0) && <div style={{ fontFamily: mono, fontSize: F.sm, color: C.text, marginBottom: 10 }}>{fmt(conn.subscriber_count || conn.metadata?.followers_count)} followers</div>}
-                      {(id === "youtube" || id === "x" || id === "instagram") && <button onClick={() => triggerSync(id)} disabled={syncing} style={{ fontFamily: mono, fontSize: F.sm, padding: "4px 12px", borderRadius: 3, border: `1px solid ${C.accent}66`, background: C.accent + "18", color: C.accent, cursor: syncing ? "default" : "pointer", letterSpacing: "0.06em" }}>{syncing ? "Syncing..." : "↻ Sync Now"}</button>}
-                    </> : <a href={`/api/auth/${id}`} style={{ display: "block", marginTop: 8, padding: "6px 12px", background: C.well, border: `1px solid ${C.border2}`, borderRadius: 3, fontFamily: mono, fontSize: F.sm, color: C.muted, textDecoration: "none", letterSpacing: "0.06em" }}>Connect →</a>}
-                  </Card>
-                );
-              })}
-            </div>
-          )}
-        </section>
-
-        {/* Recent Videos */}
-        {ytVideos.length > 0 && (platform === "All" || platform === "youtube") && (
-          <section style={{ marginBottom: 28 }}>
-            <SecHead label="Recent Videos" count={ytVideos.length} open={open.videos} onToggle={() => tog("videos")} accent="#B04840" />
-            {open.videos && (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 8, paddingTop: 12 }}>
-                {ytVideos.slice(0, 8).map(v => (
-                  <Card key={v.id}>
-                    <div style={{ fontFamily: serif, fontSize: F.md, color: C.text, marginBottom: 8, lineHeight: 1.4 }}>{v.title}</div>
-                    <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-                      {[["VIEWS", v.views], ["LIKES", v.likes], ["COMMENTS", v.comments]].map(([l, val]) => (
-                        <div key={l} style={{ display: "flex", gap: 4 }}><span style={col}>{l}</span><span style={{ fontFamily: mono, fontSize: F.sm, color: C.text }}>{fmt(val)}</span></div>
-                      ))}
+            <>
+              <Divider />
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 0 }}>
+                {[{ id: "youtube", label: "YouTube", icon: "▶", color: T.yt }, { id: "x", label: "X / Twitter", icon: "𝕏", color: T.x }, { id: "instagram", label: "Instagram", icon: "◉", color: T.ig }, { id: "linkedin", label: "LinkedIn", icon: "in", color: T.li }].map(({ id, label, icon, color }, idx) => {
+                  const conn = connections.find(c => c.platform === id);
+                  return (
+                    <div key={id} style={{ padding: "20px", borderRight: idx < 3 ? `1px solid ${T.border}` : "none" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                        <div style={{ width: 32, height: 32, borderRadius: 8, background: color + "15", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, color }}>{icon}</div>
+                        <span style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text }}>{label}</span>
+                      </div>
+                      {conn ? (
+                        <>
+                          <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 4 }}>
+                            <span style={{ width: 6, height: 6, borderRadius: "50%", background: T.green, display: "inline-block" }} />
+                            <span style={{ fontFamily: sans, fontSize: F.xs, color: T.green, fontWeight: 500 }}>Connected</span>
+                          </div>
+                          {(conn.channel_name || conn.username) && <div style={{ fontFamily: sans, fontSize: F.xs, color: T.sub, marginBottom: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{conn.channel_name || `@${conn.username}`}</div>}
+                          {(conn.subscriber_count > 0) && <div style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text, marginBottom: 10 }}>{fmt(conn.subscriber_count)}<span style={{ fontWeight: 400, color: T.sub, fontSize: F.xs }}> followers</span></div>}
+                          {(id === "youtube" || id === "x" || id === "instagram") && (
+                            <Btn variant="secondary" size="sm" onClick={() => triggerSync(id)} disabled={syncing !== null}>
+                              {syncing === id ? "Syncing…" : "↻ Sync"}
+                            </Btn>
+                          )}
+                        </>
+                      ) : (
+                        <a href={`/api/auth/${id}`} style={{ display: "inline-block", background: T.well, border: `1px solid ${T.border}`, borderRadius: 8, padding: "6px 12px", fontFamily: sans, fontSize: F.xs, color: T.sub, textDecoration: "none", fontWeight: 500 }}>Connect →</a>
+                      )}
                     </div>
-                  </Card>
-                ))}
+                  );
+                })}
               </div>
-            )}
-          </section>
-        )}
+            </>
+          )}
+        </Card>
 
-        {/* Influential Interactions */}
-        <section style={{ marginBottom: 28 }}>
-          <SecHead label="Influential Interactions" count={filteredInteractions.length} open={open.interactions} onToggle={() => tog("interactions")} accent={C.accent} />
-          {open.interactions && (
-            <div style={{ paddingTop: 12 }}>
-              {filteredInteractions.length === 0
-                ? <div style={{ fontFamily: mono, fontSize: F.sm, color: C.muted, padding: "20px 0" }}>No interactions yet — these populate as the scoring engine processes your synced data.</div>
-                : filteredInteractions.map(item => (
-                  <Card key={item.id}>
-                    <div style={{ display: "flex", gap: 12 }}>
-                      <div style={{ width: 38, height: 38, borderRadius: "50%", background: C.well, border: `1px solid ${C.border2}`, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: mono, fontSize: F.md, color: C.accent, flexShrink: 0 }}>{(item.name || item.handle || "?")[0].toUpperCase()}</div>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
-                          <span style={{ fontFamily: mono, fontSize: F.md, color: C.text, fontWeight: 600 }}>{item.name || item.handle}</span>
-                          <Dot platform={item.platform} />
-                          <span style={{ marginLeft: "auto", fontFamily: mono, fontSize: F.sm, color: C.dim }}>{timeAgo(item.interacted_at)}</span>
-                        </div>
-                        {item.content && <div style={{ fontFamily: serif, fontSize: F.md, color: C.text, lineHeight: 1.55 }}>"{item.content}"</div>}
+        {/* ── Recent Videos (YT only) ──────────────────────────────────────── */}
+        {ytVideos.length > 0 && (platform === "All" || platform === "youtube") && (
+          <Card style={{ marginBottom: 12, overflow: "hidden" }}>
+            <SectionHeader label="Recent Videos" count={ytVideos.length} open={open.videos} onToggle={() => tog("videos")} />
+            {open.videos && (
+              <>
+                <Divider />
+                <div style={{ padding: "12px 8px" }}>
+                  {ytVideos.slice(0, 8).map(v => (
+                    <div key={v.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: 8, cursor: "pointer" }}>
+                      <div style={{ flex: 1, fontFamily: sans, fontSize: F.sm, color: T.text, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.title}</div>
+                      <div style={{ display: "flex", gap: 14, flexShrink: 0 }}>
+                        {[["▶", v.views], ["♥", v.likes], ["✦", v.comments]].map(([icon, val]) => (
+                          <span key={icon} style={{ fontFamily: sans, fontSize: F.xs, color: T.sub }}>{icon} {fmt(val)}</span>
+                        ))}
                       </div>
                     </div>
-                  </Card>
-                ))}
-            </div>
-          )}
-        </section>
+                  ))}
+                </div>
+              </>
+            )}
+          </Card>
+        )}
 
-        {/* Notable Comments */}
-        <section style={{ marginBottom: 28 }}>
-          <SecHead label="Notable Comments" count={filteredComments.length} open={open.comments} onToggle={() => tog("comments")} accent={C.blue} />
+        {/* ── Influential Interactions ─────────────────────────────────────── */}
+        <Card style={{ marginBottom: 12, overflow: "hidden" }}>
+          <SectionHeader label="Influential Interactions" count={filteredInteractions.length} open={open.interactions} onToggle={() => tog("interactions")} />
+          {open.interactions && (
+            <>
+              <Divider />
+              <div style={{ padding: filteredInteractions.length === 0 ? "24px 20px" : "8px 0" }}>
+                {filteredInteractions.length === 0 ? (
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: 28, marginBottom: 8 }}>⭐</div>
+                    <div style={{ fontFamily: sans, fontSize: F.sm, color: T.dim }}>No influential interactions yet — coming as the scoring engine processes your data.</div>
+                  </div>
+                ) : filteredInteractions.map(item => (
+                  <div key={item.id} style={{ display: "flex", gap: 12, padding: "12px 20px", borderBottom: `1px solid ${T.border}` }}>
+                    <div style={{ width: 36, height: 36, borderRadius: "50%", background: T.accent + "15", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: sans, fontSize: F.sm, color: T.accent, fontWeight: 700, flexShrink: 0 }}>
+                      {(item.name || item.handle || "?")[0].toUpperCase()}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 4 }}>
+                        <span style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text }}>{item.name || item.handle}</span>
+                        <PlatDot platform={item.platform} size={6} />
+                        <span style={{ marginLeft: "auto", fontFamily: sans, fontSize: F.xs, color: T.dim }}>{timeAgo(item.interacted_at)}</span>
+                      </div>
+                      {item.content && <div style={{ fontFamily: sans, fontSize: F.sm, color: T.sub, lineHeight: 1.55 }}>"{item.content}"</div>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </Card>
+
+        {/* ── Notable Comments ─────────────────────────────────────────────── */}
+        <Card style={{ marginBottom: 12, overflow: "hidden" }}>
+          <SectionHeader label="Notable Comments" count={filteredComments.length} open={open.comments} onToggle={() => tog("comments")} />
           {open.comments && (
-            <div style={{ paddingTop: 12 }}>
-              {filteredComments.length === 0
-                ? <div style={{ fontFamily: mono, fontSize: F.sm, color: C.muted, padding: "20px 0" }}>No comments yet — sync YouTube or Instagram.</div>
-                : filteredComments.map(c => (
-                  <Card key={c.id}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
-                      <Dot platform={c.platform} />
-                      <span style={{ fontFamily: mono, fontSize: F.md, color: C.text, fontWeight: 600 }}>{c.author_name}</span>
-                      {c.video_title && <span style={{ fontFamily: mono, fontSize: F.sm, color: C.muted }}>on "{c.video_title?.slice(0, 40)}{c.video_title?.length > 40 ? "…" : ""}"</span>}
-                      <span style={{ marginLeft: "auto", fontFamily: mono, fontSize: F.sm, color: C.dim }}>{timeAgo(c.published_at)}</span>
+            <>
+              <Divider />
+              <div style={{ padding: filteredComments.length === 0 ? "24px 20px" : "8px 0" }}>
+                {filteredComments.length === 0 ? (
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: 28, marginBottom: 8 }}>💬</div>
+                    <div style={{ fontFamily: sans, fontSize: F.sm, color: T.dim }}>Sync YouTube or Instagram to pull recent comments.</div>
+                  </div>
+                ) : filteredComments.map(c => (
+                  <div key={c.id} style={{ padding: "14px 20px", borderBottom: `1px solid ${T.border}` }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                      <PlatDot platform={c.platform} size={7} />
+                      <span style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text }}>{c.author_name}</span>
+                      {c.video_title && <span style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>on "{c.video_title?.slice(0, 45)}{c.video_title?.length > 45 ? "…" : ""}"</span>}
+                      <span style={{ marginLeft: "auto", fontFamily: sans, fontSize: F.xs, color: T.dim }}>{timeAgo(c.published_at)}</span>
                     </div>
-                    <div style={{ fontFamily: serif, fontSize: F.md, color: C.text, lineHeight: 1.6 }}>"{c.content}"</div>
-                    <div style={{ display: "flex", gap: 16, marginTop: 8 }}>
-                      {c.likes > 0 && <div style={{ display: "flex", gap: 4 }}><span style={col}>LIKES</span><span style={{ fontFamily: mono, fontSize: F.sm, color: C.text }}>{fmt(c.likes)}</span></div>}
-                      {c.reply_count > 0 && <div style={{ display: "flex", gap: 4 }}><span style={col}>REPLIES</span><span style={{ fontFamily: mono, fontSize: F.sm, color: C.text }}>{c.reply_count}</span></div>}
-                    </div>
-                  </Card>
+                    <div style={{ fontFamily: sans, fontSize: F.sm, color: T.sub, lineHeight: 1.6, marginBottom: c.likes > 0 ? 8 : 0 }}>"{c.content}"</div>
+                    {c.likes > 0 && <span style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>♥ {fmt(c.likes)}</span>}
+                  </div>
                 ))}
-            </div>
+              </div>
+            </>
           )}
-        </section>
+        </Card>
 
-        <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 16, display: "flex", justifyContent: "space-between" }}>
-          <span style={{ fontFamily: mono, fontSize: F.sm, color: C.dim }}>audian.app</span>
-          <span style={{ fontFamily: mono, fontSize: F.sm, color: C.dim }}>{connections.length} platform{connections.length !== 1 ? "s" : ""} connected</span>
+        <div style={{ padding: "16px 0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>Audian · Social Intelligence</span>
+          <span style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>{connections.length} platform{connections.length !== 1 ? "s" : ""} connected</span>
         </div>
       </div>
 
