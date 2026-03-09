@@ -25,7 +25,7 @@ export async function POST(req) {
     const zone = VALID.has(category) ? category : 'SIGNAL';
     const lines = csv.trim().split('\n').map(l => l.trim()).filter(Boolean);
 
-    // Skip header
+    // Skip header row if present
     const firstLine = lines[0].toLowerCase();
     const start = (firstLine.includes('handle') || firstLine.includes('name') || firstLine.includes('platform')) ? 1 : 0;
 
@@ -55,37 +55,25 @@ export async function POST(req) {
       const clean = handle.replace(/^@/, '').toLowerCase().trim();
       if (!clean) { skipped++; continue; }
 
-      const handleCol = `handle_${platform}`;
+      // Upsert into platform_interactions — conflict on (platform, handle)
+      const { error } = await supabase
+        .from('platform_interactions')
+        .upsert({
+          platform,
+          handle:       clean,
+          name:         name || clean,
+          bio:          bio || null,
+          zone,
+          interaction_type: 'import',
+          interacted_at: now,
+          synced_at:     now,
+        }, { onConflict: 'platform,handle', ignoreDuplicates: false });
 
-      // Find existing person by this platform handle
-      const { data: existing } = await supabase
-        .from('people').select('id, category, name, bio').eq(handleCol, clean).maybeSingle();
-
-      if (existing) {
-        const newCategory = existing.category === 'ELITE' ? 'ELITE' : zone;
-        const { error } = await supabase.from('people').update({
-          category:   newCategory,
-          ...(name && !existing.name ? { name } : {}),
-          ...(bio  && !existing.bio  ? { bio  } : {}),
-          updated_at: now,
-        }).eq('id', existing.id);
-        if (error) errors.push(`Line ${i+1}: ${error.message}`);
-        else imported++;
-      } else {
-        const { error } = await supabase.from('people').insert({
-          category:    zone,
-          name:        name || clean,
-          bio:         bio || null,
-          [handleCol]: clean,
-          added_at:    now,
-          updated_at:  now,
-        });
-        if (error) errors.push(`Line ${i+1}: ${error.message}`);
-        else imported++;
-      }
+      if (error) errors.push(`Line ${i+1}: ${error.message}`);
+      else imported++;
     }
 
-    return NextResponse.json({ imported, skipped, errors: errors.length, errorDetails: errors.slice(0,5) });
+    return NextResponse.json({ imported, skipped, errors: errors.length, errorDetails: errors.slice(0, 5) });
   } catch (err) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
