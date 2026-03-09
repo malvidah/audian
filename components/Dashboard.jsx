@@ -586,7 +586,7 @@ function OutlierContent({ latestMetrics, activePlatform }) {
         {isOver ? "🚀" : "📉"}
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontFamily: sans, fontSize: F.sm, color: T.text, fontWeight: 500, marginBottom: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        <div style={{ fontFamily: sans, fontSize: F.sm, color: T.text, fontWeight: 500, marginBottom: 4, wordBreak: "break-word", lineHeight: 1.35 }}>
           {post.url ? <a href={post.url} target="_blank" rel="noreferrer" style={{ color: T.text, textDecoration: "none" }}>{post.title || "Untitled"}</a> : (post.title || "Untitled")}
         </div>
         <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
@@ -641,7 +641,7 @@ function StoriesSection({ open, onToggle }) {
 
   return (
     <Card style={{ marginBottom: 12, overflow: "hidden" }}>
-      <SectionHeader label="Audience Stories" open={open} onToggle={onToggle}
+      <SectionHeader label="STORIES" open={open} onToggle={onToggle}
         action={<Btn variant="purple" onClick={load} disabled={loading}>{loading ? "Analyzing…" : stories ? "↻ Refresh" : "✦ Generate"}</Btn>}
       />
       {open && (
@@ -764,6 +764,134 @@ function AudianAIBar() {
 }
 
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
+
+// ─── Accounts ─────────────────────────────────────────────────────────────────
+function AccountsSection({ open, onToggle }) {
+  const [accounts, setAccounts]   = useState([]);
+  const [loading, setLoading]     = useState(false);
+  const [filter, setFilter]       = useState("ALL");
+  const ZONES = ["ALL","ELITE","INFLUENTIAL","SIGNAL","IGNORE"];
+  const ZONE_COLORS = {
+    ELITE:       { color: T.accent,  bg: T.accentBg },
+    INFLUENTIAL: { color: "#F59E0B", bg: "#FFFBEB"  },
+    SIGNAL:      { color: T.sub,     bg: T.well     },
+    IGNORE:      { color: T.dim,     bg: T.well     },
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    setLoading(true);
+    fetch("/api/accounts").then(r => r.json()).then(d => {
+      setAccounts(d.accounts || []);
+    }).catch(() => {}).finally(() => setLoading(false));
+  }, [open]);
+
+  const filtered = filter === "ALL" ? accounts : accounts.filter(a => a.category === filter);
+  const counts = ZONES.slice(1).reduce((acc, z) => ({ ...acc, [z]: accounts.filter(a => a.category === z).length }), {});
+
+  const platforms = ["instagram","x","youtube","linkedin"];
+  const platIcon  = { instagram:"📸", x:"𝕏", youtube:"▶", linkedin:"in" };
+
+  return (
+    <Card style={{ marginBottom: 12, overflow: "hidden" }}>
+      <SectionHeader label="ACCOUNTS" count={accounts.length} open={open} onToggle={onToggle} />
+      {open && (
+        <>
+          <Divider />
+          {/* Zone filter tabs */}
+          <div style={{ padding: "10px 20px 0", display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {ZONES.map(z => {
+              const active = filter === z;
+              const zc = ZONE_COLORS[z];
+              return (
+                <button key={z} onClick={() => setFilter(z)}
+                  style={{ fontFamily: sans, fontSize: 11, fontWeight: 700, padding: "4px 12px",
+                    borderRadius: 20, border: active ? `1.5px solid ${zc?.color || T.accent}` : `1px solid ${T.border}`,
+                    background: active ? (zc?.bg || T.accentBg) : "transparent",
+                    color: active ? (zc?.color || T.accent) : T.dim, cursor: "pointer",
+                    display: "flex", alignItems: "center", gap: 5 }}>
+                  {z}
+                  {z !== "ALL" && <span style={{ fontWeight: 400, opacity: 0.7 }}>{counts[z] || 0}</span>}
+                </button>
+              );
+            })}
+          </div>
+          <div style={{ padding: "8px 0 0" }}>
+            {loading && <div style={{ padding: "20px", fontFamily: sans, fontSize: F.sm, color: T.dim, textAlign: "center" }}>Loading accounts…</div>}
+            {!loading && filtered.length === 0 && (
+              <div style={{ padding: "24px 20px", textAlign: "center" }}>
+                <div style={{ fontSize: 28, marginBottom: 8 }}>👤</div>
+                <div style={{ fontFamily: sans, fontSize: F.sm, color: T.dim }}>
+                  {accounts.length === 0 ? "No accounts yet — import screenshots to add accounts." : `No ${filter} accounts.`}
+                </div>
+              </div>
+            )}
+            {!loading && filtered.length > 0 && (
+              <>
+                {/* Header */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 110px 1fr 100px", padding: "6px 20px", borderBottom: `1px solid ${T.border}` }}>
+                  {["Name / Handle","Category","Platforms","Added"].map(h => (
+                    <div key={h} style={{ fontFamily: sans, fontSize: 10, fontWeight: 700, color: T.dim, textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</div>
+                  ))}
+                </div>
+                {filtered.map(acc => {
+                  const zc = ZONE_COLORS[acc.category] || ZONE_COLORS.SIGNAL;
+                  const connectedPlatforms = platforms.filter(p => acc[`handle_${p}`]);
+                  return (
+                    <div key={acc.id} style={{ display: "grid", gridTemplateColumns: "1fr 110px 1fr 100px", padding: "10px 20px", borderBottom: `1px solid ${T.border}`, alignItems: "center" }}>
+                      {/* Name / Handle */}
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text,
+                          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {acc.name || acc.handle_instagram || acc.handle_x || acc.handle_youtube || acc.handle_linkedin || "—"}
+                        </div>
+                        {acc.bio && (
+                          <div style={{ fontFamily: sans, fontSize: F.xs, color: T.sub, marginTop: 2,
+                            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{acc.bio}</div>
+                        )}
+                      </div>
+                      {/* Category badge */}
+                      <div>
+                        <span style={{ fontFamily: sans, fontSize: 10, fontWeight: 700, padding: "2px 8px",
+                          borderRadius: 4, background: zc.bg, color: zc.color, border: `1px solid ${zc.color}30` }}>
+                          {acc.category}
+                        </span>
+                      </div>
+                      {/* Platform handles */}
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        {connectedPlatforms.map(p => (
+                          <a key={p} href={
+                            p === "instagram" ? `https://instagram.com/${acc[`handle_${p}`]}` :
+                            p === "x"         ? `https://x.com/${acc[`handle_${p}`]}` :
+                            p === "youtube"   ? `https://youtube.com/@${acc[`handle_${p}`]}` :
+                                                `https://linkedin.com/in/${acc[`handle_${p}`]}`
+                          } target="_blank" rel="noreferrer"
+                            style={{ fontFamily: sans, fontSize: F.xs, color: T.sub, textDecoration: "none",
+                              display: "flex", alignItems: "center", gap: 3,
+                              background: T.well, border: `1px solid ${T.border}`, borderRadius: 4, padding: "1px 6px" }}
+                            title={`@${acc[`handle_${p}`]}`}>
+                            <span style={{ fontSize: 9 }}>{platIcon[p]}</span>
+                            @{acc[`handle_${p}`]}
+                          </a>
+                        ))}
+                        {connectedPlatforms.length === 0 && <span style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>—</span>}
+                      </div>
+                      {/* Added date */}
+                      <div style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>
+                        {acc.added_at ? new Date(acc.added_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" }) : "—"}
+                      </div>
+                    </div>
+                  );
+                })}
+              </>
+            )}
+          </div>
+        </>
+      )}
+    </Card>
+  );
+}
+
 export default function Dashboard() {
   const [supabase] = useState(() => createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY));
 
@@ -788,7 +916,7 @@ export default function Dashboard() {
   const [urlMsg, setUrlMsg]         = useState("");
   const [platform, setPlatform]     = useState("All");
   const [activeMetric, setActiveMetric] = useState("followers");
-  const [open, setOpen]             = useState({ metrics: true, outliers: true, stories: true, channels: true, interactions: true, comments: true, videos: false });
+  const [open, setOpen]             = useState({ metrics: true, outliers: true, stories: true, accounts: true, interactions: true, comments: true, videos: false });
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => { setSession(session); setAuthLoading(false); });
@@ -992,7 +1120,7 @@ export default function Dashboard() {
 
         {/* ── Content Outliers ─────────────────────────────────────────────── */}
         <Card style={{ marginBottom: 12, overflow: "hidden" }}>
-          <SectionHeader label="Content Outliers" open={open.outliers} onToggle={() => tog("outliers")} />
+          <SectionHeader label="OUTLIERS" open={open.outliers} onToggle={() => tog("outliers")} />
           {open.outliers && (
             <>
               <Divider />
@@ -1004,45 +1132,7 @@ export default function Dashboard() {
         {/* ── Audience Stories ─────────────────────────────────────────────── */}
         <StoriesSection open={open.stories} onToggle={() => tog("stories")} />
 
-        {/* ── Connected Channels ───────────────────────────────────────────── */}
-        <Card style={{ marginBottom: 12, overflow: "hidden" }}>
-          <SectionHeader label="Connected Channels" open={open.channels} onToggle={() => tog("channels")} />
-          {open.channels && (
-            <>
-              <Divider />
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 0 }}>
-                {[{ id: "youtube", label: "YouTube", icon: "▶", color: T.yt }, { id: "x", label: "X / Twitter", icon: "𝕏", color: T.x }, { id: "instagram", label: "Instagram", icon: "◉", color: T.ig }, { id: "linkedin", label: "LinkedIn", icon: "in", color: T.li }].map(({ id, label, icon, color }, idx) => {
-                  const conn = connections.find(c => c.platform === id);
-                  return (
-                    <div key={id} style={{ padding: "20px", borderRight: idx < 3 ? `1px solid ${T.border}` : "none" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-                        <div style={{ width: 32, height: 32, borderRadius: 8, background: color + "15", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, color }}>{icon}</div>
-                        <span style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text }}>{label}</span>
-                      </div>
-                      {conn ? (
-                        <>
-                          <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 4 }}>
-                            <span style={{ width: 6, height: 6, borderRadius: "50%", background: T.green, display: "inline-block" }} />
-                            <span style={{ fontFamily: sans, fontSize: F.xs, color: T.green, fontWeight: 500 }}>Connected</span>
-                          </div>
-                          {(conn.channel_name || conn.username) && <div style={{ fontFamily: sans, fontSize: F.xs, color: T.sub, marginBottom: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{conn.channel_name || `@${conn.username}`}</div>}
-                          {(conn.subscriber_count > 0) && <div style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text, marginBottom: 10 }}>{fmt(conn.subscriber_count)}<span style={{ fontWeight: 400, color: T.sub, fontSize: F.xs }}> followers</span></div>}
-                          {(id === "youtube" || id === "x" || id === "instagram") && (
-                            <Btn variant="secondary" size="sm" onClick={() => triggerSync(id)} disabled={syncing !== null}>
-                              {syncing === id ? "Syncing…" : "↻ Sync"}
-                            </Btn>
-                          )}
-                        </>
-                      ) : (
-                        <a href={`/api/auth/${id}`} style={{ display: "inline-block", background: T.well, border: `1px solid ${T.border}`, borderRadius: 8, padding: "6px 12px", fontFamily: sans, fontSize: F.xs, color: T.sub, textDecoration: "none", fontWeight: 500 }}>Connect →</a>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </>
-          )}
-        </Card>
+
 
         {/* ── Recent Videos (YT only) ──────────────────────────────────────── */}
         {ytVideos.length > 0 && (platform === "All" || platform === "youtube") && (
