@@ -180,10 +180,6 @@ function Toggle({ on, onClick }) {
 function ProfileMenu({ session, supabase, connections, onDisconnect, watchlist = [], watchlistTotal = 0, onWatchlistUpdate }) {
   const [open, setOpen] = useState(false);
   const [disconnecting, setDisconnecting] = useState(null);
-  const [watchlistOpen, setWatchlistOpen] = useState(false);
-  const [uploading, setUploading]         = useState(false);
-  const [uploadMsg, setUploadMsg]         = useState("");
-  const fileRef = useRef(null);
   const menuRef = useRef(null);
   const email = session?.user?.email || "";
   const initial = email[0]?.toUpperCase() || "?";
@@ -206,28 +202,6 @@ function ProfileMenu({ session, supabase, connections, onDisconnect, watchlist =
       console.error("Disconnect error:", e);
     }
     setDisconnecting(null);
-  }
-
-  const [csvCategory, setCsvCategory] = useState("ELITE");
-
-  async function handleCSV(file) {
-    if (!file) return;
-    setUploading(true); setUploadMsg("");
-    try {
-      const csv = await file.text();
-      const res = await fetch("/api/accounts/csv", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ csv, category: csvCategory }),
-      });
-      const data = await res.json();
-      if (data.error) setUploadMsg("✗ " + data.error);
-      else {
-        setUploadMsg(`✓ ${data.imported} accounts added as ${csvCategory}`);
-        onWatchlistUpdate?.();
-      }
-    } catch { setUploadMsg("✗ Upload failed"); }
-    setUploading(false);
   }
 
   return (
@@ -315,67 +289,18 @@ function ProfileMenu({ session, supabase, connections, onDisconnect, watchlist =
             })}
           </div>
 
-          {/* Watchlist */}
+          {/* Handles link */}
           <div style={{ borderTop: `1px solid ${T.border}` }}>
-            <button onClick={() => setWatchlistOpen(o => !o)}
-              style={{ width: "100%", padding: "11px 18px", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 8, textAlign: "left" }}>
-              <span style={{ fontFamily: sans, fontSize: F.sm, color: T.text, fontWeight: 500 }}>👁 Watch core accounts</span>
-              <span style={{ marginLeft: "auto", fontFamily: sans, fontSize: F.xs, color: T.dim }}>{watchlistTotal > 0 ? `${watchlistTotal.toLocaleString()} accounts` : "Upload CSV"}</span>
-              <span style={{ color: T.dim, fontSize: F.xs, transform: watchlistOpen ? "rotate(180deg)" : "none", display: "inline-block", transition: "transform 0.15s" }}>▾</span>
-            </button>
-            {watchlistOpen && (
-              <div style={{ padding: "0 18px 14px" }}>
-                <div style={{ fontFamily: sans, fontSize: F.xs, color: T.sub, marginBottom: 8, lineHeight: 1.5 }}>
-                  Upload a CSV to add accounts to any list. Supports <code style={{ background: T.well, padding: "1px 3px", borderRadius: 3 }}>handle</code>, <code style={{ background: T.well, padding: "1px 3px", borderRadius: 3 }}>platform,handle</code>, or <code style={{ background: T.well, padding: "1px 3px", borderRadius: 3 }}>platform,handle,name,bio</code>.
-                </div>
-                <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 10, flexWrap: "wrap" }}>
-                  <span style={{ fontFamily: sans, fontSize: 10, color: T.dim }}>Import as:</span>
-                  {["ELITE","INFLUENTIAL","SIGNAL","IGNORE"].map(cat => (
-                    <button key={cat} onClick={() => setCsvCategory(cat)}
-                      style={{ fontFamily: sans, fontSize: 10, padding: "2px 8px", borderRadius: 6,
-                        border: `1px solid ${csvCategory === cat ? T.accent : T.border}`,
-                        background: csvCategory === cat ? T.accentBg : "transparent",
-                        color: csvCategory === cat ? T.accent : T.sub,
-                        cursor: "pointer", fontWeight: csvCategory === cat ? 700 : 400 }}>
-                      {cat}
-                    </button>
-                  ))}
-                </div>
-                <input ref={fileRef} type="file" accept=".csv,.txt" style={{ display: "none" }} onChange={e => handleCSV(e.target.files[0])} />
-                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                  <Btn variant="orange" size="sm" onClick={() => fileRef.current?.click()} disabled={uploading}>
-                    {uploading ? "Uploading…" : "↑ Upload CSV"}
-                  </Btn>
-                  {watchlistTotal > 0 && (
-                    <Btn variant="ghost" size="sm" onClick={async () => {
-                      if (!confirm(`Remove all ${watchlistTotal.toLocaleString()} accounts from watchlist?`)) return;
-                      const sess = await supabase.auth.getSession();
-                      const tok = sess.data?.session?.access_token;
-                      await fetch("/api/watchlist", { method: "DELETE", headers: { "Content-Type": "application/json", ...(tok ? { Authorization: `Bearer ${tok}` } : {}) } });
-                      setUploadMsg("✓ Watchlist cleared");
-                      onWatchlistUpdate?.();
-                    }}>
-                      ✕ Clear all
-                    </Btn>
-                  )}
-                  {uploadMsg && <span style={{ fontFamily: sans, fontSize: F.xs, color: uploadMsg.startsWith("✓") ? T.green : T.red }}>{uploadMsg}</span>}
-                </div>
-                {watchlist.length > 0 && (
-                  <div style={{ marginTop: 10, maxHeight: 120, overflowY: "auto", display: "flex", flexDirection: "column", gap: 4 }}>
-                    {watchlist.slice(0, 20).map((w, i) => (
-                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, padding: "3px 0" }}>
-                        <PlatDot platform={w.platform} size={6} />
-                        <span style={{ fontFamily: sans, fontSize: F.xs, color: T.sub, flex: 1 }}>@{w.handle}</span>
-                        {w.label && <span style={{ fontFamily: sans, fontSize: 10, color: T.dim }}>{w.label}</span>}
-                        <button onClick={async () => { const s = await supabase.auth.getSession(); const t = s.data?.session?.access_token; await fetch("/api/watchlist", { method: "DELETE", headers: { "Content-Type": "application/json", ...(t ? { Authorization: `Bearer ${t}` } : {}) }, body: JSON.stringify({ platform: w.platform, handle: w.handle }) }); onWatchlistUpdate?.(); }}
-                          style={{ background: "none", border: "none", cursor: "pointer", color: T.dim, fontSize: 12, padding: "0 2px", lineHeight: 1 }}>×</button>
-                      </div>
-                    ))}
-                    {watchlist.length > 20 && <div style={{ fontFamily: sans, fontSize: 10, color: T.dim }}>+{watchlist.length - 20} more</div>}
-                  </div>
-                )}
-              </div>
-            )}
+            <a href="/handles"
+              style={{ display: "flex", alignItems: "center", gap: 8, padding: "11px 18px", textDecoration: "none" }}
+              onMouseEnter={e => e.currentTarget.style.background = T.well}
+              onMouseLeave={e => e.currentTarget.style.background = "none"}>
+              <span style={{ fontFamily: sans, fontSize: F.sm, color: T.text, fontWeight: 500 }}>👤 Manage handles</span>
+              <span style={{ marginLeft: "auto", fontFamily: sans, fontSize: F.xs, color: T.dim }}>
+                {watchlistTotal > 0 ? `${watchlistTotal.toLocaleString()} tracked` : "View & import"}
+              </span>
+              <span style={{ color: T.dim, fontSize: F.xs }}>↗</span>
+            </a>
           </div>
 
           {/* Footer */}
@@ -1042,6 +967,210 @@ function AccountsSection({ open, onToggle }) {
   );
 }
 
+
+// ─── Orbit ────────────────────────────────────────────────────────────────────
+function OrbitSection({ interactions, open, onToggle }) {
+  const canvasRef = React.useRef(null);
+  const animRef   = React.useRef(null);
+  const nodesRef  = React.useRef([]);
+
+  const ZONE_C = { ELITE: "#6C6FFF", INFLUENTIAL: "#F59E0B", SIGNAL: "#9095A8", IGNORE: "#3A3D4A" };
+
+  React.useEffect(() => {
+    if (!open) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    const W = canvas.width, H = canvas.height;
+    const CX = W / 2, CY = H / 2;
+
+    // Build nodes from interactions — dedupe by handle, keep highest followers
+    const byHandle = {};
+    interactions.forEach(i => {
+      if (!byHandle[i.handle] || (i.followers || 0) > (byHandle[i.handle].followers || 0))
+        byHandle[i.handle] = i;
+    });
+    const handles = Object.values(byHandle).filter(i => i.zone !== "IGNORE").slice(0, 60);
+
+    const maxFollowers = Math.max(...handles.map(h => h.followers || 0), 1);
+
+    // Initialize nodes with random positions around center
+    if (nodesRef.current.length !== handles.length) {
+      nodesRef.current = handles.map((h, i) => {
+        const angle = (i / handles.length) * Math.PI * 2;
+        const r = 60 + Math.random() * 120;
+        return {
+          ...h,
+          x: CX + Math.cos(angle) * r,
+          y: CY + Math.sin(angle) * r,
+          vx: 0, vy: 0,
+          r: 5 + (h.followers / maxFollowers) * 16,
+        };
+      });
+    }
+
+    const nodes = nodesRef.current;
+
+    function tick() {
+      // Force-directed: repel from each other, attract to orbit shells by zone
+      nodes.forEach(n => {
+        const zoneTarget = n.zone === "ELITE" ? 70 : n.zone === "INFLUENTIAL" ? 130 : 195;
+        // Attraction toward orbit ring
+        const dx = n.x - CX, dy = n.y - CY;
+        const dist = Math.sqrt(dx*dx + dy*dy) || 1;
+        const diff = dist - zoneTarget;
+        n.vx -= (dx / dist) * diff * 0.012;
+        n.vy -= (dy / dist) * diff * 0.012;
+
+        // Repulsion from other nodes
+        nodes.forEach(m => {
+          if (m === n) return;
+          const ex = n.x - m.x, ey = n.y - m.y;
+          const ed = Math.sqrt(ex*ex + ey*ey) || 1;
+          if (ed < 40) {
+            const f = (40 - ed) / 40 * 0.4;
+            n.vx += (ex / ed) * f;
+            n.vy += (ey / ed) * f;
+          }
+        });
+
+        n.vx *= 0.88; n.vy *= 0.88;
+        n.x += n.vx; n.y += n.vy;
+        // Clamp
+        n.x = Math.max(n.r + 4, Math.min(W - n.r - 4, n.x));
+        n.y = Math.max(n.r + 4, Math.min(H - n.r - 4, n.y));
+      });
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, W, H);
+
+      // Orbit rings
+      [[70, "#6C6FFF"], [130, "#F59E0B"], [195, "#9095A8"]].forEach(([r, c]) => {
+        ctx.beginPath();
+        ctx.arc(CX, CY, r, 0, Math.PI * 2);
+        ctx.strokeStyle = c + "22";
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 6]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      });
+
+      // Center node (Big Think / user)
+      const grad = ctx.createRadialGradient(CX, CY, 0, CX, CY, 18);
+      grad.addColorStop(0, "#8C8FFF");
+      grad.addColorStop(1, "#6C6FFF");
+      ctx.beginPath();
+      ctx.arc(CX, CY, 18, 0, Math.PI * 2);
+      ctx.fillStyle = grad;
+      ctx.fill();
+      ctx.fillStyle = "#fff";
+      ctx.font = "bold 9px Inter, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("BT", CX, CY);
+
+      // Lines from center
+      nodes.forEach(n => {
+        ctx.beginPath();
+        ctx.moveTo(CX, CY);
+        ctx.lineTo(n.x, n.y);
+        ctx.strokeStyle = (ZONE_C[n.zone] || "#555") + "25";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      });
+
+      // Handle nodes
+      nodes.forEach(n => {
+        const c = ZONE_C[n.zone] || "#555";
+        // Glow
+        const g = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, n.r * 2);
+        g.addColorStop(0, c + "40");
+        g.addColorStop(1, c + "00");
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, n.r * 2, 0, Math.PI * 2);
+        ctx.fillStyle = g;
+        ctx.fill();
+
+        // Circle
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+        ctx.fillStyle = c + "CC";
+        ctx.fill();
+        ctx.strokeStyle = c;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        // Label
+        if (n.r > 7) {
+          ctx.fillStyle = "#E8EAF0";
+          ctx.font = `${Math.max(8, Math.min(10, n.r))}px Inter, sans-serif`;
+          ctx.textAlign = "center";
+          ctx.textBaseline = "top";
+          const label = "@" + n.handle.slice(0, 10);
+          ctx.fillText(label, n.x, n.y + n.r + 3);
+        }
+      });
+    }
+
+    let frame = 0;
+    function loop() {
+      tick();
+      draw();
+      frame++;
+      animRef.current = requestAnimationFrame(loop);
+    }
+
+    animRef.current = requestAnimationFrame(loop);
+    return () => { if (animRef.current) cancelAnimationFrame(animRef.current); };
+  }, [open, interactions]);
+
+  const isEmpty = interactions.filter(i => i.zone !== "IGNORE").length === 0;
+
+  return (
+    <div style={{ marginBottom: 12, background: "#16181E", border: "1px solid #1E2028", borderRadius: 12, overflow: "hidden" }}>
+      <div style={{ display: "flex", alignItems: "center", padding: "0 20px", height: 44, borderBottom: open ? "1px solid #1E2028" : "none" }}>
+        <button onClick={onToggle}
+          style={{ flex: 1, background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 8, textAlign: "left", padding: 0 }}>
+          <span style={{ fontFamily: sans, fontSize: 11, fontWeight: 700, color: "#9095A8", textTransform: "uppercase", letterSpacing: "0.06em" }}>Orbit</span>
+          <span style={{ color: "#555B6E", fontSize: 11, transform: open ? "rotate(180deg)" : "none", display: "inline-block", transition: "transform 0.15s" }}>▾</span>
+        </button>
+        <a href="/handles"
+          style={{ fontFamily: sans, fontSize: 11, fontWeight: 600, color: "#6C6FFF", textDecoration: "none",
+            padding: "5px 12px", borderRadius: 8, border: "1px solid #6C6FFF40", background: "#6C6FFF10",
+            display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}
+          onMouseEnter={e => e.currentTarget.style.background = "#6C6FFF20"}
+          onMouseLeave={e => e.currentTarget.style.background = "#6C6FFF10"}>
+          All handles ↗
+        </a>
+      </div>
+      {open && (
+        <div style={{ padding: "0", position: "relative" }}>
+          {isEmpty ? (
+            <div style={{ padding: "32px", textAlign: "center" }}>
+              <div style={{ fontSize: 28, marginBottom: 8 }}>🪐</div>
+              <div style={{ fontFamily: sans, fontSize: 13, color: "#555B6E" }}>Import interactions to see your audience orbit.</div>
+            </div>
+          ) : (
+            <div style={{ display: "flex", justifyContent: "center", padding: "8px 0 4px" }}>
+              <canvas ref={canvasRef} width={560} height={320}
+                style={{ borderRadius: 8, maxWidth: "100%", cursor: "default" }} />
+            </div>
+          )}
+          <div style={{ padding: "6px 20px 12px", display: "flex", gap: 16 }}>
+            {[["ELITE","#6C6FFF"],["INFLUENTIAL","#F59E0B"],["SIGNAL","#9095A8"]].map(([z,c]) => (
+              <div key={z} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                <div style={{ width: 8, height: 8, borderRadius: "50%", background: c }} />
+                <span style={{ fontFamily: sans, fontSize: 10, color: "#9095A8" }}>{z}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const [supabase] = useState(() => createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY));
 
@@ -1056,8 +1185,9 @@ export default function Dashboard() {
   const [allMetrics, setAllMetrics] = useState([]);
   const [comments, setComments]     = useState([]);
   const [interactions, setInteractions] = useState([]);
-  const [selectedIds, setSelectedIds]   = useState(new Set());
-  const [deleting, setDeleting]         = useState(false);
+  const [editIntId, setEditIntId]       = useState(null);
+  const [editIntVals, setEditIntVals]   = useState({});
+  const [savingInt, setSavingInt]       = useState(false);
   const [syncing, setSyncing]       = useState(null);
   const [watchlist, setWatchlist]     = useState([]);
   const [watchlistTotal, setWatchlistTotal] = useState(0);
@@ -1066,7 +1196,7 @@ export default function Dashboard() {
   const [urlMsg, setUrlMsg]         = useState("");
   const [platform, setPlatform]     = useState("All");
   const [activeMetric, setActiveMetric] = useState("followers");
-  const [open, setOpen]             = useState({ metrics: true, outliers: true, stories: true, accounts: true, interactions: true, comments: true, videos: false });
+  const [open, setOpen]             = useState({ metrics: true, outliers: true, orbit: true, stories: true, accounts: true, interactions: true, comments: true, videos: false });
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => { setSession(session); setAuthLoading(false); });
@@ -1151,23 +1281,31 @@ export default function Dashboard() {
 
   const ytVideos = latestPerPlatform["youtube"]?.videos || [];
   const filteredComments = comments.filter(c => platform === "All" || c.platform === platform);
-  const deleteSelected = async () => {
-    if (!selectedIds.size) return;
-    if (!confirm(`Delete ${selectedIds.size} interaction${selectedIds.size !== 1 ? 's' : ''}? This cannot be undone.`)) return;
-    setDeleting(true);
+  const updateInteraction = async (id, updates) => {
+    setSavingInt(true);
     try {
-      const res = await fetch('/api/interactions/delete', {
+      await fetch('/api/interactions/update', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, updates }),
+      });
+      setInteractions(prev => prev.map(i => i.id === id ? { ...i, ...updates } : i));
+      setEditIntId(null);
+    } catch (e) { console.error('Update failed', e); }
+    setSavingInt(false);
+  };
+
+  const deleteInteraction = async (id) => {
+    if (!confirm('Remove this interaction? This cannot be undone.')) return;
+    try {
+      await fetch('/api/interactions/delete', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids: [...selectedIds] }),
+        body: JSON.stringify({ ids: [id] }),
       });
-      const data = await res.json();
-      if (data.deleted) {
-        setInteractions(prev => prev.filter(i => !selectedIds.has(i.id)));
-        setSelectedIds(new Set());
-      }
+      setInteractions(prev => prev.filter(i => i.id !== id));
+      if (editIntId === id) setEditIntId(null);
     } catch (e) { console.error('Delete failed', e); }
-    setDeleting(false);
   };
 
   const filteredInteractions = interactions.filter(i =>
@@ -1279,10 +1417,181 @@ export default function Dashboard() {
           )}
         </Card>
 
+        {/* ── Interactions ─────────────────────────────────────── */}
+        <Card style={{ marginBottom: 12, overflow: "hidden" }}>
+          <SectionHeader label="Interactions" count={filteredInteractions.length} open={open.interactions} onToggle={() => tog("interactions")} action={
+              <Btn variant="ghost" onClick={() => window.open("/import", "_blank")} style={{ fontSize: F.xs }}>📸 Import</Btn>
+            } />
+          {open.interactions && (
+            <>
+              <Divider />
+              <div style={{ padding: filteredInteractions.length === 0 ? "24px 20px" : "0" }}>
+                {filteredInteractions.length === 0 ? (
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: 28, marginBottom: 8 }}>📸</div>
+                    <div style={{ fontFamily: sans, fontSize: F.sm, color: T.dim, marginBottom: 4 }}>Import screenshots to track who's engaging with your content.</div>
+                    <div style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>Drop Instagram notifications, likers, followers, or comment sections into the Import tool.</div>
+                  </div>
+                ) : (
+                  <>
+                    {/* Zone summary */}
+                    <div style={{ padding: "10px 20px 8px", display: "flex", gap: 14, alignItems: "center", borderBottom: `1px solid ${T.border}` }}>
+                      {[["ELITE", T.accent, T.accentBg], ["INFLUENTIAL", "#F59E0B", "#FFFBEB20"], ["SIGNAL", T.sub, T.well]].map(([zone, color, bg]) => (
+                        <div key={zone} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                          <span style={{ background: bg, color, border: `1px solid ${color}30`, borderRadius: 4, padding: "1px 6px", fontFamily: sans, fontSize: 10, fontWeight: 700 }}>{zone}</span>
+                          <span style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>{filteredInteractions.filter(i => i.zone === zone).length}</span>
+                        </div>
+                      ))}
+                    </div>
+                    {/* Table header — 5 cols: Handle | Category | Bio | Followers | Followed by */}
+                    <div style={{ display: "grid", gridTemplateColumns: "1.4fr 90px 1.6fr 80px 1fr 28px", gap: 0, padding: "6px 20px", borderBottom: `1px solid ${T.border}`, alignItems: "center" }}>
+                      {["Handle", "Category", "Bio", "Followers", "Followed by", ""].map(h => (
+                        <div key={h} style={{ fontFamily: sans, fontSize: 10, fontWeight: 700, color: T.dim, textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</div>
+                      ))}
+                    </div>
+                    {filteredInteractions
+                      .sort((a, b) => new Date(b.interacted_at) - new Date(a.interacted_at))
+                      .map(item => {
+                        const zoneColor = item.zone === "ELITE" ? T.accent : item.zone === "INFLUENTIAL" ? "#F59E0B" : "#6B7280";
+                        const zoneBg    = item.zone === "ELITE" ? T.accentBg : item.zone === "INFLUENTIAL" ? "#FFFBEB20" : T.well;
+                        const profileUrl = item.profile_url || (item.platform === "instagram" ? `https://instagram.com/${item.handle}` : item.platform === "x" ? `https://x.com/${item.handle}` : null);
+                        const typeParts = (item.interaction_type || "").split(",").map(t => t.trim()).filter(Boolean);
+                        const isEditing = editIntId === item.id;
+                        const followedByArr = (item.followed_by || "").split(",").map(s => s.trim()).filter(Boolean);
+                        return (
+                          <React.Fragment key={item.id}>
+                            {/* Main row */}
+                            <div
+                              onClick={() => {
+                                if (isEditing) { setEditIntId(null); return; }
+                                setEditIntId(item.id);
+                                setEditIntVals({ bio: item.bio || "", followers: item.followers || "", followed_by: item.followed_by || "" });
+                              }}
+                              style={{ display: "grid", gridTemplateColumns: "1.4fr 90px 1.6fr 80px 1fr 28px", gap: 0, padding: "10px 20px",
+                                borderBottom: `1px solid ${T.border}`, alignItems: "center", cursor: "pointer",
+                                background: isEditing ? `${T.accent}08` : "transparent", transition: "background 0.1s" }}
+                              onMouseEnter={e => { if (!isEditing) e.currentTarget.style.background = T.well; }}
+                              onMouseLeave={e => { if (!isEditing) e.currentTarget.style.background = "transparent"; }}>
+
+                              {/* Handle + name */}
+                              <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                                  {profileUrl ? (
+                                    <a href={profileUrl} target="_blank" rel="noreferrer"
+                                      onClick={e => e.stopPropagation()}
+                                      style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text, textDecoration: "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                                      onMouseEnter={e => e.currentTarget.style.color = T.accent}
+                                      onMouseLeave={e => e.currentTarget.style.color = T.text}>
+                                      @{item.handle}
+                                    </a>
+                                  ) : (
+                                    <span style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text }}>@{item.handle}</span>
+                                  )}
+                                  {item.verified && <span style={{ color: "#1D9BF0", fontSize: 11 }}>✓</span>}
+                                  {platform === "All" && item.platform && (
+                                    <span style={{ fontFamily: sans, fontSize: 9, color: T.dim, background: T.well, border: `1px solid ${T.border}`, borderRadius: 3, padding: "1px 4px" }}>
+                                      {{"instagram":"📸","x":"𝕏","youtube":"▶","linkedin":"in"}[item.platform] || item.platform}
+                                    </span>
+                                  )}
+                                </div>
+                                {item.name && item.name !== item.handle && (
+                                  <div style={{ fontFamily: sans, fontSize: F.xs, color: T.dim, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</div>
+                                )}
+                                {item.screenshot_thumbnail && (
+                                  <div style={{ position: "relative", display: "inline-block" }}
+                                    onMouseEnter={e => { const t = e.currentTarget.querySelector(".db-thumb"); if(t) t.style.display="block"; }}
+                                    onMouseLeave={e => { const t = e.currentTarget.querySelector(".db-thumb"); if(t) t.style.display="none"; }}>
+                                    <span style={{ background: T.well, border: `1px solid ${T.border}`, borderRadius: 3, padding: "1px 4px", fontSize: 9, color: T.dim, cursor: "default" }}>📸</span>
+                                    <div className="db-thumb" style={{ display: "none", position: "absolute", zIndex: 100, bottom: "calc(100% + 6px)", left: 0, background: T.card, border: `1px solid ${T.border2}`, borderRadius: 8, padding: 6, boxShadow: "0 8px 24px rgba(0,0,0,0.18)", width: 180 }}>
+                                      <img src={item.screenshot_thumbnail} alt="source" style={{ width: "100%", borderRadius: 4, display: "block" }} />
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Category */}
+                              <div>
+                                <span style={{ background: zoneBg, color: zoneColor, border: `1px solid ${zoneColor}30`, borderRadius: 4, padding: "2px 7px", fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: "0.04em" }}>
+                                  {item.zone || "—"}
+                                </span>
+                              </div>
+
+                              {/* Bio */}
+                              <div style={{ fontFamily: sans, fontSize: F.xs, color: T.sub, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", paddingRight: 8 }}>
+                                {item.bio || <span style={{ color: T.dim }}>—</span>}
+                              </div>
+
+                              {/* Followers */}
+                              <div style={{ fontFamily: sans, fontSize: F.sm, color: item.followers ? T.text : T.dim, fontWeight: item.followers ? 500 : 400 }}>
+                                {item.followers ? fmt(item.followers) : "—"}
+                              </div>
+
+                              {/* Followed by */}
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
+                                {followedByArr.slice(0, 2).map(h => (
+                                  <span key={h} style={{ fontSize: 9, padding: "1px 5px", borderRadius: 4, background: T.well, border: `1px solid ${T.border}`, color: T.sub }}>@{h.replace(/^@/,"")}</span>
+                                ))}
+                                {followedByArr.length > 2 && <span style={{ fontSize: 9, color: T.dim }}>+{followedByArr.length - 2}</span>}
+                                {followedByArr.length === 0 && <span style={{ color: T.dim, fontSize: F.xs }}>—</span>}
+                              </div>
+
+                              {/* Delete */}
+                              <button onClick={e => { e.stopPropagation(); deleteInteraction(item.id); }}
+                                style={{ background: "none", border: "none", color: T.dim, cursor: "pointer", fontSize: 15, padding: 0, display: "flex", alignItems: "center", justifyContent: "center" }}
+                                onMouseEnter={e => e.currentTarget.style.color = "#EF4444"}
+                                onMouseLeave={e => e.currentTarget.style.color = T.dim}>×</button>
+                            </div>
+
+                            {/* Expand edit panel */}
+                            {isEditing && (
+                              <div style={{ background: T.well, borderBottom: `1px solid ${T.border}`, padding: "14px 20px", display: "flex", gap: 14, flexWrap: "wrap", alignItems: "flex-start" }}>
+                                {/* Bio */}
+                                <div style={{ flex: "2 1 200px" }}>
+                                  <label style={{ display: "block", fontSize: 10, fontWeight: 600, color: T.dim, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 5 }}>Bio</label>
+                                  <textarea value={editIntVals.bio} onChange={e => setEditIntVals(v => ({ ...v, bio: e.target.value }))}
+                                    placeholder="Short bio…" rows={2}
+                                    style={{ width: "100%", background: T.card, border: `1px solid ${T.border2}`, borderRadius: 7, padding: "6px 10px", fontFamily: sans, fontSize: F.xs, color: T.text, resize: "vertical", outline: "none", boxSizing: "border-box" }} />
+                                </div>
+                                {/* Followers */}
+                                <div style={{ flex: "0 0 110px" }}>
+                                  <label style={{ display: "block", fontSize: 10, fontWeight: 600, color: T.dim, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 5 }}>Followers</label>
+                                  <input type="number" value={editIntVals.followers} onChange={e => setEditIntVals(v => ({ ...v, followers: e.target.value }))}
+                                    placeholder="0"
+                                    style={{ width: "100%", background: T.card, border: `1px solid ${T.border2}`, borderRadius: 7, padding: "6px 10px", fontFamily: sans, fontSize: F.xs, color: T.text, outline: "none", boxSizing: "border-box" }} />
+                                </div>
+                                {/* Followed by */}
+                                <div style={{ flex: "1 1 180px" }}>
+                                  <label style={{ display: "block", fontSize: 10, fontWeight: 600, color: T.dim, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 5 }}>Followed by <span style={{ textTransform: "none", fontWeight: 400, letterSpacing: 0 }}>(@handles, comma-sep)</span></label>
+                                  <input value={editIntVals.followed_by} onChange={e => setEditIntVals(v => ({ ...v, followed_by: e.target.value }))}
+                                    placeholder="@handle1, @handle2…"
+                                    style={{ width: "100%", background: T.card, border: `1px solid ${T.border2}`, borderRadius: 7, padding: "6px 10px", fontFamily: sans, fontSize: F.xs, color: T.text, outline: "none", boxSizing: "border-box" }} />
+                                </div>
+                                {/* Actions */}
+                                <div style={{ flex: "0 0 auto", paddingTop: 18, display: "flex", gap: 8, alignItems: "center" }}>
+                                  <button onClick={() => updateInteraction(item.id, { bio: editIntVals.bio, followers: editIntVals.followers ? parseInt(editIntVals.followers) : null, followed_by: editIntVals.followed_by })} disabled={savingInt}
+                                    style={{ background: T.accent, color: "#fff", border: "none", borderRadius: 7, padding: "6px 16px", fontSize: F.xs, fontWeight: 600, cursor: "pointer" }}>
+                                    {savingInt ? "Saving…" : "Save"}
+                                  </button>
+                                  <button onClick={() => setEditIntId(null)}
+                                    style={{ background: "none", border: "none", color: T.dim, cursor: "pointer", fontSize: F.xs }}>Cancel</button>
+                                </div>
+                              </div>
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
+                  </>
+                )}
+              </div>
+            </>
+          )}
+        </Card>
+
+        {/* ── Orbit ────────────────────────────────────────────────────────── */}
+        <OrbitSection interactions={interactions} open={open.orbit} onToggle={() => tog("orbit")} />
+
         {/* ── Audience Stories ─────────────────────────────────────────────── */}
         <StoriesSection open={open.stories} onToggle={() => tog("stories")} />
-
-
 
         {/* ── Recent Videos (YT only) ──────────────────────────────────────── */}
         {ytVideos.length > 0 && (platform === "All" || platform === "youtube") && (
@@ -1307,151 +1616,6 @@ export default function Dashboard() {
             )}
           </Card>
         )}
-
-        {/* ── Interactions ─────────────────────────────────────── */}
-        <Card style={{ marginBottom: 12, overflow: "hidden" }}>
-          <SectionHeader label="Interactions" count={filteredInteractions.length} open={open.interactions} onToggle={() => tog("interactions")} action={
-              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                {selectedIds.size > 0 && (
-                  <Btn variant="ghost" onClick={deleteSelected} disabled={deleting}
-                    style={{ fontSize: F.xs, color: "#EF4444", borderColor: "#EF444430" }}>
-                    {deleting ? "Deleting…" : `🗑 Delete ${selectedIds.size}`}
-                  </Btn>
-                )}
-                <Btn variant="ghost" onClick={() => window.open("/import", "_blank")} style={{ fontSize: F.xs }}>📸 Import</Btn>
-              </div>
-            } />
-          {open.interactions && (
-            <>
-              <Divider />
-              <div style={{ padding: filteredInteractions.length === 0 ? "24px 20px" : "8px 0" }}>
-                {filteredInteractions.length === 0 ? (
-                  <div style={{ textAlign: "center" }}>
-                    <div style={{ fontSize: 28, marginBottom: 8 }}>📸</div>
-                    <div style={{ fontFamily: sans, fontSize: F.sm, color: T.dim, marginBottom: 4 }}>Import screenshots to track who's engaging with your content.</div>
-                    <div style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>Drop Instagram notifications, likers, followers, or comment sections into the Import tool.</div>
-                  </div>
-                ) : (
-                  <>
-                    <div style={{ padding: "10px 20px 6px", display: "flex", gap: 16, alignItems: "center" }}>
-                      {[["ELITE", T.accent, T.accentBg], ["INFLUENTIAL", "#F59E0B", "#FFFBEB"], ["SIGNAL", T.sub, T.well]].map(([zone, color, bg]) => (
-                        <div key={zone} style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                          <span style={{ background: bg, color, border: `1px solid ${color}30`, borderRadius: 4, padding: "1px 6px", fontFamily: sans, fontSize: 10, fontWeight: 700 }}>{zone}</span>
-                          <span style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>{filteredInteractions.filter(i => i.zone === zone).length}</span>
-                        </div>
-                      ))}
-                      
-                    </div>
-                    <Divider />
-                    {/* Table header */}
-                    <div style={{ display: "grid", gridTemplateColumns: "28px 1fr 100px 80px 80px", gap: 0, padding: "6px 20px 6px", borderBottom: `1px solid ${T.border}`, alignItems: "center" }}>
-                      <input type="checkbox"
-                        checked={selectedIds.size > 0 && selectedIds.size === filteredInteractions.length}
-                        onChange={e => setSelectedIds(e.target.checked ? new Set(filteredInteractions.map(i => i.id)) : new Set())}
-                        style={{ cursor: "pointer", accentColor: T.accent }} />
-                      {["Handle", "Category", "Followers", "Type"].map(h => (
-                        <div key={h} style={{ fontFamily: sans, fontSize: 10, fontWeight: 700, color: T.dim, textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</div>
-                      ))}
-                    </div>
-                    {filteredInteractions
-                      .sort((a, b) => new Date(b.interacted_at) - new Date(a.interacted_at))
-                      .map(item => {
-                        const zoneColor = item.zone === "ELITE" ? T.accent : item.zone === "INFLUENTIAL" ? "#F59E0B" : "#6B7280";
-                        const zoneBg    = item.zone === "ELITE" ? T.accentBg : item.zone === "INFLUENTIAL" ? "#FFFBEB" : T.well;
-                        const profileUrl = item.profile_url || (item.platform === "instagram" ? `https://instagram.com/${item.handle}` : null);
-                        const typeParts = (item.interaction_type || "").split(",").map(t => t.trim()).filter(Boolean);
-                        return (
-                          <div key={item.id} style={{ display: "grid", gridTemplateColumns: "28px 1fr 100px 80px 80px", gap: 0, padding: "10px 20px", borderBottom: `1px solid ${T.border}`, alignItems: "center", background: selectedIds.has(item.id) ? `${T.accent}10` : "transparent" }}>
-                            <input type="checkbox"
-                              checked={selectedIds.has(item.id)}
-                              onChange={e => setSelectedIds(prev => { const s = new Set(prev); e.target.checked ? s.add(item.id) : s.delete(item.id); return s; })}
-                              style={{ cursor: "pointer", accentColor: T.accent }} />
-
-                            {/* Handle */}
-                            <div style={{ display: "flex", flexDirection: "column", gap: 1, minWidth: 0 }}>
-                              <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                                {profileUrl ? (
-                                  <a href={profileUrl} target="_blank" rel="noreferrer"
-                                    style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text, textDecoration: "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                                    onMouseEnter={e => e.currentTarget.style.color = T.accent}
-                                    onMouseLeave={e => e.currentTarget.style.color = T.text}>
-                                    @{item.handle}
-                                  </a>
-                                ) : (
-                                  <span style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text }}>@{item.handle}</span>
-                                )}
-                                {item.verified && (
-                                  <span title="Verified" style={{ color: "#1D9BF0", fontSize: 12, lineHeight: 1 }}>✓</span>
-                                )}
-                                {platform === "All" && item.platform && (
-                                  <span style={{ fontFamily: sans, fontSize: 9, color: T.dim, background: T.well,
-                                    border: `1px solid ${T.border}`, borderRadius: 3, padding: "1px 4px" }}>
-                                    {{"instagram":"📸","x":"𝕏","youtube":"▶","linkedin":"in"}[item.platform] || item.platform}
-                                  </span>
-                                )}
-                              </div>
-                              {item.screenshot_thumbnail && (
-                                <div style={{ position: "relative", display: "inline-block" }}
-                                  onMouseEnter={e => { const t = e.currentTarget.querySelector(".db-thumb"); if(t) t.style.display="block"; }}
-                                  onMouseLeave={e => { const t = e.currentTarget.querySelector(".db-thumb"); if(t) t.style.display="none"; }}>
-                                  <span style={{ background: T.well, border: `1px solid ${T.border}`, borderRadius: 3,
-                                    padding: "1px 4px", fontSize: 9, color: T.dim, cursor: "default" }}>📸</span>
-                                  <div className="db-thumb" style={{
-                                    display: "none", position: "absolute", zIndex: 100,
-                                    bottom: "calc(100% + 6px)", left: 0,
-                                    background: T.card, border: `1px solid ${T.border2}`,
-                                    borderRadius: 8, padding: 6, boxShadow: "0 8px 24px rgba(0,0,0,0.18)",
-                                    width: 180,
-                                  }}>
-                                    <img src={item.screenshot_thumbnail} alt="source"
-                                      style={{ width: "100%", borderRadius: 4, display: "block" }} />
-                                  </div>
-                                </div>
-                              )}
-                              {item.name && item.name !== item.handle && (
-                                <div style={{ fontFamily: sans, fontSize: F.xs, color: T.dim, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.name}</div>
-                              )}
-                              {item.bio && (
-                                <div style={{ fontFamily: sans, fontSize: 10, color: T.dim, lineHeight: 1.4, maxWidth: 220,
-                                  overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 1, WebkitBoxOrient: "vertical" }}>
-                                  {item.bio}
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Category */}
-                            <div>
-                              <span style={{ background: zoneBg, color: zoneColor, border: `1px solid ${zoneColor}30`, borderRadius: 4, padding: "2px 7px", fontFamily: sans, fontSize: 10, fontWeight: 700, letterSpacing: "0.04em" }}>
-                                {item.zone}
-                              </span>
-                            </div>
-
-                            {/* Followers */}
-                            <div style={{ fontFamily: sans, fontSize: F.sm, color: item.followers ? T.text : T.dim }}>
-                              {item.followers ? fmt(item.followers) : "—"}
-                            </div>
-
-                            {/* Type */}
-                            <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
-                              {typeParts.length > 0 ? typeParts.map(t => {
-                                const ICONS = { follow: "👤", like: "♥", mention: "@", comment: "💬", retweet: "🔁", reply: "↩", tag: "🏷" };
-                                return (
-                                  <span key={t} style={{ fontFamily: sans, fontSize: F.xs, color: T.sub }}>
-                                    {ICONS[t] || ""} {t}
-                                  </span>
-                                );
-                              }) : <span style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>—</span>}
-                            </div>
-
-                          </div>
-                        );
-                      })}
-                  </>
-                )}
-              </div>
-            </>
-          )}
-        </Card>
 
         {/* ── Notable Comments ─────────────────────────────────────────────── */}
         <Card style={{ marginBottom: 12, overflow: "hidden" }}>
