@@ -27,9 +27,10 @@ export async function POST(req) {
       if (!item.handle) continue;
 
       const watched = isWatched(item.platform || 'instagram', item.handle);
+      // CORE = on watchlist only. Verified = INFLUENTIAL. Never assign CORE from screenshot data.
       const zone = watched ? 'CORE' :
         (item.verified || (item.followers || 0) >= 10000) ? 'INFLUENTIAL' :
-        item.zone || 'RADAR';
+        'RADAR';
 
       // Compute influence score
       const followerPts = !item.followers ? 5 :

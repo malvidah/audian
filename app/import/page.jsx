@@ -115,6 +115,11 @@ function InteractionRow({ item, index, onChange, onRemove }) {
 
   const field = (key, value, type = "text", options = null) => {
     if (!editing) {
+      if (key === "followers") return value
+        ? <span style={{ fontFamily: sans, fontSize: F.sm, color: T.text, fontWeight: 500 }}>
+            {value >= 1000000 ? (value/1000000).toFixed(1)+"M" : value >= 1000 ? (value/1000).toFixed(1)+"K" : value}
+          </span>
+        : <span style={{ color: T.dim, fontSize: F.xs }}>—</span>;
       if (key === "zone") return <ZoneBadge zone={value} />;
       if (key === "interaction_type") return (
         <span style={{ fontFamily: sans, fontSize: F.sm, color: T.sub }}>
@@ -177,7 +182,15 @@ function InteractionRow({ item, index, onChange, onRemove }) {
 
       {/* Followers */}
       <td style={{ padding: "10px 12px" }}>
-        {field("followers", item.followers, "number")}
+        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          {field("followers", item.followers, "number")}
+          {item._enriched === true && item.followers && (
+            <span title="Verified from Instagram" style={{ fontSize: 9, color: T.green }}>✓</span>
+          )}
+          {item._enriched === false && (
+            <span title="Profile not found / private" style={{ fontSize: 9, color: T.dim }}>?</span>
+          )}
+        </div>
       </td>
 
       {/* Verified */}
@@ -362,6 +375,8 @@ export default function ImportPage() {
   const [saving, setSaving] = useState(false);
   const [saveResult, setSaveResult] = useState(null);
   const [filterZone, setFilterZone] = useState("ALL");
+  const [enriching, setEnriching] = useState(false);
+  const [enrichProgress, setEnrichProgress] = useState(null);
   const [showManualAdd, setShowManualAdd] = useState(false);
 
   // Convert file to base64
@@ -507,6 +522,53 @@ export default function ImportPage() {
     setAllInteractions(prev => [...prev, { ...item, _id: id, _source: "manual" }]);
   };
 
+  const enrichAll = async () => {
+    const handles = allInteractions.map(i => i.handle).filter(Boolean);
+    if (!handles.length) return;
+    setEnriching(true);
+    setEnrichProgress(`Looking up ${handles.length} profiles…`);
+    try {
+      // Batch into groups of 10 to show progress
+      const BATCH = 10;
+      for (let i = 0; i < handles.length; i += BATCH) {
+        const batch = handles.slice(i, i + BATCH);
+        setEnrichProgress(`Enriching ${i + 1}–${Math.min(i + BATCH, handles.length)} of ${handles.length}…`);
+        const res = await fetch("/api/enrich/lookup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ handles: batch }),
+        });
+        const data = await res.json();
+        if (data.results) {
+          setAllInteractions(prev => {
+            const updated = [...prev];
+            for (const r of data.results) {
+              const idx = updated.findIndex(i => i.handle?.toLowerCase() === r.handle);
+              if (idx >= 0) {
+                updated[idx] = {
+                  ...updated[idx],
+                  followers: r.followers ?? updated[idx].followers,
+                  name: r.name || updated[idx].name,
+                  verified: r.verified ?? updated[idx].verified,
+                  zone: r.zone,
+                  on_watchlist: r.on_watchlist,
+                  bio: r.bio || updated[idx].bio,
+                  avatar_url: r.avatar || updated[idx].avatar_url,
+                  _enriched: r.found,
+                };
+              }
+            }
+            return updated;
+          });
+        }
+      }
+      setEnrichProgress(null);
+    } catch (e) {
+      setEnrichProgress(`Error: ${e.message}`);
+    }
+    setEnriching(false);
+  };
+
   const handleSave = async () => {
     const toSave = filtered.filter(i => i.handle);
     if (!toSave.length) return;
@@ -642,6 +704,10 @@ export default function ImportPage() {
                 <Btn variant="ghost" onClick={() => setShowManualAdd(!showManualAdd)}
                   style={{ fontSize: F.xs }}>
                   {showManualAdd ? "− Manual entry" : "+ Manual entry"}
+                </Btn>
+                <Btn variant="secondary" onClick={enrichAll} disabled={enriching || allInteractions.length === 0}
+                  style={{ fontSize: F.xs }}>
+                  {enriching ? enrichProgress || "Enriching…" : `🔍 Lookup ${allInteractions.length} profiles`}
                 </Btn>
                 {saveResult?.saved > 0 && (
                   <span style={{ fontFamily: sans, fontSize: F.sm, color: T.green, fontWeight: 600 }}>
