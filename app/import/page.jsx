@@ -40,6 +40,17 @@ const INTERACTION_ICONS = {
   tag: "🏷", view: "👁", unknown: "?",
 };
 
+// Zone is fully computed from profile data — never set manually except Elite button
+function computeZone(item) {
+  if (item.zone === "ELITE" || item.on_watchlist) return "ELITE";
+  const followers = parseInt(item.followers) || 0;
+  const hasProfile = !!(item.name?.trim() || item.bio?.trim());
+  if (!hasProfile) return "IGNORE";
+  if (followers >= 10000) return "INFLUENTIAL";
+  if (item.verified && followers >= 1000) return "INFLUENTIAL";
+  return "SIGNAL";
+}
+
 function ZoneBadge({ zone }) {
   const c = ZONE_COLORS[zone] || ZONE_COLORS.SIGNAL;
   return (
@@ -223,11 +234,21 @@ function InteractionRow({ item, index, onChange, onRemove }) {
         </div>
       </td>
 
-      {/* Category — dropdown incl. IGNORE */}
+      {/* Category — computed badge + Elite button */}
       <td style={{ padding: "9px 12px" }}>
-        <EditableCell value={item.zone}
-          onChange={v => onChange(index, "zone", v)}
-          options={["ELITE","INFLUENTIAL","SIGNAL","IGNORE"]} />
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <ZoneBadge zone={item.zone} />
+          {item.zone !== "ELITE" && (
+            <button
+              onClick={() => onChange(index, "zone", "ELITE")}
+              title="Add to Elite list"
+              style={{ fontFamily: sans, fontSize: 10, padding: "2px 7px", borderRadius: 5,
+                border: `1px solid ${T.accent}`, background: "transparent", color: T.accent,
+                cursor: "pointer", fontWeight: 600, whiteSpace: "nowrap", width: "fit-content" }}>
+              ★ Elite
+            </button>
+          )}
+        </div>
       </td>
 
       {/* Followers — inline editable number */}
@@ -321,19 +342,27 @@ function ScreenshotCard({ result, onRemoveScreenshot }) {
 function ManualAddRow({ onAdd }) {
   const [form, setForm] = useState({
     handle: "", name: "", bio: "", followers: "", verified: false,
-    interaction_type: "follow", zone: "SIGNAL", content: "", platform: "instagram",
+    interaction_type: "follow", zone: "IGNORE", content: "", platform: "instagram",
   });
-  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const set = (k, v) => setForm(f => {
+    const next = { ...f, [k]: v };
+    // Recompute zone live as user types (unless they clicked Elite)
+    if (["name","bio","followers","verified"].includes(k) && next.zone !== "ELITE") {
+      next.zone = computeZone({ ...next, followers: k === "followers" ? (parseInt(v)||0) : (parseInt(next.followers)||0) });
+    }
+    return next;
+  });
 
   const handleSubmit = () => {
     if (!form.handle.trim()) return;
-    onAdd({
+    const base = {
       ...form,
       handle: form.handle.replace(/^@/, "").trim(),
       followers: form.followers ? parseInt(form.followers) : null,
-    });
+    };
+    onAdd({ ...base, zone: computeZone(base) });
     setForm({ handle: "", name: "", bio: "", followers: "", verified: false,
-      interaction_type: "follow", zone: "SIGNAL", content: "", platform: "instagram" });
+      interaction_type: "follow", zone: "IGNORE", content: "", platform: "instagram" });
   };
 
   const inp = (key, placeholder, type = "text", width = 110) => (
@@ -365,13 +394,9 @@ function ManualAddRow({ onAdd }) {
           {inp("bio", "Bio (optional)", "text", 220)}
         </div>
       </td>
-      {/* Category */}
+      {/* Category — auto-computed, shown as badge */}
       <td style={{ padding: "8px 12px" }}>
-        <select value={form.zone} onChange={e => set("zone", e.target.value)}
-          style={{ fontFamily: sans, fontSize: F.sm, padding: "6px 8px", borderRadius: 8,
-            border: `1px solid ${T.border2}`, background: T.card, color: T.text }}>
-          {["ELITE","INFLUENTIAL","SIGNAL","IGNORE"].map(o => <option key={o} value={o}>{o}</option>)}
-        </select>
+        <ZoneBadge zone={form.zone} />
       </td>
       {/* Followers */}
       <td style={{ padding: "8px 12px" }}>{inp("followers", "—", "number", 80)}</td>
@@ -581,7 +606,7 @@ export default function ImportPage() {
           const key = `${item.platform||"instagram"}:${item.handle?.toLowerCase()}`;
           if (!key) continue;
           if (!map.has(key)) {
-            map.set(key, item);
+            map.set(key, { ...item, zone: computeZone(item) });
           } else {
             // Merge: keep higher follower count, merge interaction types
             const existing = map.get(key);
@@ -595,10 +620,8 @@ export default function ImportPage() {
               interaction_type: allTypes,
             };
             // Zone: elite list wins, then follower threshold
-            merged.zone = item.on_watchlist ? "ELITE" :
-              item.ignored ? "IGNORE" :
-              ((merged.followers || 0) >= 10000 || (merged.verified && (merged.followers || 0) >= 1000))
-                ? "INFLUENTIAL" : existing.zone;
+            merged.zone = computeZone({ ...merged,
+              on_watchlist: item.on_watchlist || existing.on_watchlist });
             merged.ignored = item.ignored || false;
             merged.account_id = item.account_id || existing.account_id || null;
             merged._knownHandles = item._knownHandles || existing._knownHandles || {};
@@ -656,14 +679,14 @@ export default function ImportPage() {
     setAllInteractions(prev => {
       const updated = [...prev];
       updated[index] = { ...updated[index], [key]: value };
-      // Auto-update zone if followers or verified changes
-      if (key === "followers" || key === "verified") {
-        const item = updated[index];
-        const followers = parseInt(key === "followers" ? value : item.followers) || 0;
-        const verified = key === "verified" ? value : item.verified;
-        // Follower count is primary; verified alone (with tiny audience) = SIGNAL
-        updated[index].zone = followers >= 10000 ? "INFLUENTIAL" :
-          (verified && followers >= 1000) ? "INFLUENTIAL" : "SIGNAL";
+      if (key === "zone") {
+        // Explicit zone override (Elite button) — mark on_watchlist
+        updated[index].on_watchlist = value === "ELITE";
+      } else if (["name","bio","followers","verified"].includes(key)) {
+        // Recompute zone from data (unless already Elite)
+        if (updated[index].zone !== "ELITE") {
+          updated[index].zone = computeZone(updated[index]);
+        }
       }
       return updated;
     });
