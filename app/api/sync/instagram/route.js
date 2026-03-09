@@ -61,31 +61,30 @@ export async function POST() {
     // ── Update connection with fresh follower count ───────────────────────
     await supabase.from('platform_connections').update({
       subscriber_count: profile.followers_count || conn.subscriber_count,
-      metadata: { ...conn.metadata, media_count: profile.media_count },
       updated_at: new Date().toISOString(),
     }).eq('platform', 'instagram');
 
-    // ── Metrics snapshot (use confirmed columns + metadata for IG-specific) ─
+    // ── Metrics snapshot ─────────────────────────────────────────────────────
     await supabase.from('platform_metrics').insert({
-      platform:    'instagram',
-      snapshot_at: new Date().toISOString(),
-      followers:   profile.followers_count || 0,
-      metadata: {
-        impressions:   metricTotals['impressions']   || 0,
-        reach:         metricTotals['reach']         || 0,
+      platform:       'instagram',
+      snapshot_at:    new Date().toISOString(),
+      followers:      profile.followers_count || 0,
+      impressions:    metricTotals['impressions']   || 0,
+      reach:          metricTotals['reach']         || 0,
+      likes:          totalLikes,
+      comments_count: totalComments,
+      videos: posts.slice(0, 20).map(p => ({
+        id:        p.id,
+        caption:   p.caption?.slice(0, 100),
+        type:      p.media_type,
+        likes:     p.like_count,
+        comments:  p.comments_count,
+        permalink: p.permalink,
+        timestamp: p.timestamp,
+      })),
+      raw: {
         profile_views: metricTotals['profile_views'] || 0,
-        total_likes:   totalLikes,
-        total_comments: totalComments,
-        posts_count:   posts.length,
-        recent_posts:  posts.slice(0, 5).map(p => ({
-          id:        p.id,
-          caption:   p.caption?.slice(0, 100),
-          type:      p.media_type,
-          likes:     p.like_count,
-          comments:  p.comments_count,
-          permalink: p.permalink,
-          timestamp: p.timestamp,
-        })),
+        media_count:   profile.media_count,
       },
     });
 

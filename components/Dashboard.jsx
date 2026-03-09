@@ -138,11 +138,11 @@ function KPICard({ label, value, prev, color, selected, onClick }) {
 
 function MetricsChart({ allMetrics, activeMetric, activePlatform }) {
   const metricExtract = {
-    followers: m => m.followers || 0,
-    impressions: m => m.metadata?.impressions || (m.platform === "youtube" ? m.total_views : 0) || 0,
-    reach: m => m.metadata?.reach || 0,
-    likes: m => m.metadata?.total_likes || 0,
-    comments: m => m.metadata?.total_comments || 0,
+    followers:   m => m.followers || 0,
+    impressions: m => m.impressions || m.total_views || 0,
+    reach:       m => m.reach || 0,
+    likes:       m => m.likes || 0,
+    comments:    m => m.comments_count || 0,
   };
 
   const extract = metricExtract[activeMetric] || metricExtract.followers;
@@ -213,8 +213,8 @@ function OutlierContent({ latestMetrics, activePlatform }) {
     if (m.videos) {
       m.videos.forEach(v => allPosts.push({ platform: "youtube", title: v.title?.slice(0, 80), engagement: (v.likes || 0) + (v.comments || 0), likes: v.likes || 0, comments: v.comments || 0, views: v.views || 0, url: `https://youtube.com/watch?v=${v.id}` }));
     }
-    if (m.metadata?.recent_posts) {
-      m.metadata.recent_posts.forEach(p => allPosts.push({ platform: "instagram", title: p.caption?.slice(0, 80) || `[${p.type || "post"}]`, engagement: (p.likes || 0) + (p.comments || 0), likes: p.likes || 0, comments: p.comments || 0, url: p.permalink }));
+    if (m.platform === "instagram" && m.videos) {
+      m.videos.forEach(p => allPosts.push({ platform: "instagram", title: p.caption?.slice(0, 80) || `[${p.type || "post"}]`, engagement: (p.likes || 0) + (p.comments || 0), likes: p.likes || 0, comments: p.comments || 0, url: p.permalink }));
     }
   });
 
@@ -447,12 +447,17 @@ export default function Dashboard() {
   toAgg.forEach(p => {
     const m = latestPerPlatform[p], prev = prevPerPlatform[p];
     if (!m) return;
-    kpis.followers.v   += m.followers || 0;    kpis.followers.p   += prev?.followers || 0;
-    kpis.impressions.v += m.metadata?.impressions || (p === "youtube" ? m.total_views : 0) || 0;
-    kpis.impressions.p += prev?.metadata?.impressions || (p === "youtube" ? prev?.total_views : 0) || 0;
-    kpis.reach.v       += m.metadata?.reach || 0;          kpis.reach.p += prev?.metadata?.reach || 0;
-    kpis.likes.v       += m.metadata?.total_likes || 0;    kpis.likes.p += prev?.metadata?.total_likes || 0;
-    kpis.comments.v    += m.metadata?.total_comments || 0; kpis.comments.p += prev?.metadata?.total_comments || 0;
+    kpis.followers.v   += m.followers || 0;
+    kpis.followers.p   += prev?.followers || 0;
+    // impressions: real column for IG, total_views for YT
+    kpis.impressions.v += m.impressions || m.total_views || 0;
+    kpis.impressions.p += prev?.impressions || prev?.total_views || 0;
+    kpis.reach.v       += m.reach || 0;
+    kpis.reach.p       += prev?.reach || 0;
+    kpis.likes.v       += m.likes || 0;
+    kpis.likes.p       += prev?.likes || 0;
+    kpis.comments.v    += m.comments_count || 0;
+    kpis.comments.p    += prev?.comments_count || 0;
   });
 
   const ytVideos = latestPerPlatform["youtube"]?.videos || [];
