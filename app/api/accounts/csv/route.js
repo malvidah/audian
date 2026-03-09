@@ -32,7 +32,7 @@ async function bulkUpsert(rows, conflictCol) {
         count: 'exact',
       });
     if (error) errors.push(error.message);
-    else imported += count ?? rows.slice(i, i + CHUNK).length;
+    else imported += rows.slice(i, i + CHUNK).length; // count inserts+updates
   }
   return { imported, errors };
 }
