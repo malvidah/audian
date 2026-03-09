@@ -87,15 +87,30 @@ export default function HandlesPage() {
     if (!file) return;
     setUploading(true); setUploadMsg("");
     try {
-      const csv = await file.text();
-      const res = await fetch("/api/accounts/csv", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ csv, category: csvZone }),
-      });
-      const d = await res.json();
-      if (d.error) setUploadMsg("✗ " + d.error);
-      else { setUploadMsg(`✓ ${d.imported} handles imported`); load(); }
-    } catch { setUploadMsg("✗ Upload failed"); }
+      const text = await file.text();
+      const lines = text.trim().split("\n");
+      const header = lines[0];
+      const dataLines = lines.slice(1).filter(l => l.trim());
+      const CHUNK = 500;
+      let totalImported = 0, totalErrors = 0;
+
+      for (let i = 0; i < dataLines.length; i += CHUNK) {
+        const chunk = [header, ...dataLines.slice(i, i + CHUNK)].join("\n");
+        const pct = Math.round((i / dataLines.length) * 100);
+        setUploadMsg(`Importing… ${pct}% (${Math.min(i + CHUNK, dataLines.length)}/${dataLines.length})`);
+        const res = await fetch("/api/accounts/csv", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ csv: chunk, category: csvZone }),
+        });
+        const d = await res.json();
+        if (d.error) { setUploadMsg("✗ " + d.error); setUploading(false); return; }
+        totalImported += d.imported || 0;
+        totalErrors   += d.errors  || 0;
+      }
+
+      setUploadMsg(`✓ ${totalImported} handles imported${totalErrors ? ` (${totalErrors} errors)` : ""}`);
+      load();
+    } catch (e) { setUploadMsg("✗ Upload failed"); }
     setUploading(false);
   }
 
