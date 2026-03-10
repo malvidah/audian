@@ -183,201 +183,288 @@ function ManualPanel({ onAdd, onClose }) {
   );
 }
 
-// ── Staging row (compact list item in split-pane) ─────────────────────────────
-function StagingRow({ item, selected, onClick, rowRef }) {
-  const zc   = ZC[item.zone] || ZC.SIGNAL;
-  const plat = item.platform || "instagram";
+// ── Person card (left list item — one card per person) ────────────────────────
+function PersonCard({ group, selected, onClick, cardRef }) {
+  const primaryItem = group.items[0];
+  const zone = primaryItem?.zone || "SIGNAL";
+  const zc   = ZC[zone] || ZC.SIGNAL;
+  const initial = (group.name || group.key || "?")[0].toUpperCase();
   return (
-    <div ref={rowRef} onClick={onClick}
-      style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 14px",
-        borderBottom:`1px solid ${T.border}`,
-        background: selected ? T.well : "transparent",
-        borderLeft: `3px solid ${selected ? zc.color : "transparent"}`,
+    <div ref={cardRef} onClick={onClick}
+      style={{ padding:"14px 16px", borderBottom:`1px solid ${T.border}`,
+        borderLeft:`3px solid ${selected ? zc.color : "transparent"}`,
+        background: selected ? "#16181F" : "transparent",
         cursor:"pointer", transition:"background 0.1s" }}>
-      <span style={{ fontSize:11, color:PLAT_COLOR[plat], flexShrink:0 }}>{PLAT_ICON[plat]}</span>
-      <div style={{ flex:1, minWidth:0 }}>
-        <div style={{ fontFamily:sans, fontSize:F.sm, fontWeight:600,
-          color: selected ? T.text : T.sub,
-          overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-          @{item.handle}
-          {item.verified && <span style={{ color:"#1D9BF0", fontSize:10, marginLeft:4 }}>✓</span>}
+
+      {/* Identity */}
+      <div style={{ display:"flex", alignItems:"flex-start", gap:10, marginBottom:6 }}>
+        <div style={{ width:36, height:36, borderRadius:"50%", flexShrink:0,
+          background:zc.bg, border:`1px solid ${zc.border}`,
+          display:"flex", alignItems:"center", justifyContent:"center",
+          fontSize:14, fontWeight:800, color:zc.color, fontFamily:sans }}>
+          {initial}
         </div>
-        {item.followers && (
-          <div style={{ fontFamily:sans, fontSize:F.xs, color:T.dim }}>{fmt(item.followers)} followers</div>
+        <div style={{ flex:1, minWidth:0 }}>
+          {group.name && group.name.toLowerCase() !== group.key && (
+            <div style={{ fontFamily:sans, fontSize:F.sm, fontWeight:700, color:T.text,
+              overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", lineHeight:1.3 }}>
+              {group.name}
+            </div>
+          )}
+          <div style={{ display:"flex", alignItems:"center", gap:5, flexWrap:"wrap" }}>
+            <span style={{ fontFamily:sans, fontSize:F.xs, color:T.sub }}>@{group.key}</span>
+            <span style={{ background:zc.bg, color:zc.color, border:`1px solid ${zc.border}`,
+              borderRadius:3, padding:"1px 5px", fontSize:9, fontWeight:700,
+              fontFamily:sans, letterSpacing:"0.04em" }}>{zone}</span>
+            {group.items.some(i=>i._wikiBio) && (
+              <span style={{ fontSize:9, color:T.blue, background:T.blueBg,
+                border:`1px solid ${T.blue}30`, borderRadius:3,
+                padding:"1px 5px", fontFamily:sans, fontWeight:700 }}>WIKI</span>
+            )}
+          </div>
+          {/* Platform handles + follower counts */}
+          <div style={{ display:"flex", gap:10, marginTop:3 }}>
+            {group.items.map(item=>(
+              <span key={item._id} style={{ fontFamily:sans, fontSize:F.xs,
+                color:T.dim, display:"flex", alignItems:"center", gap:3 }}>
+                <span style={{ color:PLAT_COLOR[item.platform] }}>{PLAT_ICON[item.platform]}</span>
+                {item.followers ? fmt(item.followers) : "—"}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Bio */}
+      {group.bio && (
+        <div style={{ fontFamily:sans, fontSize:F.xs, color:T.dim, lineHeight:1.4,
+          overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
+          marginBottom:6, paddingLeft:46 }}>
+          {group.bio}
+        </div>
+      )}
+
+      {/* Interaction rows */}
+      <div style={{ paddingLeft:46, display:"flex", flexDirection:"column", gap:3 }}>
+        {group.items.flatMap(item =>
+          (item.interaction_type||"unknown").split(",").filter(Boolean).map((type,ti)=>(
+            <div key={`${item._id}-${ti}`}
+              style={{ display:"flex", alignItems:"center", gap:5,
+                fontFamily:sans, fontSize:F.xs, color:T.dim }}>
+              <span style={{ color:PLAT_COLOR[item.platform], fontSize:10 }}>{PLAT_ICON[item.platform]}</span>
+              <span style={{ fontSize:11 }}>{IX_ICON[type]||"•"}</span>
+              <span style={{ color:T.sub }}>{type}</span>
+              {item.content && (
+                <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
+                  flex:1, color:T.dim }}>· {item.content}</span>
+              )}
+            </div>
+          ))
         )}
       </div>
-      <span style={{ background:zc.bg, color:zc.color, border:`1px solid ${zc.border}`,
-        borderRadius:4, padding:"1px 6px", fontSize:9, fontWeight:700,
-        fontFamily:sans, flexShrink:0, letterSpacing:"0.04em" }}>
-        {item.zone}
-      </span>
     </div>
   );
 }
 
-// ── Profile detail panel ───────────────────────────────────────────────────────
-function ProfilePanel({ item, idx, total, onUpdate, onRemove, onPrev, onNext }) {
-  const zc   = ZC[item.zone] || ZC.SIGNAL;
-  const plat = item.platform || "instagram";
-  const profileUrl = PLAT_URL[plat]?.(item.handle);
+// ── Profile preview (right panel — Microlink screenshot) ──────────────────────
+function ProfilePreview({ group, idx, total, onUpdateZone, onRemoveGroup, onPrev, onNext }) {
+  const primaryItem = group.items[0];
+  const zone = primaryItem?.zone || "SIGNAL";
+  const zc   = ZC[zone] || ZC.SIGNAL;
+  const platforms = [...new Set(group.items.map(i=>i.platform).filter(Boolean))];
+  const [activePlat, setActivePlat] = useState(primaryItem?.platform || "instagram");
+  const [imgState,   setImgState]   = useState("loading"); // loading | loaded | error
 
-  const field = (label, key, type = "text", placeholder = "") => (
-    <div style={{ marginBottom:12 }}>
-      <div style={{ fontFamily:sans, fontSize:F.xs, color:T.dim, fontWeight:600,
-        textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:5 }}>{label}</div>
-      <input
-        type={type}
-        value={item[key] ?? ""}
-        placeholder={placeholder}
-        onChange={e => onUpdate(key, type === "number" ? (parseInt(e.target.value)||null) : e.target.value)}
-        style={{ background:T.well, border:`1px solid ${T.border}`, color:T.text,
-          borderRadius:8, padding:"7px 11px", fontFamily:sans, fontSize:F.sm,
-          outline:"none", width:"100%", boxSizing:"border-box" }} />
-    </div>
-  );
+  useEffect(() => {
+    setActivePlat(group.items[0]?.platform || "instagram");
+    setImgState("loading");
+  }, [group.key]);
+
+  const profileUrl   = PLAT_URL[activePlat]?.(group.key);
+  const screenshotSrc = profileUrl
+    ? `https://api.microlink.io/?url=${encodeURIComponent(profileUrl)}&screenshot=true&meta=false&embed=screenshot.url&viewport.width=390&viewport.height=844&waitFor=2000`
+    : null;
 
   return (
     <div style={{ display:"flex", flexDirection:"column", height:"100%" }}>
-      {/* Nav header */}
+
+      {/* Nav + zone + remove header */}
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
-        padding:"12px 18px", borderBottom:`1px solid ${T.border}`, flexShrink:0 }}>
-        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-          <button onClick={onPrev} disabled={idx === 0}
-            title="Previous (↑)"
-            style={{ background:"none", border:`1px solid ${T.border}`, color: idx===0 ? T.dim : T.sub,
-              borderRadius:6, width:26, height:26, cursor: idx===0 ? "default" : "pointer",
-              fontFamily:sans, fontSize:13, display:"flex", alignItems:"center", justifyContent:"center" }}>↑</button>
-          <button onClick={onNext} disabled={idx === total - 1}
-            title="Next (↓)"
-            style={{ background:"none", border:`1px solid ${T.border}`, color: idx===total-1 ? T.dim : T.sub,
-              borderRadius:6, width:26, height:26, cursor: idx===total-1 ? "default" : "pointer",
-              fontFamily:sans, fontSize:13, display:"flex", alignItems:"center", justifyContent:"center" }}>↓</button>
+        padding:"10px 14px", borderBottom:`1px solid ${T.border}`, flexShrink:0, gap:8 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+          <button onClick={onPrev} disabled={idx===0} title="↑ Previous"
+            style={{ background:"none", border:`1px solid ${T.border}`,
+              color:idx===0?T.dim:T.sub, borderRadius:6, width:26, height:26,
+              cursor:idx===0?"default":"pointer", display:"flex", alignItems:"center",
+              justifyContent:"center", fontSize:13 }}>↑</button>
+          <button onClick={onNext} disabled={idx===total-1} title="↓ Next"
+            style={{ background:"none", border:`1px solid ${T.border}`,
+              color:idx===total-1?T.dim:T.sub, borderRadius:6, width:26, height:26,
+              cursor:idx===total-1?"default":"pointer", display:"flex", alignItems:"center",
+              justifyContent:"center", fontSize:13 }}>↓</button>
           <span style={{ fontFamily:sans, fontSize:F.xs, color:T.dim }}>{idx+1} / {total}</span>
         </div>
-        <button onClick={onRemove}
+        {/* Zone pills */}
+        <div style={{ display:"flex", gap:3 }}>
+          {Object.entries(ZC).map(([z,zc2])=>(
+            <button key={z} onClick={()=>onUpdateZone(z)}
+              style={{ padding:"3px 7px", fontFamily:sans, fontSize:9, fontWeight:700,
+                letterSpacing:"0.04em", cursor:"pointer", borderRadius:5,
+                border:`1px solid ${zone===z?zc2.border:T.border}`,
+                background:zone===z?zc2.bg:"transparent",
+                color:zone===z?zc2.color:T.dim, transition:"all 0.1s" }}>
+              {z}
+            </button>
+          ))}
+        </div>
+        <button onClick={onRemoveGroup}
           style={{ background:"none", border:`1px solid ${T.red}44`, color:T.red,
-            borderRadius:7, padding:"3px 12px", fontFamily:sans, fontSize:F.xs,
-            fontWeight:600, cursor:"pointer" }}>Remove</button>
+            borderRadius:6, padding:"3px 10px", fontFamily:sans, fontSize:F.xs,
+            fontWeight:600, cursor:"pointer", flexShrink:0 }}>Remove</button>
       </div>
 
-      {/* Scrollable body */}
-      <div style={{ flex:1, overflowY:"auto", padding:"20px 18px" }}>
-        {/* Identity */}
-        <div style={{ display:"flex", alignItems:"flex-start", gap:12, marginBottom:20 }}>
-          {item.avatar_url ? (
-            <img src={item.avatar_url} alt="" style={{ width:48, height:48,
-              borderRadius:"50%", objectFit:"cover", flexShrink:0 }} />
-          ) : (
-            <div style={{ width:48, height:48, borderRadius:"50%", background:T.well,
-              border:`1px solid ${T.border}`, display:"flex", alignItems:"center",
-              justifyContent:"center", flexShrink:0, fontSize:18, color:PLAT_COLOR[plat] }}>
-              {PLAT_ICON[plat]}
-            </div>
-          )}
+      {/* Platform tabs */}
+      {platforms.length > 1 && (
+        <div style={{ display:"flex", borderBottom:`1px solid ${T.border}`, flexShrink:0 }}>
+          {platforms.map(p=>(
+            <button key={p} onClick={()=>{ setActivePlat(p); setImgState("loading"); }}
+              style={{ flex:1, padding:"7px 0", background:activePlat===p?T.well:"transparent",
+                border:"none", borderBottom:`2px solid ${activePlat===p?PLAT_COLOR[p]:"transparent"}`,
+                color:activePlat===p?PLAT_COLOR[p]:T.dim, cursor:"pointer",
+                fontFamily:sans, fontSize:F.xs, fontWeight:700,
+                display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}>
+              {PLAT_ICON[p]} {p}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Body: profile bar + screenshot + interactions */}
+      <div style={{ flex:1, overflowY:"auto", padding:"14px 16px",
+        display:"flex", flexDirection:"column", gap:12 }}>
+
+        {/* Profile identity bar */}
+        <div style={{ display:"flex", alignItems:"center", gap:10,
+          background:T.well, borderRadius:10, padding:"10px 14px" }}>
+          <div style={{ width:34, height:34, borderRadius:"50%", flexShrink:0,
+            background:zc.bg, border:`1px solid ${zc.border}`,
+            display:"flex", alignItems:"center", justifyContent:"center",
+            fontSize:14, fontWeight:800, color:zc.color, fontFamily:sans }}>
+            {(group.name||group.key||"?")[0].toUpperCase()}
+          </div>
           <div style={{ flex:1, minWidth:0 }}>
-            <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap", marginBottom:4 }}>
-              <a href={profileUrl} target="_blank" rel="noreferrer"
-                style={{ fontFamily:sans, fontSize:F.md, fontWeight:700, color:T.text,
-                  textDecoration:"none" }}
-                onMouseEnter={e=>e.currentTarget.style.color=T.accent}
-                onMouseLeave={e=>e.currentTarget.style.color=T.text}>
-                @{item.handle}
-              </a>
-              {item.verified && <span style={{ color:"#1D9BF0", fontSize:12 }}>✓</span>}
-              {item._wikiBio && (
-                <span title="Bio sourced from Wikipedia"
-                  style={{ fontSize:9, color:T.blue, background:T.blueBg,
-                    border:`1px solid ${T.blue}30`, borderRadius:4,
-                    padding:"2px 6px", fontFamily:sans, fontWeight:700 }}>WIKI</span>
-              )}
+            <div style={{ fontFamily:sans, fontSize:F.sm, fontWeight:700, color:T.text,
+              overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+              {group.name || `@${group.key}`}
             </div>
-            {item.name && item.name !== item.handle && (
-              <div style={{ fontFamily:sans, fontSize:F.sm, color:T.sub }}>{item.name}</div>
+            {primaryItem?.followers && (
+              <div style={{ fontFamily:sans, fontSize:F.xs, color:T.dim }}>
+                {fmt(primaryItem.followers)} followers · {activePlat}
+              </div>
             )}
-            {item.followers && (
-              <div style={{ fontFamily:sans, fontSize:F.xs, color:T.dim, marginTop:2 }}>
-                {fmt(item.followers)} followers
+            {group.bio && (
+              <div style={{ fontFamily:sans, fontSize:F.xs, color:T.dim, marginTop:2,
+                overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                {group.bio}
+              </div>
+            )}
+          </div>
+          <a href={profileUrl} target="_blank" rel="noreferrer"
+            style={{ background:T.card, border:`1px solid ${T.border}`, color:T.sub,
+              borderRadius:7, padding:"5px 10px", fontFamily:sans, fontSize:F.xs,
+              fontWeight:600, textDecoration:"none", flexShrink:0,
+              display:"flex", alignItems:"center", gap:4 }}
+            onMouseEnter={e=>e.currentTarget.style.color=T.text}
+            onMouseLeave={e=>e.currentTarget.style.color=T.sub}>
+            <span style={{ color:PLAT_COLOR[activePlat] }}>{PLAT_ICON[activePlat]}</span> Open ↗
+          </a>
+        </div>
+
+        {/* Screenshot window */}
+        <div style={{ flex:1, minHeight:320, borderRadius:14, overflow:"hidden",
+          border:`1px solid ${T.border}`, background:T.well, position:"relative",
+          display:"flex", alignItems:"center", justifyContent:"center" }}>
+
+          {/* Browser chrome bar */}
+          <div style={{ position:"absolute", top:0, left:0, right:0,
+            background:"#1E2028", borderBottom:`1px solid ${T.border}`,
+            padding:"7px 12px", display:"flex", alignItems:"center", gap:8, zIndex:2 }}>
+            <div style={{ display:"flex", gap:5 }}>
+              {["#FF5F57","#FEBC2E","#28C840"].map(c=>(
+                <div key={c} style={{ width:10, height:10, borderRadius:"50%", background:c }} />
+              ))}
+            </div>
+            <div style={{ flex:1, background:"#13141A", borderRadius:6, padding:"3px 10px",
+              fontFamily:sans, fontSize:10, color:T.dim, overflow:"hidden",
+              textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+              {profileUrl}
+            </div>
+          </div>
+
+          {/* Screenshot image */}
+          <div style={{ position:"absolute", inset:0, top:32, overflow:"hidden" }}>
+            {screenshotSrc && (
+              <img
+                key={screenshotSrc}
+                src={screenshotSrc}
+                alt={`${group.key} on ${activePlat}`}
+                onLoad={()=>setImgState("loaded")}
+                onError={()=>setImgState("error")}
+                style={{ width:"100%", height:"100%", objectFit:"cover",
+                  objectPosition:"top", display:imgState==="loaded"?"block":"none" }}
+              />
+            )}
+            {imgState==="loading" && (
+              <div style={{ height:"100%", display:"flex", flexDirection:"column",
+                alignItems:"center", justifyContent:"center", gap:10,
+                color:T.dim, fontFamily:sans, fontSize:F.xs }}>
+                <div style={{ width:24, height:24, border:`2px solid ${T.border}`,
+                  borderTopColor:T.accent, borderRadius:"50%",
+                  animation:"spin 0.8s linear infinite" }} />
+                Loading {activePlat} profile…
+              </div>
+            )}
+            {imgState==="error" && (
+              <div style={{ height:"100%", display:"flex", flexDirection:"column",
+                alignItems:"center", justifyContent:"center", gap:8,
+                color:T.dim, fontFamily:sans }}>
+                <span style={{ fontSize:28 }}>{PLAT_ICON[activePlat]}</span>
+                <span style={{ fontSize:F.xs }}>Preview unavailable</span>
+                <a href={profileUrl} target="_blank" rel="noreferrer"
+                  style={{ color:PLAT_COLOR[activePlat], fontSize:F.xs,
+                    fontWeight:700, textDecoration:"none" }}>
+                  Open on {activePlat} ↗
+                </a>
               </div>
             )}
           </div>
         </div>
 
-        {/* Zone selector */}
-        <div style={{ marginBottom:16 }}>
-          <div style={{ fontFamily:sans, fontSize:F.xs, color:T.dim, fontWeight:600,
-            textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:7 }}>List</div>
-          <div style={{ display:"flex", gap:6 }}>
-            {Object.entries(ZC).map(([z, zc2]) => (
-              <button key={z} onClick={() => onUpdate("zone", z)}
-                style={{ flex:1, padding:"6px 0", fontFamily:sans, fontSize:F.xs,
-                  fontWeight:700, letterSpacing:"0.04em", cursor:"pointer",
-                  borderRadius:7, border:`1px solid ${item.zone===z ? zc2.border : T.border}`,
-                  background: item.zone===z ? zc2.bg : T.well,
-                  color: item.zone===z ? zc2.color : T.dim,
-                  transition:"all 0.1s" }}>
-                {z}
-              </button>
-            ))}
+        {/* Interactions being imported */}
+        <div style={{ background:T.well, borderRadius:10, padding:"10px 14px", flexShrink:0 }}>
+          <div style={{ fontFamily:sans, fontSize:F.xs, color:T.dim, fontWeight:700,
+            textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:7 }}>
+            Importing
           </div>
+          {group.items.flatMap(item=>
+            (item.interaction_type||"unknown").split(",").filter(Boolean).map((type,ti)=>(
+              <div key={`${item._id}-${ti}`}
+                style={{ display:"flex", alignItems:"center", gap:8, padding:"5px 0",
+                  borderBottom:`1px solid ${T.border}`, fontFamily:sans, fontSize:F.xs }}>
+                <span style={{ color:PLAT_COLOR[item.platform] }}>{PLAT_ICON[item.platform]}</span>
+                <span style={{ fontSize:12 }}>{IX_ICON[type]||"•"}</span>
+                <span style={{ color:T.sub, textTransform:"capitalize", minWidth:60 }}>{type}</span>
+                {item.content && (
+                  <span style={{ color:T.dim, overflow:"hidden", textOverflow:"ellipsis",
+                    whiteSpace:"nowrap", flex:1 }}>"{item.content}"</span>
+                )}
+                {item.interacted_at && (
+                  <span style={{ color:T.dim, flexShrink:0 }}>{fmtDate(item.interacted_at)}</span>
+                )}
+              </div>
+            ))
+          )}
         </div>
-
-        {/* Interaction type + source */}
-        {(item.interaction_type || item._source) && (
-          <div style={{ display:"flex", gap:8, marginBottom:16, flexWrap:"wrap" }}>
-            {item.interaction_type && (
-              <span style={{ background:T.well, color:T.sub, border:`1px solid ${T.border}`,
-                borderRadius:6, padding:"3px 10px", fontSize:F.xs, fontFamily:sans }}>
-                {IX_ICON[item.interaction_type] || "•"} {item.interaction_type}
-              </span>
-            )}
-            {item._source && (
-              <span style={{ background:T.well, color:T.dim, border:`1px solid ${T.border}`,
-                borderRadius:6, padding:"3px 10px", fontSize:F.xs, fontFamily:sans,
-                overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:180 }}
-                title={item._source}>
-                {item._source}
-              </span>
-            )}
-          </div>
-        )}
-
-        {/* Content */}
-        {item.content && (
-          <div style={{ background:T.well, border:`1px solid ${T.border}`, borderRadius:9,
-            padding:"10px 12px", marginBottom:16, fontFamily:sans, fontSize:F.xs,
-            color:T.sub, lineHeight:1.5 }}>
-            "{item.content}"
-          </div>
-        )}
-
-        {/* Editable fields */}
-        {field("Name", "name", "text", "Display name")}
-        {field("Followers", "followers", "number", "125000")}
-        <div style={{ marginBottom:12 }}>
-          <div style={{ fontFamily:sans, fontSize:F.xs, color:T.dim, fontWeight:600,
-            textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:5 }}>Bio</div>
-          <textarea
-            value={item.bio ?? ""}
-            placeholder="Short bio…"
-            onChange={e => onUpdate("bio", e.target.value)}
-            rows={3}
-            style={{ background:T.well, border:`1px solid ${T.border}`, color:T.text,
-              borderRadius:8, padding:"7px 11px", fontFamily:sans, fontSize:F.sm,
-              outline:"none", width:"100%", resize:"vertical", boxSizing:"border-box",
-              lineHeight:1.5 }} />
-        </div>
-
-        {/* External link */}
-        <a href={profileUrl} target="_blank" rel="noreferrer"
-          style={{ display:"inline-flex", alignItems:"center", gap:6,
-            color:PLAT_COLOR[plat], fontFamily:sans, fontSize:F.xs,
-            fontWeight:600, textDecoration:"none", opacity:0.8 }}
-          onMouseEnter={e=>e.currentTarget.style.opacity="1"}
-          onMouseLeave={e=>e.currentTarget.style.opacity="0.8"}>
-          <span style={{ fontSize:12 }}>{PLAT_ICON[plat]}</span>
-          View on {plat}
-          <span style={{ fontSize:10 }}>↗</span>
-        </a>
       </div>
     </div>
   );
@@ -499,9 +586,23 @@ export default function InteractionsPage() {
     z==="ALL"?items.length:items.filter(i=>i.zone===z).length]));
   const filteredStaging=filterZone==="ALL"?items:items.filter(i=>i.zone===filterZone);
 
+  // Group filteredStaging by handle for the person-card view
+  const personGroups = (() => {
+    const map = new Map();
+    for (const item of filteredStaging) {
+      const key = (item.handle||"").toLowerCase().replace(/^@/,"");
+      if (!map.has(key)) map.set(key, { key, name:item.name, bio:item.bio, items:[] });
+      const g = map.get(key);
+      if (item.name && !g.name) g.name = item.name;
+      if (item.bio  && !g.bio)  g.bio  = item.bio;
+      g.items.push(item);
+    }
+    return Array.from(map.values());
+  })();
+
   // Clamp selectedIdx when items change
   useEffect(() => {
-    setSelectedIdx(i => Math.min(i, Math.max(0, filteredStaging.length - 1)));
+    setSelectedIdx(i => Math.min(i, Math.max(0, personGroups.length - 1)));
   }, [items, filterZone]);
 
   // Keyboard navigation for staging queue
@@ -509,13 +610,13 @@ export default function InteractionsPage() {
   const rowRefs = useRef({});
   useEffect(() => {
     function onKey(e) {
-      if (!filteredStaging.length) return;
+      if (!personGroups.length) return;
       // Don't hijack when user is typing in an input/textarea
       if (["INPUT","TEXTAREA","SELECT"].includes(e.target.tagName)) return;
       if (e.key === "ArrowDown") {
         e.preventDefault();
         setSelectedIdx(i => {
-          const next = Math.min(i + 1, filteredStaging.length - 1);
+          const next = Math.min(i + 1, personGroups.length - 1);
           rowRefs.current[next]?.scrollIntoView({ block:"nearest" });
           return next;
         });
@@ -527,13 +628,13 @@ export default function InteractionsPage() {
           return prev;
         });
       } else if (e.key === "Backspace" || e.key === "Delete") {
-        const item = filteredStaging[selectedIdx];
-        if (item) setItems(prev => prev.filter(i => i._id !== item._id));
+        const group = personGroups[selectedIdx];
+        if (group) setItems(prev => prev.filter(i => (i.handle||"").toLowerCase().replace(/^@/,"") !== group.key));
       }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [filteredStaging, selectedIdx]);
+  }, [personGroups, selectedIdx]);
 
   const autofill = item => {
     const h = (item.handle||"").toLowerCase().replace(/^@/,"");
@@ -722,6 +823,14 @@ export default function InteractionsPage() {
     return n;
   }));
 
+  const updateGroupZone = (handle, zone) => setItems(prev=>prev.map(i=>
+    (i.handle||"").toLowerCase().replace(/^@/,"")===handle ? {...i, zone} : i
+  ));
+
+  const removeGroup = (handle) => setItems(prev=>
+    prev.filter(i=>(i.handle||"").toLowerCase().replace(/^@/,"")!==handle)
+  );
+
   // Saved interactions filtering
   const savedCounts=Object.fromEntries(ZONES.map(z=>[z,
     z==="ALL"?saved.length:saved.filter(i=>i.zone===z).length]));
@@ -735,7 +844,7 @@ export default function InteractionsPage() {
 
   return (
     <div style={{ minHeight:"100vh", background:T.bg, fontFamily:sans, padding:"36px 40px" }}>
-      <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.35}}*{box-sizing:border-box}
+      <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.35}}@keyframes spin{to{transform:rotate(360deg)}}*{box-sizing:border-box}
         ::-webkit-scrollbar{width:5px}::-webkit-scrollbar-thumb{background:#2A2D38;border-radius:3px}
         input::placeholder{color:${T.dim}}`}</style>
 
@@ -854,55 +963,54 @@ export default function InteractionsPage() {
             </div>
           </div>
 
-          {/* Split pane */}
-          <div style={{ display:"flex", background:T.card,
-            border:`1px solid ${T.border}`, borderRadius:14, overflow:"hidden",
-            height:480 }}>
+          {/* Split pane: person cards left, profile screenshot right */}
+          <div style={{ display:"flex", flexDirection:"column" }}>
+            {/* Wide: side-by-side. Narrow: stacked */}
+            <div style={{ display:"flex", flexWrap:"wrap", background:T.card,
+              border:`1px solid ${T.border}`, borderRadius:14, overflow:"hidden", minHeight:560 }}>
 
-            {/* Left: scrollable list */}
-            <div ref={listRef} style={{ width:260, flexShrink:0, overflowY:"auto",
-              borderRight:`1px solid ${T.border}` }}>
-              {filteredStaging.map((item, idx) => (
-                <StagingRow
-                  key={item._id}
-                  item={item}
-                  selected={idx === selectedIdx}
-                  onClick={() => setSelectedIdx(idx)}
-                  rowRef={el => rowRefs.current[idx] = el}
-                />
-              ))}
+              {/* Left — person cards */}
+              <div ref={listRef} style={{ width:300, minWidth:260, flexShrink:0,
+                overflowY:"auto", borderRight:`1px solid ${T.border}`, maxHeight:560 }}>
+                {personGroups.map((group, gi) => (
+                  <PersonCard
+                    key={group.key}
+                    group={group}
+                    selected={gi === selectedIdx}
+                    onClick={() => setSelectedIdx(gi)}
+                    cardRef={el => rowRefs.current[gi] = el}
+                  />
+                ))}
+              </div>
+
+              {/* Right — profile preview */}
+              {personGroups[selectedIdx] ? (
+                <div style={{ flex:1, minWidth:300, minHeight:460 }}>
+                  <ProfilePreview
+                    group={personGroups[selectedIdx]}
+                    idx={selectedIdx}
+                    total={personGroups.length}
+                    onUpdateZone={z => updateGroupZone(personGroups[selectedIdx].key, z)}
+                    onRemoveGroup={() => removeGroup(personGroups[selectedIdx].key)}
+                    onPrev={() => {
+                      const p = Math.max(selectedIdx-1, 0);
+                      setSelectedIdx(p);
+                      rowRefs.current[p]?.scrollIntoView({ block:"nearest" });
+                    }}
+                    onNext={() => {
+                      const n = Math.min(selectedIdx+1, personGroups.length-1);
+                      setSelectedIdx(n);
+                      rowRefs.current[n]?.scrollIntoView({ block:"nearest" });
+                    }}
+                  />
+                </div>
+              ) : (
+                <div style={{ flex:1, display:"flex", alignItems:"center",
+                  justifyContent:"center", color:T.dim, fontFamily:sans, fontSize:F.sm }}>
+                  No profiles to review
+                </div>
+              )}
             </div>
-
-            {/* Right: detail panel */}
-            {filteredStaging[selectedIdx] ? (
-              <div style={{ flex:1, minWidth:0 }}>
-                <ProfilePanel
-                  item={filteredStaging[selectedIdx]}
-                  idx={selectedIdx}
-                  total={filteredStaging.length}
-                  onUpdate={(k,v) => updateItem(filteredStaging[selectedIdx]._id, k, v)}
-                  onRemove={() => {
-                    const id = filteredStaging[selectedIdx]._id;
-                    setItems(prev => prev.filter(i => i._id !== id));
-                  }}
-                  onPrev={() => {
-                    const prev = Math.max(selectedIdx - 1, 0);
-                    setSelectedIdx(prev);
-                    rowRefs.current[prev]?.scrollIntoView({ block:"nearest" });
-                  }}
-                  onNext={() => {
-                    const next = Math.min(selectedIdx + 1, filteredStaging.length - 1);
-                    setSelectedIdx(next);
-                    rowRefs.current[next]?.scrollIntoView({ block:"nearest" });
-                  }}
-                />
-              </div>
-            ) : (
-              <div style={{ flex:1, display:"flex", alignItems:"center",
-                justifyContent:"center", color:T.dim, fontFamily:sans, fontSize:F.sm }}>
-                Select a profile to review
-              </div>
-            )}
           </div>
         </div>
       )}
