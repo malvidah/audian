@@ -183,60 +183,202 @@ function ManualPanel({ onAdd, onClose }) {
   );
 }
 
-// ── Staging card (pre-save) ────────────────────────────────────────────────────
-function StagingCard({ item, onUpdate, onRemove }) {
-  const zc = ZC[item.zone] || ZC.SIGNAL;
+// ── Staging row (compact list item in split-pane) ─────────────────────────────
+function StagingRow({ item, selected, onClick, rowRef }) {
+  const zc   = ZC[item.zone] || ZC.SIGNAL;
   const plat = item.platform || "instagram";
   return (
-    <div style={{ background:T.card, borderRadius:12, border:`1px solid ${T.border}`,
-      borderTop:`2px solid ${zc.color}`, padding:"12px 14px" }}>
-      <div style={{ display:"flex", alignItems:"flex-start",
-        justifyContent:"space-between", gap:8, marginBottom:4 }}>
-        <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
-          <span style={{ fontSize:12, color:PLAT_COLOR[plat] }}>{PLAT_ICON[plat]}</span>
-          <a href={PLAT_URL[plat]?.(item.handle)} target="_blank" rel="noreferrer"
-            style={{ fontFamily:sans, fontSize:F.sm, fontWeight:700, color:T.text, textDecoration:"none" }}
-            onMouseEnter={e=>e.currentTarget.style.color=T.accent}
-            onMouseLeave={e=>e.currentTarget.style.color=T.text}>
-            @{item.handle}
-          </a>
-          {item.verified && <span style={{ color:"#1D9BF0", fontSize:11 }}>✓</span>}
-          <span style={{ background:zc.bg, color:zc.color, border:`1px solid ${zc.border}`,
-            borderRadius:5, padding:"2px 8px", fontSize:10, fontWeight:700, fontFamily:sans }}>
-            {item.zone}
-          </span>
-          {item.interaction_type && (
-            <span style={{ background:T.well, color:T.sub, border:`1px solid ${T.border}`,
-              borderRadius:5, padding:"2px 8px", fontSize:10, fontFamily:sans }}>
-              {IX_ICON[item.interaction_type] || ""} {item.interaction_type}
-            </span>
-          )}
-          {item._wikiBio && <span title="Bio from Wikipedia"
-            style={{ fontSize:9, color:T.blue, background:T.blueBg,
-              border:`1px solid ${T.blue}30`, borderRadius:4, padding:"1px 5px", fontFamily:sans }}>W</span>}
+    <div ref={rowRef} onClick={onClick}
+      style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 14px",
+        borderBottom:`1px solid ${T.border}`,
+        background: selected ? T.well : "transparent",
+        borderLeft: `3px solid ${selected ? zc.color : "transparent"}`,
+        cursor:"pointer", transition:"background 0.1s" }}>
+      <span style={{ fontSize:11, color:PLAT_COLOR[plat], flexShrink:0 }}>{PLAT_ICON[plat]}</span>
+      <div style={{ flex:1, minWidth:0 }}>
+        <div style={{ fontFamily:sans, fontSize:F.sm, fontWeight:600,
+          color: selected ? T.text : T.sub,
+          overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+          @{item.handle}
+          {item.verified && <span style={{ color:"#1D9BF0", fontSize:10, marginLeft:4 }}>✓</span>}
         </div>
-        <div style={{ display:"flex", gap:5, flexShrink:0 }}>
-          {item.zone !== "ELITE" && (
-            <button onClick={() => onUpdate("zone","ELITE")}
-              style={{ background:"none", border:`1px solid ${T.purple}44`, color:T.purple,
-                borderRadius:6, padding:"2px 8px", fontSize:11, cursor:"pointer",
-                fontFamily:sans, fontWeight:600 }}>★</button>
-          )}
-          <button onClick={onRemove}
-            style={{ background:"none", border:"none", color:T.dim,
-              cursor:"pointer", fontSize:17, lineHeight:1 }}
-            onMouseEnter={e=>e.currentTarget.style.color=T.red}
-            onMouseLeave={e=>e.currentTarget.style.color=T.dim}>×</button>
-        </div>
+        {item.followers && (
+          <div style={{ fontFamily:sans, fontSize:F.xs, color:T.dim }}>{fmt(item.followers)} followers</div>
+        )}
       </div>
-      {(item.name && item.name !== item.handle || item.followers) && (
-        <div style={{ fontFamily:sans, fontSize:F.xs, color:T.sub, display:"flex", gap:8 }}>
-          {item.name && item.name !== item.handle && <span>{item.name}</span>}
-          {item.followers && <span style={{ color:T.dim }}>{fmt(item.followers)} followers</span>}
+      <span style={{ background:zc.bg, color:zc.color, border:`1px solid ${zc.border}`,
+        borderRadius:4, padding:"1px 6px", fontSize:9, fontWeight:700,
+        fontFamily:sans, flexShrink:0, letterSpacing:"0.04em" }}>
+        {item.zone}
+      </span>
+    </div>
+  );
+}
+
+// ── Profile detail panel ───────────────────────────────────────────────────────
+function ProfilePanel({ item, idx, total, onUpdate, onRemove, onPrev, onNext }) {
+  const zc   = ZC[item.zone] || ZC.SIGNAL;
+  const plat = item.platform || "instagram";
+  const profileUrl = PLAT_URL[plat]?.(item.handle);
+
+  const field = (label, key, type = "text", placeholder = "") => (
+    <div style={{ marginBottom:12 }}>
+      <div style={{ fontFamily:sans, fontSize:F.xs, color:T.dim, fontWeight:600,
+        textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:5 }}>{label}</div>
+      <input
+        type={type}
+        value={item[key] ?? ""}
+        placeholder={placeholder}
+        onChange={e => onUpdate(key, type === "number" ? (parseInt(e.target.value)||null) : e.target.value)}
+        style={{ background:T.well, border:`1px solid ${T.border}`, color:T.text,
+          borderRadius:8, padding:"7px 11px", fontFamily:sans, fontSize:F.sm,
+          outline:"none", width:"100%", boxSizing:"border-box" }} />
+    </div>
+  );
+
+  return (
+    <div style={{ display:"flex", flexDirection:"column", height:"100%" }}>
+      {/* Nav header */}
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
+        padding:"12px 18px", borderBottom:`1px solid ${T.border}`, flexShrink:0 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          <button onClick={onPrev} disabled={idx === 0}
+            title="Previous (↑)"
+            style={{ background:"none", border:`1px solid ${T.border}`, color: idx===0 ? T.dim : T.sub,
+              borderRadius:6, width:26, height:26, cursor: idx===0 ? "default" : "pointer",
+              fontFamily:sans, fontSize:13, display:"flex", alignItems:"center", justifyContent:"center" }}>↑</button>
+          <button onClick={onNext} disabled={idx === total - 1}
+            title="Next (↓)"
+            style={{ background:"none", border:`1px solid ${T.border}`, color: idx===total-1 ? T.dim : T.sub,
+              borderRadius:6, width:26, height:26, cursor: idx===total-1 ? "default" : "pointer",
+              fontFamily:sans, fontSize:13, display:"flex", alignItems:"center", justifyContent:"center" }}>↓</button>
+          <span style={{ fontFamily:sans, fontSize:F.xs, color:T.dim }}>{idx+1} / {total}</span>
         </div>
-      )}
-      {item.bio && <div style={{ fontFamily:sans, fontSize:F.xs, color:T.dim,
-        overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", marginTop:2 }}>{item.bio}</div>}
+        <button onClick={onRemove}
+          style={{ background:"none", border:`1px solid ${T.red}44`, color:T.red,
+            borderRadius:7, padding:"3px 12px", fontFamily:sans, fontSize:F.xs,
+            fontWeight:600, cursor:"pointer" }}>Remove</button>
+      </div>
+
+      {/* Scrollable body */}
+      <div style={{ flex:1, overflowY:"auto", padding:"20px 18px" }}>
+        {/* Identity */}
+        <div style={{ display:"flex", alignItems:"flex-start", gap:12, marginBottom:20 }}>
+          {item.avatar_url ? (
+            <img src={item.avatar_url} alt="" style={{ width:48, height:48,
+              borderRadius:"50%", objectFit:"cover", flexShrink:0 }} />
+          ) : (
+            <div style={{ width:48, height:48, borderRadius:"50%", background:T.well,
+              border:`1px solid ${T.border}`, display:"flex", alignItems:"center",
+              justifyContent:"center", flexShrink:0, fontSize:18, color:PLAT_COLOR[plat] }}>
+              {PLAT_ICON[plat]}
+            </div>
+          )}
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap", marginBottom:4 }}>
+              <a href={profileUrl} target="_blank" rel="noreferrer"
+                style={{ fontFamily:sans, fontSize:F.md, fontWeight:700, color:T.text,
+                  textDecoration:"none" }}
+                onMouseEnter={e=>e.currentTarget.style.color=T.accent}
+                onMouseLeave={e=>e.currentTarget.style.color=T.text}>
+                @{item.handle}
+              </a>
+              {item.verified && <span style={{ color:"#1D9BF0", fontSize:12 }}>✓</span>}
+              {item._wikiBio && (
+                <span title="Bio sourced from Wikipedia"
+                  style={{ fontSize:9, color:T.blue, background:T.blueBg,
+                    border:`1px solid ${T.blue}30`, borderRadius:4,
+                    padding:"2px 6px", fontFamily:sans, fontWeight:700 }}>WIKI</span>
+              )}
+            </div>
+            {item.name && item.name !== item.handle && (
+              <div style={{ fontFamily:sans, fontSize:F.sm, color:T.sub }}>{item.name}</div>
+            )}
+            {item.followers && (
+              <div style={{ fontFamily:sans, fontSize:F.xs, color:T.dim, marginTop:2 }}>
+                {fmt(item.followers)} followers
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Zone selector */}
+        <div style={{ marginBottom:16 }}>
+          <div style={{ fontFamily:sans, fontSize:F.xs, color:T.dim, fontWeight:600,
+            textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:7 }}>List</div>
+          <div style={{ display:"flex", gap:6 }}>
+            {Object.entries(ZC).map(([z, zc2]) => (
+              <button key={z} onClick={() => onUpdate("zone", z)}
+                style={{ flex:1, padding:"6px 0", fontFamily:sans, fontSize:F.xs,
+                  fontWeight:700, letterSpacing:"0.04em", cursor:"pointer",
+                  borderRadius:7, border:`1px solid ${item.zone===z ? zc2.border : T.border}`,
+                  background: item.zone===z ? zc2.bg : T.well,
+                  color: item.zone===z ? zc2.color : T.dim,
+                  transition:"all 0.1s" }}>
+                {z}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Interaction type + source */}
+        {(item.interaction_type || item._source) && (
+          <div style={{ display:"flex", gap:8, marginBottom:16, flexWrap:"wrap" }}>
+            {item.interaction_type && (
+              <span style={{ background:T.well, color:T.sub, border:`1px solid ${T.border}`,
+                borderRadius:6, padding:"3px 10px", fontSize:F.xs, fontFamily:sans }}>
+                {IX_ICON[item.interaction_type] || "•"} {item.interaction_type}
+              </span>
+            )}
+            {item._source && (
+              <span style={{ background:T.well, color:T.dim, border:`1px solid ${T.border}`,
+                borderRadius:6, padding:"3px 10px", fontSize:F.xs, fontFamily:sans,
+                overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:180 }}
+                title={item._source}>
+                {item._source}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Content */}
+        {item.content && (
+          <div style={{ background:T.well, border:`1px solid ${T.border}`, borderRadius:9,
+            padding:"10px 12px", marginBottom:16, fontFamily:sans, fontSize:F.xs,
+            color:T.sub, lineHeight:1.5 }}>
+            "{item.content}"
+          </div>
+        )}
+
+        {/* Editable fields */}
+        {field("Name", "name", "text", "Display name")}
+        {field("Followers", "followers", "number", "125000")}
+        <div style={{ marginBottom:12 }}>
+          <div style={{ fontFamily:sans, fontSize:F.xs, color:T.dim, fontWeight:600,
+            textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:5 }}>Bio</div>
+          <textarea
+            value={item.bio ?? ""}
+            placeholder="Short bio…"
+            onChange={e => onUpdate("bio", e.target.value)}
+            rows={3}
+            style={{ background:T.well, border:`1px solid ${T.border}`, color:T.text,
+              borderRadius:8, padding:"7px 11px", fontFamily:sans, fontSize:F.sm,
+              outline:"none", width:"100%", resize:"vertical", boxSizing:"border-box",
+              lineHeight:1.5 }} />
+        </div>
+
+        {/* External link */}
+        <a href={profileUrl} target="_blank" rel="noreferrer"
+          style={{ display:"inline-flex", alignItems:"center", gap:6,
+            color:PLAT_COLOR[plat], fontFamily:sans, fontSize:F.xs,
+            fontWeight:600, textDecoration:"none", opacity:0.8 }}
+          onMouseEnter={e=>e.currentTarget.style.opacity="1"}
+          onMouseLeave={e=>e.currentTarget.style.opacity="0.8"}>
+          <span style={{ fontSize:12 }}>{PLAT_ICON[plat]}</span>
+          View on {plat}
+          <span style={{ fontSize:10 }}>↗</span>
+        </a>
+      </div>
     </div>
   );
 }
@@ -325,6 +467,7 @@ export default function InteractionsPage() {
 
   // Staging (pre-save)
   const [items,          setItems]          = useState([]);
+  const [selectedIdx,    setSelectedIdx]    = useState(0);
   const [parsing,        setParsing]        = useState(false);
   const [enrichStatus,   setEnrichStatus]   = useState(null);
   const [saveStatus,     setSaveStatus]     = useState(null);
@@ -349,6 +492,42 @@ export default function InteractionsPage() {
     fetch("/api/elite/profiles").then(r=>r.json())
       .then(d=>{ if(d.profiles) setKnownProfiles(d.profiles); }).catch(()=>{});
   }, []);
+
+  // Clamp selectedIdx when items change
+  useEffect(() => {
+    setSelectedIdx(i => Math.min(i, Math.max(0, filteredStaging.length - 1)));
+  }, [items, filterZone]);
+
+  // Keyboard navigation for staging queue
+  const listRef = useRef(null);
+  const rowRefs = useRef({});
+  useEffect(() => {
+    function onKey(e) {
+      if (!filteredStaging.length) return;
+      // Don't hijack when user is typing in an input/textarea
+      if (["INPUT","TEXTAREA","SELECT"].includes(e.target.tagName)) return;
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setSelectedIdx(i => {
+          const next = Math.min(i + 1, filteredStaging.length - 1);
+          rowRefs.current[next]?.scrollIntoView({ block:"nearest" });
+          return next;
+        });
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSelectedIdx(i => {
+          const prev = Math.max(i - 1, 0);
+          rowRefs.current[prev]?.scrollIntoView({ block:"nearest" });
+          return prev;
+        });
+      } else if (e.key === "Backspace" || e.key === "Delete") {
+        const item = filteredStaging[selectedIdx];
+        if (item) setItems(prev => prev.filter(i => i._id !== item._id));
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [filteredStaging, selectedIdx]);
 
   const autofill = item => {
     const h = (item.handle||"").toLowerCase().replace(/^@/,"");
@@ -635,15 +814,14 @@ export default function InteractionsPage() {
                 Review before saving
               </span>
               <span style={{ fontFamily:sans, fontSize:F.xs, color:T.dim }}>
-                {items.length} item{items.length!==1?"s":""}
+                {items.length} item{items.length!==1?"s":""} · ↑↓ to navigate · ⌫ to remove
               </span>
             </div>
             <div style={{ display:"flex", gap:6, alignItems:"center", flexWrap:"wrap" }}>
-              {/* Zone filters */}
               {ZONES.filter(z=>stagingCounts[z]>0||z==="ALL").map(z=>{
                 const active=filterZone===z; const zc=ZC[z];
                 return (
-                  <button key={z} onClick={()=>setFilterZone(z)} style={{
+                  <button key={z} onClick={()=>{ setFilterZone(z); setSelectedIdx(0); }} style={{
                     background:active?(zc?.bg||T.well):T.card,
                     color:active?(zc?.color||T.text):T.dim,
                     border:`1px solid ${active?(zc?.border||T.border):T.border}`,
@@ -671,16 +849,60 @@ export default function InteractionsPage() {
                 background:T.accent, color:"#fff", border:"none", borderRadius:9,
                 padding:"7px 18px", fontFamily:sans, fontSize:F.sm, fontWeight:700,
                 cursor:saving?"not-allowed":"pointer", opacity:saving?0.7:1 }}>
-                {saving?"Saving…":`Save ${items.length}`}
+                {saving?`Saving…`:`Save ${items.length}`}
               </button>
             </div>
           </div>
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(290px,1fr))", gap:8 }}>
-            {filteredStaging.map(item=>(
-              <StagingCard key={item._id} item={item}
-                onUpdate={(k,v)=>updateItem(item._id,k,v)}
-                onRemove={()=>setItems(prev=>prev.filter(i=>i._id!==item._id))} />
-            ))}
+
+          {/* Split pane */}
+          <div style={{ display:"flex", background:T.card,
+            border:`1px solid ${T.border}`, borderRadius:14, overflow:"hidden",
+            height:480 }}>
+
+            {/* Left: scrollable list */}
+            <div ref={listRef} style={{ width:260, flexShrink:0, overflowY:"auto",
+              borderRight:`1px solid ${T.border}` }}>
+              {filteredStaging.map((item, idx) => (
+                <StagingRow
+                  key={item._id}
+                  item={item}
+                  selected={idx === selectedIdx}
+                  onClick={() => setSelectedIdx(idx)}
+                  rowRef={el => rowRefs.current[idx] = el}
+                />
+              ))}
+            </div>
+
+            {/* Right: detail panel */}
+            {filteredStaging[selectedIdx] ? (
+              <div style={{ flex:1, minWidth:0 }}>
+                <ProfilePanel
+                  item={filteredStaging[selectedIdx]}
+                  idx={selectedIdx}
+                  total={filteredStaging.length}
+                  onUpdate={(k,v) => updateItem(filteredStaging[selectedIdx]._id, k, v)}
+                  onRemove={() => {
+                    const id = filteredStaging[selectedIdx]._id;
+                    setItems(prev => prev.filter(i => i._id !== id));
+                  }}
+                  onPrev={() => {
+                    const prev = Math.max(selectedIdx - 1, 0);
+                    setSelectedIdx(prev);
+                    rowRefs.current[prev]?.scrollIntoView({ block:"nearest" });
+                  }}
+                  onNext={() => {
+                    const next = Math.min(selectedIdx + 1, filteredStaging.length - 1);
+                    setSelectedIdx(next);
+                    rowRefs.current[next]?.scrollIntoView({ block:"nearest" });
+                  }}
+                />
+              </div>
+            ) : (
+              <div style={{ flex:1, display:"flex", alignItems:"center",
+                justifyContent:"center", color:T.dim, fontFamily:sans, fontSize:F.sm }}>
+                Select a profile to review
+              </div>
+            )}
           </div>
         </div>
       )}
