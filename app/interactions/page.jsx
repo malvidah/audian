@@ -493,7 +493,8 @@ export default function InteractionsPage() {
       .then(d=>{ if(d.profiles) setKnownProfiles(d.profiles); }).catch(()=>{});
   }, []);
 
-  // Staging filtering — declared here so useEffect deps can reference them
+  // Staging/saved filtering — declared here so useEffect deps can reference them
+  const ZONES=["ALL","ELITE","INFLUENTIAL","SIGNAL","IGNORE"];
   const stagingCounts=Object.fromEntries(ZONES.map(z=>[z,
     z==="ALL"?items.length:items.filter(i=>i.zone===z).length]));
   const filteredStaging=filterZone==="ALL"?items:items.filter(i=>i.zone===filterZone);
@@ -722,7 +723,6 @@ export default function InteractionsPage() {
   }));
 
   // Saved interactions filtering
-  const ZONES=["ALL","ELITE","INFLUENTIAL","SIGNAL","IGNORE"];
   const savedCounts=Object.fromEntries(ZONES.map(z=>[z,
     z==="ALL"?saved.length:saved.filter(i=>i.zone===z).length]));
   const filteredSaved=saved.filter(i=>{
