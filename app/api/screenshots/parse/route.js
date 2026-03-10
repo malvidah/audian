@@ -29,87 +29,75 @@ Return ONLY a valid JSON array, no markdown fences, no explanation:
 
 If no interactions visible, return [].`;
 
+async function parseOne(img, apiKey) {
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-opus-4-6',
+      max_tokens: 2000,
+      system: SYSTEM_PROMPT,
+      messages: [{
+        role: 'user',
+        content: [
+          {
+            type: 'image',
+            source: { type: 'base64', media_type: img.mediaType || 'image/jpeg', data: img.base64 },
+          },
+          {
+            type: 'text',
+            text: 'Parse this screenshot and extract all visible account interactions. Return only the JSON array.',
+          },
+        ],
+      }],
+    }),
+  });
+
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error?.message || `API error ${response.status}`);
+
+  const text  = data.content?.[0]?.text || '[]';
+  const clean = text.replace(/```json\n?|```\n?/g, '').trim();
+
+  // Guard against Claude returning an error string instead of JSON
+  if (!clean.startsWith('[') && !clean.startsWith('{')) {
+    console.error(`Non-JSON response for ${img.filename}:`, clean.slice(0, 100));
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(clean);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    const match = clean.match(/\[[\s\S]*\]/);
+    return match ? JSON.parse(match[0]) : [];
+  }
+}
+
 export async function POST(req) {
   try {
-    const body = await req.json();
-    const { images } = body;
-
+    const { images } = await req.json();
     if (!images?.length) {
       return NextResponse.json({ error: 'No images provided' }, { status: 400 });
     }
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
-      return NextResponse.json({ error: 'ANTHROPIC_API_KEY not set in environment' }, { status: 500 });
+      return NextResponse.json({ error: 'ANTHROPIC_API_KEY not set' }, { status: 500 });
     }
 
-    const results = [];
+    // Process all images in parallel — sequential was the 504 culprit
+    const settled = await Promise.allSettled(images.map(img => parseOne(img, apiKey)));
 
-    for (const img of images) {
-      try {
-        const response = await fetch('https://api.anthropic.com/v1/messages', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': apiKey,
-            'anthropic-version': '2023-06-01',
-          },
-          body: JSON.stringify({
-            model: 'claude-opus-4-6',
-            max_tokens: 2000,
-            system: SYSTEM_PROMPT,
-            messages: [{
-              role: 'user',
-              content: [
-                {
-                  type: 'image',
-                  source: {
-                    type: 'base64',
-                    media_type: img.mediaType || 'image/jpeg',
-                    data: img.base64,
-                  },
-                },
-                {
-                  type: 'text',
-                  text: 'Parse this screenshot and extract all visible account interactions. Return only the JSON array.',
-                },
-              ],
-            }],
-          }),
-        });
-
-        const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(data.error?.message || `API error ${response.status}`);
-        }
-
-        const text = data.content?.[0]?.text || '[]';
-        const clean = text.replace(/```json\n?|```\n?/g, '').trim();
-
-        let parsed;
-        try {
-          parsed = JSON.parse(clean);
-        } catch {
-          // Try to extract JSON array if there's surrounding text
-          const match = clean.match(/\[[\s\S]*\]/);
-          parsed = match ? JSON.parse(match[0]) : [];
-        }
-
-        results.push({
-          filename: img.filename,
-          interactions: Array.isArray(parsed) ? parsed : [],
-          error: null,
-        });
-      } catch (e) {
-        console.error(`Parse error for ${img.filename}:`, e.message);
-        results.push({
-          filename: img.filename,
-          interactions: [],
-          error: e.message,
-        });
-      }
-    }
+    const results = settled.map((r, i) => ({
+      filename:     images[i].filename,
+      interactions: r.status === 'fulfilled' ? r.value : [],
+      error:        r.status === 'rejected'  ? r.reason?.message : null,
+    }));
 
     return NextResponse.json({ results });
   } catch (err) {

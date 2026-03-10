@@ -10,7 +10,7 @@ export async function GET() {
   try {
     const { data, error } = await supabaseAdmin
       .from('handles')
-      .select('id, name, bio, zone, avatar_url, handle_instagram, handle_x, handle_youtube, handle_linkedin, followers_instagram, followers_x, followers_youtube, followers_linkedin, verified_instagram, verified_x, verified_youtube, verified_linkedin')
+      .select('id, name, bio, zone, avatar_url, handle_instagram, handle_x, handle_youtube, handle_linkedin, followers_instagram, followers_x, followers_youtube, followers_linkedin')
       .order('updated_at', { ascending: false });
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -31,7 +31,7 @@ export async function GET() {
           ignored:      h.zone === 'IGNORE',
           on_watchlist: h.zone === 'ELITE',
           followers:    h[`followers_${plat}`],
-          verified:     h[`verified_${plat}`] || false,
+          verified:     false,
           avatar_url:   h.avatar_url,
           handles:      PLATFORMS.reduce((acc, p) => {
             if (h[`handle_${p}`]) acc[p] = h[`handle_${p}`];
