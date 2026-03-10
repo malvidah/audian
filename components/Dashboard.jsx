@@ -1260,7 +1260,7 @@ export default function Dashboard() {
   }, [session, supabase]);
 
   // Elite list fetched separately — only on mount and after explicit changes
-  const loadElite list = useCallback(async () => {
+  const loadEliteList = useCallback(async () => {
     if (!session) return;
     try {
       const { data: { session: s } } = await supabase.auth.getSession();
@@ -1272,7 +1272,7 @@ export default function Dashboard() {
   }, [session, supabase]);
 
   useEffect(() => { loadData(); }, [loadData]);
-  useEffect(() => { loadElite list(); }, [loadElite list]);
+  useEffect(() => { loadEliteList(); }, [loadEliteList]);
 
   async function triggerSync(p) {
     setSyncing(p); setSyncMsg("");
@@ -1419,7 +1419,7 @@ export default function Dashboard() {
           <ProfileMenu session={session} supabase={supabase} connections={connections}
             eliteList={eliteList}
             eliteListTotal={eliteListTotal}
-            onEliteListUpdate={loadElite list}
+            onEliteListUpdate={loadEliteList}
             onDisconnect={async (platformId) => {
               const res = await fetch(`/api/disconnect/${platformId}`, { method: "DELETE", headers: await authHeaders() });
               const data = await res.json();
