@@ -493,6 +493,11 @@ export default function InteractionsPage() {
       .then(d=>{ if(d.profiles) setKnownProfiles(d.profiles); }).catch(()=>{});
   }, []);
 
+  // Staging filtering — declared here so useEffect deps can reference them
+  const stagingCounts=Object.fromEntries(ZONES.map(z=>[z,
+    z==="ALL"?items.length:items.filter(i=>i.zone===z).length]));
+  const filteredStaging=filterZone==="ALL"?items:items.filter(i=>i.zone===filterZone);
+
   // Clamp selectedIdx when items change
   useEffect(() => {
     setSelectedIdx(i => Math.min(i, Math.max(0, filteredStaging.length - 1)));
@@ -727,11 +732,6 @@ export default function InteractionsPage() {
     return i.handle?.toLowerCase().includes(q)||i.name?.toLowerCase().includes(q)||
       i.content?.toLowerCase().includes(q)||i.interaction_type?.toLowerCase().includes(q);
   });
-
-  // Staging filtering
-  const stagingCounts=Object.fromEntries(ZONES.map(z=>[z,
-    z==="ALL"?items.length:items.filter(i=>i.zone===z).length]));
-  const filteredStaging=filterZone==="ALL"?items:items.filter(i=>i.zone===filterZone);
 
   return (
     <div style={{ minHeight:"100vh", background:T.bg, fontFamily:sans, padding:"36px 40px" }}>
