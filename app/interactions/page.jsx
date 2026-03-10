@@ -272,18 +272,42 @@ function ProfilePreview({ group, idx, total, onUpdateZone, onRemoveGroup, onPrev
   const zone = primaryItem?.zone || "SIGNAL";
   const zc   = ZC[zone] || ZC.SIGNAL;
   const platforms = [...new Set(group.items.map(i=>i.platform).filter(Boolean))];
-  const [activePlat, setActivePlat] = useState(primaryItem?.platform || "instagram");
-  const [imgState,   setImgState]   = useState("loading"); // loading | loaded | error
+  const [activePlat,    setActivePlat]    = useState(primaryItem?.platform || "instagram");
+  const [imgState,      setImgState]      = useState("idle");
+  const [screenshotSrc, setScreenshotSrc] = useState(null);
+  const ssCache = useRef({});
+
+  const fetchScreenshot = useCallback(async (handle, platform) => {
+    const key = `${platform}:${handle}`;
+    if (ssCache.current[key]) {
+      setScreenshotSrc(ssCache.current[key]);
+      setImgState("loaded");
+      return;
+    }
+    setImgState("loading");
+    setScreenshotSrc(null);
+    try {
+      const res  = await fetch(`/api/screenshot/profile?handle=${encodeURIComponent(handle)}&platform=${platform}`);
+      const data = await res.json();
+      if (data.url) {
+        ssCache.current[key] = data.url;
+        setScreenshotSrc(data.url);
+        setImgState("loaded");
+      } else { setImgState("error"); }
+    } catch { setImgState("error"); }
+  }, []);
 
   useEffect(() => {
-    setActivePlat(group.items[0]?.platform || "instagram");
-    setImgState("loading");
+    const plat = group.items[0]?.platform || "instagram";
+    setActivePlat(plat);
+    fetchScreenshot(group.key, plat);
   }, [group.key]);
 
-  const profileUrl   = PLAT_URL[activePlat]?.(group.key);
-  const screenshotSrc = profileUrl
-    ? `https://api.microlink.io/?url=${encodeURIComponent(profileUrl)}&screenshot=true&meta=false&embed=screenshot.url&viewport.width=390&viewport.height=844&waitFor=2000`
-    : null;
+  useEffect(() => {
+    fetchScreenshot(group.key, activePlat);
+  }, [activePlat]);
+
+  const profileUrl = PLAT_URL[activePlat]?.(group.key);
 
   return (
     <div style={{ display:"flex", flexDirection:"column", height:"100%" }}>
