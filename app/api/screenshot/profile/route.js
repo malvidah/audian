@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 
-const BROWSERLESS_TOKEN = process.env.BROWSERLESS_TOKEN;
-const INSTAGRAM_COOKIES = process.env.INSTAGRAM_COOKIES; // JSON array string
+const SERVICE_URL  = process.env.PLAYWRIGHT_SERVICE_URL;  // e.g. https://audian-pw.up.railway.app
+const AUTH_TOKEN   = process.env.PLAYWRIGHT_AUTH_TOKEN;
+const IG_COOKIES   = process.env.INSTAGRAM_COOKIES;
 
 // In-memory cache: "platform:handle" -> { url, ts }
 const cache = new Map();
@@ -14,8 +15,11 @@ const PROFILE_URL = {
   linkedin:  h => `https://www.linkedin.com/in/${h}/`,
 };
 
-function getInstagramCookies() {
-  try { return JSON.parse(INSTAGRAM_COOKIES || "[]"); } catch { return []; }
+function cookiesForPlatform(platform) {
+  if (platform === "instagram") {
+    try { return JSON.parse(IG_COOKIES || "[]"); } catch { return []; }
+  }
+  return [];
 }
 
 export async function GET(request) {
@@ -23,8 +27,7 @@ export async function GET(request) {
   const handle   = (searchParams.get("handle") || "").replace(/^@/, "").toLowerCase();
   const platform = (searchParams.get("platform") || "instagram").toLowerCase();
 
-  if (!handle)   return NextResponse.json({ error: "handle required" }, { status: 400 });
-  if (!BROWSERLESS_TOKEN) return NextResponse.json({ error: "BROWSERLESS_TOKEN not set" }, { status: 500 });
+  if (!handle) return NextResponse.json({ error: "handle required" }, { status: 400 });
 
   const cacheKey = `${platform}:${handle}`;
   const cached = cache.get(cacheKey);
@@ -35,58 +38,33 @@ export async function GET(request) {
   const profileUrl = PROFILE_URL[platform]?.(handle);
   if (!profileUrl) return NextResponse.json({ error: "unsupported platform" }, { status: 400 });
 
-  const rawCookies = platform === "instagram" ? getInstagramCookies() : [];
-  const cookies = rawCookies.map(c => ({
-    name:   c.name,
-    value:  c.value,
-    domain: c.domain || ".instagram.com",
-    path:   c.path   || "/",
-  }));
+  if (!SERVICE_URL) {
+    return NextResponse.json({ error: "PLAYWRIGHT_SERVICE_URL not configured" }, { status: 503 });
+  }
 
   try {
-    const res = await fetch(
-      `https://chrome.browserless.io/screenshot?token=${BROWSERLESS_TOKEN}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          url: profileUrl,
-          options: {
-            type: "jpeg",
-            quality: 82,
-            fullPage: false,
-            clip: { x: 0, y: 0, width: 390, height: 844 },
-          },
-          viewport: {
-            width: 390,
-            height: 844,
-            isMobile: true,
-            hasTouch: true,
-            deviceScaleFactor: 2,
-          },
-          cookies,
-          waitFor: 2500,
-          addScriptTag: [{
-            content: `setTimeout(() => {
-              // Dismiss "Turn on notifications" and other dialogs
-              const btns = [...document.querySelectorAll('button')];
-              const dismiss = btns.find(b => /not now|dismiss|close/i.test(b.textContent));
-              if (dismiss) dismiss.click();
-            }, 1800);`
-          }],
-        }),
-      }
-    );
+    const res = await fetch(`${SERVICE_URL}/screenshot`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-auth-token": AUTH_TOKEN || "",
+      },
+      body: JSON.stringify({
+        url:     profileUrl,
+        cookies: cookiesForPlatform(platform),
+        waitFor: 2500,
+      }),
+    });
 
     if (!res.ok) {
       const txt = await res.text().catch(() => res.status);
-      return NextResponse.json({ error: `browserless: ${res.status} ${txt}` }, { status: 502 });
+      return NextResponse.json({ error: `service error: ${res.status} ${txt}` }, { status: 502 });
     }
 
-    const buffer  = await res.arrayBuffer();
-    const base64  = Buffer.from(buffer).toString("base64");
-    const dataUrl = `data:image/jpeg;base64,${base64}`;
+    const { image, error } = await res.json();
+    if (error) return NextResponse.json({ error }, { status: 502 });
 
+    const dataUrl = `data:image/jpeg;base64,${image}`;
     cache.set(cacheKey, { url: dataUrl, ts: Date.now() });
     return NextResponse.json({ url: dataUrl, cached: false });
 
