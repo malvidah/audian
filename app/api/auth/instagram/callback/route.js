@@ -95,7 +95,14 @@ export async function GET(request) {
     console.log('IG profile:', JSON.stringify({ username: profile.username, followers: profile.followers_count }));
 
     // Step 5: Upsert to Supabase
-    const { error: dbError } = await supabase.from('platform_connections').upsert({
+    console.log('[instagram] writing to platform_connections:', {
+      platform: 'instagram', channel_id: String(igAccount.id),
+      channel_name: profile.username || pageName || 'unknown',
+      subscriber_count: profile.followers_count || 0,
+      supabase_url: process.env.NEXT_PUBLIC_SUPABASE_URL?.slice(0, 30) + '...',
+    });
+
+    const { data: upserted, error: dbError } = await supabase.from('platform_connections').upsert({
       platform:          'instagram',
       channel_id:        String(igAccount.id),
       channel_name:      profile.username || pageName || 'unknown',
@@ -104,13 +111,14 @@ export async function GET(request) {
       access_token:      pageToken,
       connected_at:      new Date().toISOString(),
       updated_at:        new Date().toISOString(),
-    }, { onConflict: 'platform' });
+    }, { onConflict: 'platform' }).select();
 
     if (dbError) {
-      console.error('Supabase upsert error:', JSON.stringify(dbError));
-      return NextResponse.redirect(`${base}?error=db_write_failed`);
+      console.error('[instagram] Supabase upsert FAILED:', JSON.stringify(dbError));
+      return NextResponse.redirect(`${base}?error=db_write_failed&detail=${encodeURIComponent(dbError.message)}`);
     }
 
+    console.log('[instagram] Supabase upsert SUCCESS, row:', JSON.stringify(upserted));
     return NextResponse.redirect(`${base}?connected=instagram`);
 
   } catch (err) {
