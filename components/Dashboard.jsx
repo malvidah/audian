@@ -1218,7 +1218,7 @@ export default function Dashboard() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const conn = params.get("connected"), err = params.get("error");
-    if (conn) setSyncMsg(`✓ ${conn} connected`);
+    if (conn) { setSyncMsg(`✓ ${conn} connected — syncing…`); triggerSync(conn); }
     if (err)  setSyncMsg(`✗ ${err.replace(/_/g, " ")}`);
     if (conn || err) window.history.replaceState({}, "", "/");
   }, []);
