@@ -430,10 +430,7 @@ export default function HandlesTable({ platform, refreshKey }) {
                   </td>
                   {/* Zone / Label */}
                   <td style={tdStyle}>
-                    <ZoneBadge zone={h.zone} onClick={() => {
-                      const next = LIST_ORDER[(LIST_ORDER.indexOf(h.zone) + 1) % LIST_ORDER.length];
-                      saveField(h.id, { zone: next });
-                    }} />
+                    <ZoneBadge zone={h.zone} />
                   </td>
                   {/* Last seen */}
                   <td style={{ ...tdStyle, whiteSpace: "nowrap", color: T.dim, fontSize: F.xs }}>
