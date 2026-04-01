@@ -126,7 +126,8 @@ function WeeklyOKR({ posts, activePlatform, selectedWeek, onWeekSelect, dateFrom
   };
 
   return (
-    <div style={{ marginBottom: 28 }}>
+    <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14,
+      padding: "20px 24px", marginBottom: 24, boxShadow: T.shadowSm }}>
       <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 12 }}>
         <div style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text }}>
           Weekly
@@ -192,8 +193,8 @@ function FollowersChart({ snapshots, activePlatform }) {
 
   if (empty) {
     return (
-      <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 12,
-        padding: "32px 24px", textAlign: "center", marginBottom: 28, boxShadow: T.shadowSm }}>
+      <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14,
+        padding: "32px 24px", textAlign: "center", marginBottom: 24, boxShadow: T.shadowSm }}>
         <div style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text, marginBottom: 6 }}>
           Followers
         </div>
@@ -286,8 +287,8 @@ function FollowersChart({ snapshots, activePlatform }) {
     : "Followers";
 
   return (
-    <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 12,
-      padding: "18px 20px 14px", marginBottom: 28, boxShadow: T.shadowSm }}>
+    <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14,
+      padding: "20px 24px 14px", marginBottom: 24, boxShadow: T.shadowSm }}>
 
       <div style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text, marginBottom: 16 }}>
         {label}
@@ -433,13 +434,14 @@ function Outliers({ posts, activePlatform, selectedWeek }) {
   const weekSuffix = selectedWeek ? ` · week of ${weekLabel(selectedWeek)}` : "";
 
   return (
-    <div style={{ marginBottom: 28 }}>
+    <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14,
+      padding: "20px 24px", marginBottom: 24, boxShadow: T.shadowSm }}>
       <div style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text, marginBottom: 12 }}>
         Outliers · {platLabel}{weekSuffix}
         <span style={{ fontWeight: 400, color: T.dim, marginLeft: 8 }}>avg {fmt(Math.round(avg))} likes</span>
       </div>
-      <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 12,
-        boxShadow: T.shadowSm, display: "grid", gridTemplateColumns: "1fr 1fr", overflow: "hidden" }}>
+      <div style={{ border: `1px solid ${T.border}`, borderRadius: 12,
+        display: "grid", gridTemplateColumns: "1fr 1fr", overflow: "hidden" }}>
         <div style={{ borderRight: `1px solid ${T.border}` }}>
           <div style={{ padding: "10px 18px 8px", display: "flex", alignItems: "center", gap: 6,
             borderBottom: `1px solid ${T.border}` }}>
@@ -500,27 +502,35 @@ function PostsTable({ posts, activePlatform, selectedWeek }) {
     borderBottom: `1px solid ${T.border}`, verticalAlign: "middle" };
 
   return (
-    <div>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
-        <div style={{ fontFamily: sans, fontSize: F.sm, color: T.sub }}>
-          {sorted.length} post{sorted.length !== 1 ? "s" : ""}
-          {selectedWeek ? ` · week of ${weekLabel(selectedWeek)}` : ""}
+    <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14,
+      padding: "20px 24px", marginBottom: 24, boxShadow: T.shadowSm }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
+        <div style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text }}>
+          All Content
+          <span style={{
+            display: "inline-flex", alignItems: "center", justifyContent: "center",
+            marginLeft: 8, minWidth: 22, height: 20, padding: "0 7px",
+            borderRadius: 10, background: T.well, border: `1px solid ${T.border}`,
+            fontFamily: sans, fontSize: F.xs, fontWeight: 600, color: T.sub,
+          }}>{sorted.length}</span>
         </div>
+        {selectedWeek && (
+          <div style={{ fontFamily: sans, fontSize: F.xs, color: T.sub }}>
+            week of {weekLabel(selectedWeek)}
+          </div>
+        )}
         <label style={{ display: "flex", alignItems: "center", gap: 6, fontFamily: sans, fontSize: F.xs, color: T.sub, cursor: "pointer", marginLeft: "auto" }}>
           <input type="checkbox" checked={showAgg} onChange={e => setShowAgg(e.target.checked)} />
           Show LinkedIn daily totals
         </label>
       </div>
 
-      <div style={{ overflowX: "auto", borderRadius: 12, border: `1px solid ${T.border}`, boxShadow: T.shadowSm }}>
+      <div style={{ overflowX: "auto", borderRadius: 12, border: `1px solid ${T.border}` }}>
         <table style={{ width: "100%", borderCollapse: "collapse", background: T.card }}>
           <thead>
             <tr style={{ background: T.well }}>
-              <th style={thStyle("published_at")} onClick={() => toggleSort("published_at")}>
-                Date {sortBy === "published_at" ? (sortDesc ? "↓" : "↑") : ""}
-              </th>
+              <th style={{ ...thStyle(), width: "50%", cursor: "default" }}>Content</th>
               <th style={{ ...thStyle(), cursor: "default" }}>Platform</th>
-              <th style={{ ...thStyle(), width: "40%", cursor: "default" }}>Content</th>
               <th style={thStyle("likes")} onClick={() => toggleSort("likes")}>
                 Likes {sortBy === "likes" ? (sortDesc ? "↓" : "↑") : ""}
               </th>
@@ -530,41 +540,50 @@ function PostsTable({ posts, activePlatform, selectedWeek }) {
               <th style={thStyle("comments")} onClick={() => toggleSort("comments")}>
                 Comments {sortBy === "comments" ? (sortDesc ? "↓" : "↑") : ""}
               </th>
-              <th style={{ ...thStyle(), cursor: "default" }}>↗</th>
+              <th style={thStyle("published_at")} onClick={() => toggleSort("published_at")}>
+                Date {sortBy === "published_at" ? (sortDesc ? "↓" : "↑") : ""}
+              </th>
             </tr>
           </thead>
           <tbody>
             {sorted.length === 0 && (
-              <tr><td colSpan={7} style={{ ...td, textAlign: "center", color: T.dim, padding: 40 }}>
+              <tr><td colSpan={6} style={{ ...td, textAlign: "center", color: T.dim, padding: 40 }}>
                 {selectedWeek ? `No posts for week of ${weekLabel(selectedWeek)}` : "No posts yet — import data above"}
               </td></tr>
             )}
             {sorted.map((p, i) => {
               const likes  = parseInt(p.likes || 0);
               const isHot  = likes >= LIKES_GOAL;
+              const contentText = p.content || "\u2014";
+              const contentEl = p.permalink
+                ? <a href={p.permalink} target="_blank" rel="noopener noreferrer"
+                    style={{
+                      color: p.post_type === "daily_aggregate" ? T.dim : T.text,
+                      textDecoration: "none",
+                      transition: "color 0.15s ease",
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.color = T.accent; }}
+                    onMouseLeave={e => { e.currentTarget.style.color = p.post_type === "daily_aggregate" ? T.dim : T.text; }}
+                  >{contentText}</a>
+                : contentText;
               return (
                 <tr key={p.id || i} style={{ background: i % 2 === 0 ? T.card : T.well + "88" }}>
-                  <td style={{ ...td, whiteSpace: "nowrap", color: T.sub, fontSize: F.xs }}>
-                    {fmtDate(p.published_at)}
-                  </td>
-                  <td style={td}><PlatDot platform={p.platform} size={12} /></td>
                   <td style={{ ...td, maxWidth: 0 }}>
                     <div style={{
                       overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                      fontSize: F.xs, color: p.post_type === "daily_aggregate" ? T.dim : T.text,
+                      fontSize: F.xs,
+                      color: p.post_type === "daily_aggregate" ? T.dim : T.text,
                       fontStyle: p.post_type === "daily_aggregate" ? "italic" : "normal",
-                    }}>{p.content || "—"}</div>
+                    }}>{contentEl}</div>
                   </td>
+                  <td style={td}><PlatDot platform={p.platform} size={12} /></td>
                   <td style={{ ...td, fontWeight: isHot ? 700 : 400, color: isHot ? T.green : T.text }}>
-                    {isHot && "🔥 "}{fmt(likes)}
+                    {isHot && "\uD83D\uDD25 "}{fmt(likes)}
                   </td>
                   <td style={{ ...td, color: T.sub }}>{fmt(p.impressions)}</td>
                   <td style={{ ...td, color: T.sub }}>{fmt(p.comments)}</td>
-                  <td style={td}>
-                    {p.permalink
-                      ? <a href={p.permalink} target="_blank" rel="noopener noreferrer"
-                          style={{ color: T.accent, textDecoration: "none", fontSize: F.xs }}>↗</a>
-                      : <span style={{ color: T.dim }}>—</span>}
+                  <td style={{ ...td, whiteSpace: "nowrap", color: T.sub, fontSize: F.xs }}>
+                    {fmtDate(p.published_at)}
                   </td>
                 </tr>
               );
