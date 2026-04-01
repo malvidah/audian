@@ -40,7 +40,6 @@ const ZONE_CFG = {
   SIGNAL:      { label: "SIGNAL", color: T.blue, bg: T.blueBg, border: T.blueBorder },
   IGNORE:      { label: "IGNORE", color: T.dim, bg: T.well, border: T.border },
 };
-
 const LIST_ORDER = ["ELITE", "INFLUENTIAL", "SIGNAL", "IGNORE"];
 
 const PLAT_OPTIONS = [
@@ -82,22 +81,13 @@ function truncate(str, max) {
   return str.length > max ? str.slice(0, max) + "..." : str;
 }
 
-function normalizeZone(zone) {
-  return LIST_ORDER.includes(zone) ? zone : "UNASSIGNED";
-}
-
-function isCommentType(type) {
-  return ["comment", "commented", "reply"].includes((type || "").toLowerCase());
-}
-
+function normalizeZone(zone) { return LIST_ORDER.includes(zone) ? zone : "UNASSIGNED"; }
+function isCommentType(type) { return ["comment", "commented", "reply"].includes((type || "").toLowerCase()); }
 function normalizeType(type) {
   const raw = (type || "").toLowerCase();
-  if (raw === "liked") return "like";
-  if (raw === "followed") return "follow";
-  if (raw === "commented") return "comment";
-  if (raw === "reposted") return "repost";
-  if (raw === "mentioned") return "mention";
-  return raw || "unknown";
+  if (raw === "liked") return "like"; if (raw === "followed") return "follow";
+  if (raw === "commented") return "comment"; if (raw === "reposted") return "repost";
+  if (raw === "mentioned") return "mention"; return raw || "unknown";
 }
 
 function IgIcon({ size = 16, color = "#E1306C" }) {
@@ -106,6 +96,15 @@ function IgIcon({ size = 16, color = "#E1306C" }) {
       <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/>
       <circle cx="12" cy="12" r="4.5"/>
       <circle cx="17.5" cy="6.5" r="1" fill={color} stroke="none"/>
+    </svg>
+  );
+}
+
+function TrashIcon({ size = 16, color = T.red }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+      <path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
     </svg>
   );
 }
@@ -126,21 +125,16 @@ function StatCard({ label, value, color = T.text, active = false, onClick, click
 }
 
 function SummaryStats({ data, selectedZones, onToggleZone, commentsOnly }) {
-  const counts = data.reduce((acc, row) => {
-    const zone = normalizeZone(row.zone);
-    acc[zone] = (acc[zone] || 0) + 1;
-    return acc;
-  }, {});
+  const counts = data.reduce((acc, row) => { acc[normalizeZone(row.zone)] = (acc[normalizeZone(row.zone)] || 0) + 1; return acc; }, {});
   const total = data.length;
   const uniquePeople = new Set(data.map(d => `${d.platform}:${d.handle}`)).size;
   const avgFollowers = total > 0 ? Math.round(data.reduce((s, d) => s + (d.followers || 0), 0) / total) : 0;
-
   return (
     <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
       <StatCard label={commentsOnly ? "Total comments" : "Total interactions"} value={total} />
       <StatCard label="Unique people" value={uniquePeople} />
       <StatCard label="Avg followers" value={fmt(avgFollowers)} />
-      {["ELITE", "INFLUENTIAL", "SIGNAL"].map((zone) => (
+      {["ELITE", "INFLUENTIAL", "SIGNAL"].map(zone => (
         <StatCard key={zone} label={zone} value={counts[zone] || 0} color={ZONE_CFG[zone].color}
           active={selectedZones.has(zone)} clickable onClick={() => onToggleZone(zone)} />
       ))}
@@ -148,65 +142,195 @@ function SummaryStats({ data, selectedZones, onToggleZone, commentsOnly }) {
   );
 }
 
-// ─── Inline editable cell ───────────────────────────────────────────────────
-const editInputBase = {
-  fontFamily: sans, background: "transparent", border: "none", outline: "none",
-  padding: "2px 0", margin: 0, width: "100%", color: T.text,
+function ZoneBadge({ zone }) {
+  const cfg = ZONE_CFG[zone] || ZONE_CFG.SIGNAL;
+  return (
+    <span style={{ display: "inline-block", background: cfg.bg, color: cfg.color,
+      border: `1px solid ${cfg.border}`, borderRadius: 6, padding: "2px 8px",
+      fontSize: F.xs, fontWeight: 700, fontFamily: sans, letterSpacing: "0.04em" }}>{cfg.label}</span>
+  );
+}
+
+function TypeBadge({ type }) {
+  const cfg = {
+    like: { label: "Like", icon: "♥", bg: "#FEF2F2", color: "#DC2626", border: "#FECACA" },
+    follow: { label: "Follow", bg: "#EFF6FF", color: "#2563EB", border: "#BFDBFE" },
+    comment: { label: "Comment", bg: "#FEFCE8", color: "#CA8A04", border: "#FEF08A" },
+    repost: { label: "Repost", bg: "#F0FDF4", color: "#16A34A", border: "#BBF7D0" },
+    mention: { label: "Mention", bg: "#FFF3EE", color: "#FF6B35", border: "#FFD4C2" },
+    tag: { label: "Tag", bg: "#F5F3FF", color: "#7C3AED", border: "#DDD6FE" },
+    reply: { label: "Reply", bg: "#FEFCE8", color: "#CA8A04", border: "#FEF08A" },
+  };
+  const c = cfg[normalizeType(type)] || { label: type || "Unknown", bg: T.well, color: T.sub, border: T.border };
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 4,
+      background: c.bg, color: c.color, border: `1px solid ${c.border}`,
+      borderRadius: 12, padding: "3px 10px", fontSize: F.xs, fontWeight: 600, fontFamily: sans, whiteSpace: "nowrap" }}>
+      {c.icon && <span style={{ fontSize: 10 }}>{c.icon}</span>}{c.label}
+    </span>
+  );
+}
+
+// ─── Detail Panel ───────────────────────────────────────────────────────────
+const editInput = {
+  fontFamily: sans, fontSize: F.sm, background: "transparent", border: "none",
+  borderBottom: `1px solid transparent`, outline: "none", padding: "4px 0",
+  width: "100%", color: T.text, transition: "border-color 0.15s",
 };
+const editInputFocus = { borderBottomColor: T.accent };
 
-function EditableText({ value, onChange, fontSize = F.xs, placeholder = "", style = {} }) {
-  const [editing, setEditing] = useState(false);
+function DetailField({ label, value, onChange, placeholder = "—", multiline = false, type = "text" }) {
+  const [focused, setFocused] = useState(false);
   const [draft, setDraft] = useState(value || "");
-  const ref = useRef(null);
-
   useEffect(() => { setDraft(value || ""); }, [value]);
 
   function commit() {
-    setEditing(false);
+    setFocused(false);
     if (draft !== (value || "")) onChange(draft);
   }
 
-  if (!editing) {
-    return (
-      <div onClick={() => { setEditing(true); setTimeout(() => ref.current?.focus(), 0); }}
-        style={{ cursor: "text", minHeight: 18, fontSize, color: value ? T.text : T.dim,
-          fontStyle: value ? "normal" : "italic", ...style }}>
-        {value || placeholder || "—"}
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ fontFamily: sans, fontSize: 10, fontWeight: 600, color: T.dim,
+        textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 3 }}>{label}</div>
+      {multiline ? (
+        <textarea value={draft} onChange={e => setDraft(e.target.value)}
+          onFocus={() => setFocused(true)} onBlur={commit}
+          placeholder={placeholder}
+          style={{ ...editInput, ...(focused ? editInputFocus : {}),
+            minHeight: 60, resize: "vertical", lineHeight: 1.5 }} />
+      ) : (
+        <input type={type} value={draft} onChange={e => setDraft(e.target.value)}
+          onFocus={() => setFocused(true)} onBlur={commit}
+          placeholder={placeholder}
+          style={{ ...editInput, ...(focused ? editInputFocus : {}) }} />
+      )}
+    </div>
+  );
+}
+
+function DetailSelect({ label, value, options, onChange }) {
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ fontFamily: sans, fontSize: 10, fontWeight: 600, color: T.dim,
+        textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 3 }}>{label}</div>
+      <select value={value} onChange={e => onChange(e.target.value)}
+        style={{ ...editInput, cursor: "pointer", borderBottom: `1px solid ${T.border}` }}>
+        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </div>
+  );
+}
+
+function DetailPanel({ row, rawData, onClose, onSave, onRefresh }) {
+  // Get full handle data from the raw supabase response
+  const rawRow = rawData?.find(r => r.id === row?.id);
+  const handle = rawRow?.handles || {};
+
+  const save = useCallback((field, value) => {
+    onSave(row.id, field, value);
+  }, [row?.id, onSave]);
+
+  if (!row) return null;
+
+  const platHandles = [
+    { key: "handle_x", label: "X", plat: "x" },
+    { key: "handle_instagram", label: "Instagram", plat: "instagram" },
+    { key: "handle_youtube", label: "YouTube", plat: "youtube" },
+    { key: "handle_linkedin", label: "LinkedIn", plat: "linkedin" },
+  ];
+
+  return (
+    <div style={{
+      position: "fixed", top: 0, right: 0, bottom: 0, width: 420, zIndex: 1000,
+      background: T.bg, borderLeft: `1px solid ${T.border}`, boxShadow: "-4px 0 24px rgba(0,0,0,0.08)",
+      overflowY: "auto", padding: "24px 28px",
+    }}>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+        <div style={{ fontFamily: sans, fontSize: F.lg, fontWeight: 700, color: T.text }}>Detail</div>
+        <button onClick={onClose} style={{
+          fontFamily: sans, fontSize: F.md, background: "none", border: "none",
+          color: T.dim, cursor: "pointer", padding: "4px 8px", lineHeight: 1,
+        }}>✕</button>
       </div>
-    );
-  }
-  return (
-    <input ref={ref} value={draft} onChange={e => setDraft(e.target.value)}
-      onBlur={commit} onKeyDown={e => { if (e.key === "Enter") commit(); if (e.key === "Escape") { setDraft(value || ""); setEditing(false); } }}
-      style={{ ...editInputBase, fontSize, ...style }} autoFocus />
-  );
-}
 
-function EditableSelect({ value, options, onChange, render }) {
-  const [editing, setEditing] = useState(false);
-  const ref = useRef(null);
+      {/* Interaction section */}
+      <div style={{ fontFamily: sans, fontSize: F.xs, fontWeight: 700, color: T.sub,
+        textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12 }}>Interaction</div>
 
-  useEffect(() => { if (editing && ref.current) ref.current.focus(); }, [editing]);
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
+        <DetailSelect label="Platform" value={row.platform}
+          options={[{ value: "x", label: "X" }, { value: "instagram", label: "Instagram" },
+            { value: "youtube", label: "YouTube" }, { value: "linkedin", label: "LinkedIn" }]}
+          onChange={v => save("platform", v)} />
+        <DetailSelect label="Type" value={normalizeType(row.type)} options={TYPE_OPTIONS}
+          onChange={v => save("interaction_type", v)} />
+      </div>
 
-  if (!editing) {
-    return <div onClick={() => setEditing(true)} style={{ cursor: "pointer" }}>{render(value)}</div>;
-  }
-  return (
-    <select ref={ref} value={value} onChange={e => { onChange(e.target.value); setEditing(false); }}
-      onBlur={() => setEditing(false)}
-      style={{ ...editInputBase, fontSize: F.xs, cursor: "pointer" }}>
-      {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-    </select>
-  );
-}
+      <DetailField label="Content" value={row.content} multiline placeholder="No content"
+        onChange={v => save("content", v)} />
 
-// ─── Trash icon SVG ─────────────────────────────────────────────────────────
-function TrashIcon({ size = 16, color = T.red }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-      <path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
-    </svg>
+      <DetailField label="Mention URL" value={row.mention_url} placeholder="https://..."
+        onChange={v => save("mention_url", v)} />
+
+      <DetailField label="Post URL" value={row.post_url} placeholder="https://..."
+        onChange={v => save("post_url", v)} />
+
+      <DetailField label="Date" value={row.date ? row.date.slice(0, 10) : ""} type="date"
+        onChange={v => save("interacted_at", v)} />
+
+      {/* Divider */}
+      <div style={{ borderTop: `1px solid ${T.border}`, margin: "20px 0" }} />
+
+      {/* Person / Handle section */}
+      <div style={{ fontFamily: sans, fontSize: F.xs, fontWeight: 700, color: T.sub,
+        textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12 }}>Person</div>
+
+      <DetailField label="Name" value={row.name} placeholder="Name"
+        onChange={v => save("name", v)} />
+
+      <DetailField label="Bio" value={handle.bio || row.bio} multiline placeholder="No bio"
+        onChange={v => save("bio", v)} />
+
+      <DetailSelect label="Label" value={row.zone || "SIGNAL"} options={ZONE_OPTIONS}
+        onChange={v => save("zone", v)} />
+
+      {/* Platform handles */}
+      <div style={{ fontFamily: sans, fontSize: 10, fontWeight: 600, color: T.dim,
+        textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8, marginTop: 4 }}>Handles</div>
+
+      {platHandles.map(({ key, label, plat }) => (
+        <div key={key} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+          <span style={{
+            display: "inline-flex", alignItems: "center", justifyContent: "center",
+            width: 24, height: 24, borderRadius: 6, flexShrink: 0,
+            background: (PLAT_COLORS[plat] || T.dim) + "14",
+            color: PLAT_COLORS[plat] || T.dim, fontSize: 11, fontWeight: 700,
+          }}>
+            {plat === "instagram" ? <IgIcon size={12} color="#E1306C" /> : (PLAT_ICON[plat] || "·")}
+          </span>
+          <DetailField label="" value={handle[key] || ""} placeholder={`${label} handle`}
+            onChange={v => save(key, v)} />
+        </div>
+      ))}
+
+      {/* Follower counts */}
+      <div style={{ fontFamily: sans, fontSize: 10, fontWeight: 600, color: T.dim,
+        textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8, marginTop: 12 }}>Followers</div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
+        {[
+          { key: "followers_x", label: "X" },
+          { key: "followers_instagram", label: "Instagram" },
+          { key: "followers_youtube", label: "YouTube" },
+          { key: "followers_linkedin", label: "LinkedIn" },
+        ].map(({ key, label }) => (
+          <DetailField key={key} label={label} value={handle[key] ? String(handle[key]) : ""}
+            placeholder="0" onChange={v => save(key, v)} />
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -215,6 +339,7 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
   const [sortBy, setSortBy] = useState("date");
   const [sortDesc, setSortDesc] = useState(true);
   const [liveData, setLiveData] = useState([]);
+  const [rawData, setRawData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedZones, setSelectedZones] = useState(new Set());
   const [addingRow, setAddingRow] = useState(false);
@@ -223,40 +348,50 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
   const [fetchKey, setFetchKey] = useState(0);
   const [selected, setSelected] = useState(new Set());
   const [deleting, setDeleting] = useState(false);
+  const [detailRow, setDetailRow] = useState(null);
 
-  // Debounced save for inline edits
-  const pendingEdits = useRef({});
-  const saveTimers = useRef({});
-
-  const flushEdit = useCallback((rowId) => {
-    const updates = pendingEdits.current[rowId];
-    if (!updates || Object.keys(updates).length === 0) return;
-    delete pendingEdits.current[rowId];
+  const saveField = useCallback((rowId, field, value) => {
+    // Update local state immediately
+    setLiveData(prev => prev.map(r => {
+      if (r.id !== rowId) return r;
+      const u = { ...r };
+      if (field === "name" || field === "bio" || field === "zone") u[field] = value;
+      else if (field === "content") u.content = value;
+      else if (field === "mention_url") u.mention_url = value;
+      else if (field === "post_url") u.post_url = value;
+      else if (field === "interaction_type") u.type = value;
+      else if (field === "platform") u.platform = value;
+      else if (field === "interacted_at") u.date = value;
+      return u;
+    }));
+    // Also update rawData for handles fields
+    setRawData(prev => prev.map(r => {
+      if (r.id !== rowId) return r;
+      const u = { ...r, handles: { ...r.handles } };
+      if (["name", "bio", "zone"].includes(field)) u.handles[field] = value;
+      if (field.startsWith("handle_") || field.startsWith("followers_")) u.handles[field] = field.startsWith("followers_") ? (parseInt(value, 10) || null) : value;
+      return u;
+    }));
+    // Update detailRow if it's the one being edited
+    setDetailRow(prev => {
+      if (!prev || prev.id !== rowId) return prev;
+      const u = { ...prev };
+      if (field === "name" || field === "bio" || field === "zone") u[field] = value;
+      else if (field === "content") u.content = value;
+      else if (field === "mention_url") u.mention_url = value;
+      else if (field === "post_url") u.post_url = value;
+      else if (field === "interaction_type") u.type = value;
+      else if (field === "platform") u.platform = value;
+      else if (field === "interacted_at") u.date = value;
+      return u;
+    });
+    // Persist to API
     fetch("/api/interactions/update", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: rowId, updates }),
-    }).catch(err => console.error("Edit save failed:", err));
+      body: JSON.stringify({ id: rowId, updates: { [field]: value } }),
+    }).catch(err => console.error("Save failed:", err));
   }, []);
-
-  const queueEdit = useCallback((rowId, field, value) => {
-    if (!pendingEdits.current[rowId]) pendingEdits.current[rowId] = {};
-    pendingEdits.current[rowId][field] = value;
-    // Also update local state immediately for responsiveness
-    setLiveData(prev => prev.map(r => {
-      if (r.id !== rowId) return r;
-      const updated = { ...r };
-      if (field === "name" || field === "bio" || field === "zone") updated[field] = value;
-      else if (field === "content") updated.content = value;
-      else if (field === "mention_url") updated.mention_url = value;
-      else if (field === "interaction_type") { updated.type = value; }
-      else if (field === "followers") updated.followers = parseInt(value, 10) || 0;
-      else if (field === "interacted_at") updated.date = value;
-      return updated;
-    }));
-    clearTimeout(saveTimers.current[rowId]);
-    saveTimers.current[rowId] = setTimeout(() => flushEdit(rowId), 800);
-  }, [flushEdit]);
 
   useEffect(() => {
     let cancelled = false;
@@ -272,21 +407,19 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
         if (error) throw error;
         if (commentsResult?.error) throw commentsResult.error;
 
+        if (!cancelled) setRawData(data || []);
+
         const mappedInteractions = (data || []).map((row, i) => {
           const h = row.handles || {};
           const plat = row.platform || "x";
-          const handle = plat === "instagram"
-            ? (h.handle_instagram || h.handle_x || h.handle_youtube || h.handle_linkedin || "unknown")
-            : plat === "x"
-              ? (h.handle_x || h.handle_instagram || h.handle_youtube || h.handle_linkedin || "unknown")
-              : plat === "youtube"
-                ? (h.handle_youtube || h.handle_x || h.handle_instagram || h.handle_linkedin || "unknown")
-                : (h.handle_linkedin || h.handle_x || h.handle_instagram || h.handle_youtube || "unknown");
+          const handle = plat === "instagram" ? (h.handle_instagram || h.handle_x || h.handle_youtube || h.handle_linkedin || "unknown")
+            : plat === "x" ? (h.handle_x || h.handle_instagram || h.handle_youtube || h.handle_linkedin || "unknown")
+            : plat === "youtube" ? (h.handle_youtube || h.handle_x || h.handle_instagram || h.handle_linkedin || "unknown")
+            : (h.handle_linkedin || h.handle_x || h.handle_instagram || h.handle_youtube || "unknown");
           const followers = plat === "instagram" ? (h.followers_instagram || 0)
             : plat === "x" ? (h.followers_x || 0)
             : plat === "youtube" ? (h.followers_youtube || 0)
             : (h.followers_linkedin || 0);
-
           return {
             id: row.id || i + 1, source: "interactions",
             name: h.name || "Unknown", handle, bio: h.bio || null,
@@ -297,9 +430,9 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
           };
         });
 
-        const mappedPlatformComments = commentsOnly
+        const mappedComments = commentsOnly
           ? (commentsResult?.data || []).map((row, i) => ({
-              id: row.id || `platform_comment_${i + 1}`, source: "platform_comments",
+              id: row.id || `pc_${i}`, source: "platform_comments",
               name: row.author_name || "Unknown", handle: row.author_handle || "unknown",
               bio: null, platform: row.platform || "instagram", type: "comment",
               content: row.content || null, followers: row.author_followers || 0,
@@ -309,22 +442,15 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
 
         const existingKeys = new Set(
           mappedInteractions.filter(r => isCommentType(r.type))
-            .map(r => [r.platform || "", (r.handle || "").toLowerCase(), (r.content || "").trim().toLowerCase(), r.date || ""].join("|"))
+            .map(r => [r.platform, (r.handle || "").toLowerCase(), (r.content || "").trim().toLowerCase(), r.date || ""].join("|"))
         );
         const merged = commentsOnly
-          ? [...mappedInteractions, ...mappedPlatformComments.filter(r => {
-              const key = [r.platform || "", (r.handle || "").toLowerCase(), (r.content || "").trim().toLowerCase(), r.date || ""].join("|");
-              return !existingKeys.has(key);
-            })]
+          ? [...mappedInteractions, ...mappedComments.filter(r => !existingKeys.has([r.platform, (r.handle || "").toLowerCase(), (r.content || "").trim().toLowerCase(), r.date || ""].join("|")))]
           : mappedInteractions;
 
         if (!cancelled) { setLiveData(merged); setSelected(new Set()); }
-      } catch (err) {
-        console.error("Failed to fetch interactions:", err);
-        if (!cancelled) setLiveData([]);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+      } catch (err) { console.error("Fetch failed:", err); if (!cancelled) setLiveData([]); }
+      finally { if (!cancelled) setLoading(false); }
     }
     fetchInteractions();
     return () => { cancelled = true; };
@@ -335,9 +461,9 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
     if (commentsOnly) data = data.filter(r => isCommentType(r.type));
     if (platform && platform !== "all") data = data.filter(d => d.platform === platform);
     if (weekFilter) {
-      const weekStart = new Date(weekFilter + "T00:00:00Z");
-      const weekEnd = new Date(weekStart); weekEnd.setDate(weekEnd.getDate() + 7);
-      data = data.filter(d => { const dd = new Date(d.date); return dd >= weekStart && dd < weekEnd; });
+      const ws = new Date(weekFilter + "T00:00:00Z"), we = new Date(ws);
+      we.setDate(we.getDate() + 7);
+      data = data.filter(d => { const dd = new Date(d.date); return dd >= ws && dd < we; });
     }
     return data;
   }, [commentsOnly, liveData, platform, weekFilter]);
@@ -357,85 +483,52 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
       else if (sortBy === "platform") { av = a.platform || ""; bv = b.platform || ""; }
       else if (sortBy === "type") { av = normalizeType(a.type); bv = normalizeType(b.type); }
       else { av = a[sortBy] ?? ""; bv = b[sortBy] ?? ""; }
-      const cmp = av < bv ? -1 : av > bv ? 1 : 0;
-      return sortDesc ? -cmp : cmp;
+      return sortDesc ? (av < bv ? 1 : av > bv ? -1 : 0) : (av < bv ? -1 : av > bv ? 1 : 0);
     });
   }, [filtered, sortBy, sortDesc]);
 
-  function toggleSort(col) {
-    if (sortBy === col) setSortDesc(d => !d);
-    else { setSortBy(col); setSortDesc(true); }
-  }
-  function toggleZone(zone) {
-    setSelectedZones(prev => { const next = new Set(prev); next.has(zone) ? next.delete(zone) : next.add(zone); return next; });
-  }
+  function toggleSort(col) { if (sortBy === col) setSortDesc(d => !d); else { setSortBy(col); setSortDesc(true); } }
+  function toggleZone(zone) { setSelectedZones(prev => { const n = new Set(prev); n.has(zone) ? n.delete(zone) : n.add(zone); return n; }); }
   function cancelAdd() { setAddingRow(false); setNewRow({ ...EMPTY_ROW }); }
+  function toggleSelect(id) { setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; }); }
+  function toggleSelectAll() { selected.size === sorted.length ? setSelected(new Set()) : setSelected(new Set(sorted.map(r => r.id))); }
 
   async function saveNewRow() {
     if (!newRow.name.trim()) return;
     setSaving(true);
     try {
-      const payload = { ...newRow, name: newRow.name.trim(), handle: newRow.handle.trim() };
-      payload.followers = payload.followers ? parseInt(payload.followers, 10) || null : null;
-      const res = await fetch("/api/interactions/add", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
-      cancelAdd();
-      setFetchKey(k => k + 1);
-    } catch (err) { console.error("Failed to save:", err); }
+      const p = { ...newRow, name: newRow.name.trim(), handle: newRow.handle.trim() };
+      p.followers = p.followers ? parseInt(p.followers, 10) || null : null;
+      const res = await fetch("/api/interactions/add", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(p) });
+      if (!res.ok) throw new Error((await res.json()).error);
+      cancelAdd(); setFetchKey(k => k + 1);
+    } catch (err) { console.error("Save failed:", err); }
     finally { setSaving(false); }
-  }
-
-  function toggleSelect(id) {
-    setSelected(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
-  }
-  function toggleSelectAll() {
-    if (selected.size === sorted.length) setSelected(new Set());
-    else setSelected(new Set(sorted.map(r => r.id)));
   }
 
   async function deleteSelected() {
     if (!selected.size) return;
     setDeleting(true);
     try {
-      const ids = [...selected];
-      const res = await fetch("/api/interactions/delete", {
-        method: "DELETE", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids }),
-      });
-      if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
-      setSelected(new Set());
-      setFetchKey(k => k + 1);
+      const res = await fetch("/api/interactions/delete", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids: [...selected] }) });
+      if (!res.ok) throw new Error((await res.json()).error);
+      setSelected(new Set()); setDetailRow(null); setFetchKey(k => k + 1);
     } catch (err) { console.error("Delete failed:", err); }
     finally { setDeleting(false); }
   }
 
   const thStyle = (col) => ({
-    fontFamily: sans, fontSize: F.xs, fontWeight: 600,
-    color: sortBy === col ? T.accent : T.sub,
-    padding: "10px 12px", textAlign: "left", cursor: "pointer",
-    whiteSpace: "nowrap", borderBottom: `1px solid ${T.border}`, userSelect: "none",
+    fontFamily: sans, fontSize: F.xs, fontWeight: 600, color: sortBy === col ? T.accent : T.sub,
+    padding: "10px 12px", textAlign: "left", cursor: "pointer", whiteSpace: "nowrap",
+    borderBottom: `1px solid ${T.border}`, userSelect: "none",
   });
-  const tdStyle = {
-    padding: "11px 12px", fontFamily: sans, fontSize: F.sm, color: T.text,
-    borderBottom: `1px solid ${T.border}`, verticalAlign: "middle",
-  };
+  const tdStyle = { padding: "11px 12px", fontFamily: sans, fontSize: F.sm, color: T.text, borderBottom: `1px solid ${T.border}`, verticalAlign: "middle" };
   const arrow = (col) => sortBy === col ? (sortDesc ? " ↓" : " ↑") : "";
-
-  // Shared inline input style for the add row
-  const addInputStyle = {
-    fontFamily: sans, fontSize: F.xs, padding: "5px 7px", borderRadius: 6,
-    border: "none", background: T.accentBg, color: T.text, width: "100%", outline: "none",
-  };
+  const addInputStyle = { fontFamily: sans, fontSize: F.xs, padding: "5px 7px", borderRadius: 6, border: "none", background: T.accentBg, color: T.text, width: "100%", outline: "none" };
 
   if (loading) {
-    return (
-      <div style={{ fontFamily: sans, fontSize: F.md, color: T.sub, textAlign: "center", padding: "60px 20px" }}>
-        {commentsOnly ? "Loading comments..." : "Loading interactions..."}
-      </div>
-    );
+    return <div style={{ fontFamily: sans, fontSize: F.md, color: T.sub, textAlign: "center", padding: "60px 20px" }}>
+      {commentsOnly ? "Loading comments..." : "Loading interactions..."}</div>;
   }
 
   return (
@@ -444,13 +537,12 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
 
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
         <div style={{ fontFamily: sans, fontSize: F.xs, color: T.sub, fontWeight: 600 }}>
-          {selectedZones.size ? `Showing: ${[...selectedZones].join(", ")}` : `Showing: all labels`}
+          {selectedZones.size ? `Showing: ${[...selectedZones].join(", ")}` : "Showing: all labels"}
         </div>
         {selectedZones.size > 0 && (
-          <button onClick={() => setSelectedZones(new Set())} style={{
-            background: "transparent", color: T.dim, border: `1px solid ${T.border}`,
-            borderRadius: 999, padding: "4px 10px", fontFamily: sans, fontSize: F.xs, fontWeight: 600, cursor: "pointer",
-          }}>Clear filters</button>
+          <button onClick={() => setSelectedZones(new Set())} style={{ background: "transparent", color: T.dim,
+            border: `1px solid ${T.border}`, borderRadius: 999, padding: "4px 10px",
+            fontFamily: sans, fontSize: F.xs, fontWeight: 600, cursor: "pointer" }}>Clear filters</button>
         )}
       </div>
 
@@ -460,21 +552,15 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
           {platform && platform !== "all" ? <span> on {PLAT_LABEL[platform] || platform}</span> : null}
         </div>
         {!commentsOnly && !addingRow && (
-          <button onClick={() => setAddingRow(true)} style={{
-            fontFamily: sans, fontSize: F.xs, fontWeight: 600, padding: "4px 12px",
-            borderRadius: 8, border: `1px solid ${T.border}`, background: T.card,
-            color: T.accent, cursor: "pointer",
-          }}>+ Add</button>
+          <button onClick={() => setAddingRow(true)} style={{ fontFamily: sans, fontSize: F.xs, fontWeight: 600,
+            padding: "4px 12px", borderRadius: 8, border: `1px solid ${T.border}`, background: T.card,
+            color: T.accent, cursor: "pointer" }}>+ Add</button>
         )}
         {selected.size > 0 && (
-          <button onClick={deleteSelected} disabled={deleting}
-            title={`Delete ${selected.size} interaction${selected.size !== 1 ? "s" : ""}`}
-            style={{
-              display: "inline-flex", alignItems: "center", gap: 5,
-              fontFamily: sans, fontSize: F.xs, fontWeight: 600, padding: "4px 12px",
-              borderRadius: 8, border: `1px solid ${T.redBorder}`, background: T.redBg,
-              color: T.red, cursor: deleting ? "wait" : "pointer", opacity: deleting ? 0.6 : 1,
-            }}>
+          <button onClick={deleteSelected} disabled={deleting} style={{
+            display: "inline-flex", alignItems: "center", gap: 5, fontFamily: sans, fontSize: F.xs,
+            fontWeight: 600, padding: "4px 12px", borderRadius: 8, border: `1px solid ${T.redBorder}`,
+            background: T.redBg, color: T.red, cursor: deleting ? "wait" : "pointer", opacity: deleting ? 0.6 : 1 }}>
             <TrashIcon size={13} color={T.red} />
             {deleting ? "Deleting..." : `Delete (${selected.size})`}
           </button>
@@ -489,7 +575,7 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {sorted.map((row) => (
+            {sorted.map(row => (
               <div key={row.id} style={{ background: T.card, border: `1px solid ${T.border}`,
                 borderRadius: 12, padding: "16px 20px", boxShadow: T.shadowSm }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
@@ -500,23 +586,13 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
                     {row.platform === "instagram" ? <IgIcon size={16} color="#E1306C" /> : (PLAT_ICON[row.platform] || "·")}
                   </span>
                   <span style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text }}>{row.name}</span>
-                  <span style={{ fontFamily: sans, fontSize: F.xs, color: T.dim,
-                    background: T.well, borderRadius: 4, padding: "1px 6px", border: `1px solid ${T.border}` }}>
-                    {fmt(row.followers)} followers
-                  </span>
-                  <span style={{ display: "inline-block", background: (ZONE_CFG[row.zone] || ZONE_CFG.SIGNAL).bg,
-                    color: (ZONE_CFG[row.zone] || ZONE_CFG.SIGNAL).color,
-                    border: `1px solid ${(ZONE_CFG[row.zone] || ZONE_CFG.SIGNAL).border}`,
-                    borderRadius: 6, padding: "2px 8px", fontSize: F.xs, fontWeight: 700, fontFamily: sans }}>
-                    {(ZONE_CFG[row.zone] || ZONE_CFG.SIGNAL).label}
-                  </span>
-                  <span style={{ marginLeft: "auto", fontFamily: sans, fontSize: F.xs, color: T.dim }}>
-                    {fmtDate(row.date)}
-                  </span>
+                  <span style={{ fontFamily: sans, fontSize: F.xs, color: T.dim, background: T.well, borderRadius: 4,
+                    padding: "1px 6px", border: `1px solid ${T.border}` }}>{fmt(row.followers)} followers</span>
+                  <ZoneBadge zone={row.zone} />
+                  <span style={{ marginLeft: "auto", fontFamily: sans, fontSize: F.xs, color: T.dim }}>{fmtDate(row.date)}</span>
                 </div>
                 <div style={{ fontFamily: sans, fontSize: F.sm, color: T.text, lineHeight: 1.55, whiteSpace: "pre-wrap" }}>
-                  {row.content || "—"}
-                </div>
+                  {row.content || "—"}</div>
               </div>
             ))}
           </div>
@@ -526,11 +602,9 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
           <table style={{ width: "100%", borderCollapse: "collapse", background: T.card, minWidth: 880 }}>
             <thead>
               <tr style={{ background: T.well }}>
-                <th style={{ ...thStyle(""), cursor: "pointer", width: 36, textAlign: "center", padding: "10px 8px" }}
-                  onClick={toggleSelectAll}>
+                <th style={{ ...thStyle(""), cursor: "pointer", width: 36, textAlign: "center", padding: "10px 8px" }} onClick={toggleSelectAll}>
                   <input type="checkbox" checked={sorted.length > 0 && selected.size === sorted.length}
-                    onChange={toggleSelectAll}
-                    style={{ cursor: "pointer", accentColor: T.accent }} />
+                    onChange={toggleSelectAll} style={{ cursor: "pointer", accentColor: T.accent }} />
                 </th>
                 <th style={thStyle("name")} onClick={() => toggleSort("name")}>Person{arrow("name")}</th>
                 <th style={thStyle("platform")} onClick={() => toggleSort("platform")}>Platform{arrow("platform")}</th>
@@ -542,14 +616,12 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
               </tr>
             </thead>
             <tbody>
-              {/* ── Add new row ── */}
               {addingRow && (
                 <tr style={{ background: T.accentBg + "66" }}>
                   <td style={{ ...tdStyle, textAlign: "center" }} />
                   <td style={{ ...tdStyle, verticalAlign: "top" }}>
                     <input value={newRow.name} onChange={e => setNewRow(r => ({ ...r, name: e.target.value }))}
-                      placeholder="Name" autoFocus
-                      onKeyDown={e => { if (e.key === "Enter") saveNewRow(); if (e.key === "Escape") cancelAdd(); }}
+                      placeholder="Name" autoFocus onKeyDown={e => { if (e.key === "Enter") saveNewRow(); if (e.key === "Escape") cancelAdd(); }}
                       style={addInputStyle} />
                   </td>
                   <td style={{ ...tdStyle, verticalAlign: "top" }}>
@@ -585,149 +657,83 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
                         onChange={e => setNewRow(r => ({ ...r, interacted_at: e.target.value }))}
                         onKeyDown={e => { if (e.key === "Enter") saveNewRow(); if (e.key === "Escape") cancelAdd(); }}
                         style={{ ...addInputStyle, width: 110 }} />
-                      <button onClick={saveNewRow} disabled={saving} style={{
-                        fontFamily: sans, fontSize: 10, fontWeight: 700, padding: "4px 8px",
-                        borderRadius: 6, border: "none", background: T.accent, color: "#fff",
-                        cursor: saving ? "wait" : "pointer", opacity: saving ? 0.6 : 1, whiteSpace: "nowrap",
-                      }}>{saving ? "..." : "Save"}</button>
-                      <button onClick={cancelAdd} style={{
-                        fontFamily: sans, fontSize: 10, fontWeight: 600, padding: "4px 6px",
-                        borderRadius: 6, border: `1px solid ${T.border}`, background: T.card,
-                        color: T.dim, cursor: "pointer", whiteSpace: "nowrap",
-                      }}>Esc</button>
+                      <button onClick={saveNewRow} disabled={saving} style={{ fontFamily: sans, fontSize: 10, fontWeight: 700,
+                        padding: "4px 8px", borderRadius: 6, border: "none", background: T.accent, color: "#fff",
+                        cursor: saving ? "wait" : "pointer", opacity: saving ? 0.6 : 1 }}>{saving ? "..." : "Save"}</button>
+                      <button onClick={cancelAdd} style={{ fontFamily: sans, fontSize: 10, fontWeight: 600,
+                        padding: "4px 6px", borderRadius: 6, border: `1px solid ${T.border}`, background: T.card,
+                        color: T.dim, cursor: "pointer" }}>Esc</button>
                     </div>
                   </td>
                 </tr>
               )}
-
               {sorted.length === 0 && !addingRow && (
-                <tr>
-                  <td colSpan={8} style={{ ...tdStyle, textAlign: "center", color: T.dim, padding: "40px 12px" }}>
-                    No interactions found{platform && platform !== "all" ? ` on ${PLAT_LABEL[platform] || platform}` : ""}{weekFilter ? " for the selected week" : ""}.
-                  </td>
-                </tr>
+                <tr><td colSpan={8} style={{ ...tdStyle, textAlign: "center", color: T.dim, padding: "40px 12px" }}>
+                  No interactions found{platform && platform !== "all" ? ` on ${PLAT_LABEL[platform] || platform}` : ""}{weekFilter ? " for the selected week" : ""}.
+                </td></tr>
               )}
-
-              {/* ── Data rows (inline editable) ── */}
               {sorted.map((row, i) => {
                 const isSelected = selected.has(row.id);
-                const isEditable = row.source === "interactions";
+                const isDetail = detailRow?.id === row.id;
                 return (
-                  <tr key={row.id} style={{ background: isSelected ? T.blueBg : i % 2 === 0 ? T.card : T.well + "88" }}>
-                    <td style={{ ...tdStyle, textAlign: "center", padding: "11px 8px" }}>
+                  <tr key={row.id}
+                    onClick={() => row.source === "interactions" && setDetailRow(row)}
+                    style={{
+                      background: isDetail ? T.accentBg : isSelected ? T.blueBg : i % 2 === 0 ? T.card : T.well + "88",
+                      cursor: row.source === "interactions" ? "pointer" : "default",
+                      transition: "background 0.1s",
+                    }}>
+                    <td style={{ ...tdStyle, textAlign: "center", padding: "11px 8px" }} onClick={e => e.stopPropagation()}>
                       <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(row.id)}
                         style={{ cursor: "pointer", accentColor: T.accent }} />
                     </td>
                     <td style={tdStyle}>
                       <div style={{ maxWidth: 260 }}>
-                        {isEditable ? (
-                          <EditableText value={row.name} fontSize={F.sm}
-                            style={{ fontWeight: 600, lineHeight: 1.3 }}
-                            onChange={v => queueEdit(row.id, "name", v)} />
-                        ) : (
-                          <div style={{ fontWeight: 600, fontSize: F.sm, color: T.text, lineHeight: 1.3 }}>{row.name}</div>
-                        )}
-                        {row.bio && (
-                          <div style={{ marginTop: 4, fontSize: F.xs, color: T.sub, lineHeight: 1.45, whiteSpace: "normal" }}>
-                            {truncate(row.bio, 120)}
-                          </div>
-                        )}
+                        <div style={{ fontWeight: 600, fontSize: F.sm, color: T.text, lineHeight: 1.3 }}>{row.name}</div>
+                        {row.bio && <div style={{ marginTop: 4, fontSize: F.xs, color: T.sub, lineHeight: 1.45, whiteSpace: "normal" }}>{truncate(row.bio, 120)}</div>}
                       </div>
                     </td>
                     <td style={{ ...tdStyle, textAlign: "center" }}>
                       <a href={PLAT_URL[row.platform]?.(row.handle) || "#"} target="_blank" rel="noreferrer"
+                        onClick={e => e.stopPropagation()}
                         style={{ display: "inline-flex", alignItems: "center", justifyContent: "center",
                           width: 30, height: 30, borderRadius: 8,
                           background: (PLAT_COLORS[row.platform] || T.dim) + "14",
-                          color: PLAT_COLORS[row.platform] || T.dim,
-                          fontSize: 14, fontWeight: 700, textDecoration: "none" }}>
+                          color: PLAT_COLORS[row.platform] || T.dim, fontSize: 14, fontWeight: 700, textDecoration: "none" }}>
                         {row.platform === "instagram" ? <IgIcon size={16} color="#E1306C" /> : (PLAT_ICON[row.platform] || "·")}
                       </a>
                     </td>
-                    <td style={tdStyle}>
-                      {isEditable ? (
-                        <EditableSelect value={normalizeType(row.type)} options={TYPE_OPTIONS}
-                          onChange={v => queueEdit(row.id, "interaction_type", v)}
-                          render={v => {
-                            const cfg = { like: { label: "Like", icon: "♥", bg: "#FEF2F2", color: "#DC2626", border: "#FECACA" },
-                              follow: { label: "Follow", bg: "#EFF6FF", color: "#2563EB", border: "#BFDBFE" },
-                              comment: { label: "Comment", bg: "#FEFCE8", color: "#CA8A04", border: "#FEF08A" },
-                              repost: { label: "Repost", bg: "#F0FDF4", color: "#16A34A", border: "#BBF7D0" },
-                              mention: { label: "Mention", bg: "#FFF3EE", color: "#FF6B35", border: "#FFD4C2" },
-                              tag: { label: "Tag", bg: "#F5F3FF", color: "#7C3AED", border: "#DDD6FE" },
-                              reply: { label: "Reply", bg: "#FEFCE8", color: "#CA8A04", border: "#FEF08A" },
-                            };
-                            const c = cfg[v] || { label: v, bg: T.well, color: T.sub, border: T.border };
-                            return (
-                              <span style={{ display: "inline-flex", alignItems: "center", gap: 4,
-                                background: c.bg, color: c.color, border: `1px solid ${c.border}`,
-                                borderRadius: 12, padding: "3px 10px", fontSize: F.xs, fontWeight: 600,
-                                fontFamily: sans, whiteSpace: "nowrap", cursor: "pointer" }}>
-                                {c.icon && <span style={{ fontSize: 10 }}>{c.icon}</span>}{c.label}
-                              </span>
-                            );
-                          }} />
-                      ) : (
-                        <span style={{ display: "inline-flex", alignItems: "center", gap: 4,
-                          background: T.well, color: T.sub, border: `1px solid ${T.border}`,
-                          borderRadius: 12, padding: "3px 10px", fontSize: F.xs, fontWeight: 600, fontFamily: sans }}>
-                          {normalizeType(row.type)}
-                        </span>
-                      )}
-                    </td>
+                    <td style={tdStyle}><TypeBadge type={row.type} /></td>
                     <td style={{ ...tdStyle, maxWidth: 0 }}>
-                      {isEditable ? (
-                        <EditableText value={row.content} fontSize={F.xs} placeholder="—"
-                          style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                          onChange={v => queueEdit(row.id, "content", v)} />
-                      ) : (
-                        <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                          fontSize: F.xs, color: row.content ? T.sub : T.dim, fontStyle: row.content ? "normal" : "italic" }}>
-                          {row.content ? truncate(row.content, 100) : "—"}
-                        </div>
-                      )}
+                      {(() => {
+                        const href = row.mention_url || row.post_url;
+                        const text = row.content ? truncate(row.content, 100) : "—";
+                        const s = { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                          fontSize: F.xs, color: row.content ? T.sub : T.dim, fontStyle: row.content ? "normal" : "italic", display: "block" };
+                        return href && row.content
+                          ? <a href={href} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ ...s, textDecoration: "none" }} title={href}>{text}</a>
+                          : <div style={s}>{text}</div>;
+                      })()}
                     </td>
-                    <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>
-                      {isEditable ? (
-                        <EditableText value={row.followers ? String(row.followers) : ""} fontSize={F.sm}
-                          placeholder="—" style={{ fontWeight: 600 }}
-                          onChange={v => queueEdit(row.id, "followers", v)} />
-                      ) : (
-                        <span style={{ fontWeight: 600 }}>{row.followers ? fmt(row.followers) : "—"}</span>
-                      )}
-                    </td>
-                    <td style={tdStyle}>
-                      {isEditable ? (
-                        <EditableSelect value={row.zone || "SIGNAL"} options={ZONE_OPTIONS}
-                          onChange={v => queueEdit(row.id, "zone", v)}
-                          render={v => {
-                            const cfg = ZONE_CFG[v] || ZONE_CFG.SIGNAL;
-                            return (
-                              <span style={{ display: "inline-block", background: cfg.bg, color: cfg.color,
-                                border: `1px solid ${cfg.border}`, borderRadius: 6, padding: "2px 8px",
-                                fontSize: F.xs, fontWeight: 700, fontFamily: sans, letterSpacing: "0.04em", cursor: "pointer" }}>
-                                {cfg.label}
-                              </span>
-                            );
-                          }} />
-                      ) : (
-                        <span style={{ display: "inline-block", background: (ZONE_CFG[row.zone] || ZONE_CFG.SIGNAL).bg,
-                          color: (ZONE_CFG[row.zone] || ZONE_CFG.SIGNAL).color,
-                          border: `1px solid ${(ZONE_CFG[row.zone] || ZONE_CFG.SIGNAL).border}`,
-                          borderRadius: 6, padding: "2px 8px", fontSize: F.xs, fontWeight: 700, fontFamily: sans }}>
-                          {(ZONE_CFG[row.zone] || ZONE_CFG.SIGNAL).label}
-                        </span>
-                      )}
-                    </td>
-                    <td style={{ ...tdStyle, whiteSpace: "nowrap", color: T.sub, fontSize: F.xs }}>
-                      {fmtDate(row.date)}
-                    </td>
+                    <td style={{ ...tdStyle, fontWeight: 600, whiteSpace: "nowrap" }}>{row.followers ? fmt(row.followers) : "—"}</td>
+                    <td style={tdStyle}><ZoneBadge zone={row.zone} /></td>
+                    <td style={{ ...tdStyle, whiteSpace: "nowrap", color: T.sub, fontSize: F.xs }}>{fmtDate(row.date)}</td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
         </div>
+      )}
+
+      {/* Detail slide-out panel */}
+      {detailRow && (
+        <>
+          <div onClick={() => setDetailRow(null)} style={{
+            position: "fixed", inset: 0, zIndex: 999, background: "rgba(0,0,0,0.15)" }} />
+          <DetailPanel row={detailRow} rawData={rawData} onClose={() => setDetailRow(null)}
+            onSave={saveField} onRefresh={() => setFetchKey(k => k + 1)} />
+        </>
       )}
     </div>
   );

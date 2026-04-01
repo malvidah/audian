@@ -148,22 +148,32 @@ function NotableInteractions({ activePlatform, dateFrom, dateTo }) {
           filtered = filtered.filter(m => m.platform === activePlatform);
         }
 
-        // Score and rank by notability
-        filtered.sort((a, b) => {
-          const za = ZONE_PRIORITY[a.zone] ?? 99;
-          const zb = ZONE_PRIORITY[b.zone] ?? 99;
-          if (za !== zb) return za - zb;
-          if ((b.followers || 0) !== (a.followers || 0)) return (b.followers || 0) - (a.followers || 0);
-          const bioA = a.bio ? 1 : 0;
-          const bioB = b.bio ? 1 : 0;
-          if (bioB !== bioA) return bioB - bioA;
-          const contentA = a.content ? 1 : 0;
-          const contentB = b.content ? 1 : 0;
-          return contentB - contentA;
-        });
+        // Score interactions for ranking — prefer meaningful types and content
+        const TYPE_SCORE = { follow: 5, repost: 4, mention: 3, comment: 2, reply: 2, tag: 1, like: 0 };
+        function interactionScore(m) {
+          let s = TYPE_SCORE[m.type] ?? 1;
+          if (m.content && m.content.length > 30) s += 3;
+          else if (m.content && m.content.length > 0) s += 1;
+          s += (ZONE_PRIORITY[m.zone] != null ? (3 - ZONE_PRIORITY[m.zone]) : 0);
+          s += Math.min((m.followers || 0) / 100000, 5);
+          return s;
+        }
+
+        // Sort by score descending
+        filtered.sort((a, b) => interactionScore(b) - interactionScore(a));
+
+        // Deduplicate: 1 interaction per handle (best one first)
+        const seenHandles = new Set();
+        const deduped = [];
+        for (const m of filtered) {
+          const key = m.name?.toLowerCase() || m.handle?.toLowerCase();
+          if (seenHandles.has(key)) continue;
+          seenHandles.add(key);
+          deduped.push(m);
+        }
 
         // Only keep ELITE, INFLUENTIAL, or high-signal entries
-        const notable = filtered.filter(m =>
+        const notable = deduped.filter(m =>
           m.zone === "ELITE" || m.zone === "INFLUENTIAL" ||
           (m.followers && m.followers >= 1000) ||
           m.bio || m.content

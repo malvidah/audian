@@ -8,7 +8,9 @@ export async function PATCH(req) {
     const { id, updates } = await req.json();
 
     // Fields that live on the handles table
-    const handleFields = ['bio', 'name', 'followed_by', 'zone', 'avatar_url'];
+    const handleFields = ['bio', 'name', 'followed_by', 'zone', 'avatar_url',
+      'handle_x', 'handle_instagram', 'handle_youtube', 'handle_linkedin',
+      'followers_x', 'followers_instagram', 'followers_youtube', 'followers_linkedin'];
     // Fields that live on the interactions table
     const interactionFields = ['interaction_type', 'content', 'mention_url', 'post_url', 'interacted_at', 'platform'];
 
@@ -57,10 +59,12 @@ export async function PATCH(req) {
 
     // ── Update handles table fields ──────────────────────────────────────
     const handleUpdates = Object.fromEntries(
-      Object.entries(updates).filter(([k]) => handleFields.includes(k))
+      Object.entries(updates)
+        .filter(([k]) => handleFields.includes(k))
+        .map(([k, v]) => k.startsWith("followers_") ? [k, parseInt(v, 10) || null] : [k, v])
     );
 
-    if (updates.followers != null && updates.followers !== '') {
+    if (updates.followers != null && updates.followers !== '' && !Object.keys(updates).some(k => k.startsWith("followers_"))) {
       const parsed = parseInt(updates.followers);
       if (!isNaN(parsed)) {
         const usePlat = updates.platform || plat;
