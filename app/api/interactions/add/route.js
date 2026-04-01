@@ -1,0 +1,82 @@
+import { NextResponse } from 'next/server';
+import { supabaseAdmin as supabase } from '@/lib/supabase';
+
+export const dynamic = 'force-dynamic';
+
+export async function POST(req) {
+  try {
+    const body = await req.json();
+    const { name, platform, handle, interaction_type, content, mention_url, post_url, zone, interacted_at } = body;
+
+    if (!name || !platform || !interaction_type) {
+      return NextResponse.json({ error: 'Name, platform, and type are required' }, { status: 400 });
+    }
+
+    const VALID_PLATFORMS = ['x', 'instagram', 'youtube', 'linkedin'];
+    if (!VALID_PLATFORMS.includes(platform)) {
+      return NextResponse.json({ error: 'Invalid platform' }, { status: 400 });
+    }
+
+    const now = new Date().toISOString();
+    const handleCol = `handle_${platform}`;
+    const cleanHandle = handle ? handle.toLowerCase().replace(/^@/, '') : null;
+
+    // Look up existing handle by name or platform handle
+    let handleId = null;
+    if (cleanHandle) {
+      const { data: byHandle } = await supabase
+        .from('handles')
+        .select('id, zone')
+        .eq(handleCol, cleanHandle)
+        .maybeSingle();
+      if (byHandle) handleId = byHandle.id;
+    }
+
+    if (!handleId) {
+      const { data: byName } = await supabase
+        .from('handles')
+        .select('id, zone')
+        .eq('name', name)
+        .maybeSingle();
+      if (byName) handleId = byName.id;
+    }
+
+    // Create handle if not found
+    if (!handleId) {
+      const insert = {
+        name,
+        zone: zone || 'SIGNAL',
+        added_at: now,
+        updated_at: now,
+      };
+      if (cleanHandle) insert[handleCol] = cleanHandle;
+
+      const { data: created, error } = await supabase
+        .from('handles')
+        .insert(insert)
+        .select('id')
+        .single();
+
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+      handleId = created.id;
+    }
+
+    // Insert interaction
+    const { error: intError } = await supabase.from('interactions').insert({
+      handle_id: handleId,
+      platform,
+      interaction_type,
+      content: content?.slice(0, 2000) || null,
+      mention_url: mention_url || null,
+      post_url: post_url || null,
+      interacted_at: interacted_at || now,
+      synced_at: now,
+    });
+
+    if (intError) return NextResponse.json({ error: intError.message }, { status: 500 });
+
+    return NextResponse.json({ success: true, handle_id: handleId });
+  } catch (err) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}

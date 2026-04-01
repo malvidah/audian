@@ -195,12 +195,42 @@ function TypeBadge({ type }) {
   );
 }
 
+const PLAT_OPTIONS = [
+  { value: "x", label: "X" },
+  { value: "instagram", label: "IG" },
+  { value: "youtube", label: "YT" },
+  { value: "linkedin", label: "LI" },
+];
+const TYPE_OPTIONS = [
+  { value: "mention", label: "Mention" },
+  { value: "repost", label: "Repost" },
+  { value: "comment", label: "Comment" },
+  { value: "reply", label: "Reply" },
+  { value: "like", label: "Like" },
+  { value: "follow", label: "Follow" },
+  { value: "tag", label: "Tag" },
+];
+const ZONE_OPTIONS = [
+  { value: "ELITE", label: "Elite" },
+  { value: "INFLUENTIAL", label: "Influential" },
+  { value: "SIGNAL", label: "Signal" },
+];
+
+const EMPTY_ROW = {
+  name: "", platform: "x", handle: "", interaction_type: "mention",
+  content: "", zone: "SIGNAL", interacted_at: new Date().toISOString().slice(0, 10),
+};
+
 export default function InteractionsTable({ platform, weekFilter, refreshKey, commentsOnly = false }) {
   const [sortBy, setSortBy] = useState("date");
   const [sortDesc, setSortDesc] = useState(true);
   const [liveData, setLiveData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedZones, setSelectedZones] = useState(new Set());
+  const [addingRow, setAddingRow] = useState(false);
+  const [newRow, setNewRow] = useState({ ...EMPTY_ROW });
+  const [saving, setSaving] = useState(false);
+  const [fetchKey, setFetchKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -312,7 +342,7 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
 
     fetchInteractions();
     return () => { cancelled = true; };
-  }, [refreshKey]);
+  }, [refreshKey, fetchKey]);
 
   const baseFiltered = useMemo(() => {
     let data = liveData;
@@ -392,6 +422,31 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
     });
   }
 
+  function cancelAdd() {
+    setAddingRow(false);
+    setNewRow({ ...EMPTY_ROW });
+  }
+
+  async function saveNewRow() {
+    if (!newRow.name.trim()) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/interactions/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...newRow, name: newRow.name.trim(), handle: newRow.handle.trim() }),
+      });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+      setAddingRow(false);
+      setNewRow({ ...EMPTY_ROW });
+      setFetchKey(k => k + 1);
+    } catch (err) {
+      console.error("Failed to save:", err);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   const thStyle = (col) => ({
     fontFamily: sans, fontSize: F.xs, fontWeight: 600,
     color: sortBy === col ? T.accent : T.sub,
@@ -447,9 +502,18 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
         )}
       </div>
 
-      <div style={{ fontFamily: sans, fontSize: F.sm, color: T.sub, marginBottom: 10 }}>
-        {sorted.length} {commentsOnly ? "comment" : "interaction"}{sorted.length !== 1 ? "s" : ""}
-        {platform && platform !== "all" ? <span> on {PLAT_LABEL[platform] || platform}</span> : null}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+        <div style={{ fontFamily: sans, fontSize: F.sm, color: T.sub }}>
+          {sorted.length} {commentsOnly ? "comment" : "interaction"}{sorted.length !== 1 ? "s" : ""}
+          {platform && platform !== "all" ? <span> on {PLAT_LABEL[platform] || platform}</span> : null}
+        </div>
+        {!commentsOnly && !addingRow && (
+          <button onClick={() => setAddingRow(true)} style={{
+            fontFamily: sans, fontSize: F.xs, fontWeight: 600, padding: "4px 12px",
+            borderRadius: 8, border: `1px solid ${T.border}`, background: T.card,
+            color: T.accent, cursor: "pointer",
+          }}>+ Add</button>
+        )}
       </div>
 
       {commentsOnly ? (
@@ -530,7 +594,85 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
               </tr>
             </thead>
             <tbody>
-              {sorted.length === 0 && (
+              {addingRow && (() => {
+                const cellInput = (key, placeholder, opts) => (
+                  <input
+                    value={newRow[key]}
+                    onChange={e => setNewRow(r => ({ ...r, [key]: e.target.value }))}
+                    placeholder={placeholder}
+                    autoFocus={key === "name"}
+                    onKeyDown={e => { if (e.key === "Enter") saveNewRow(); if (e.key === "Escape") cancelAdd(); }}
+                    style={{
+                      fontFamily: sans, fontSize: F.xs, padding: "5px 7px", borderRadius: 6,
+                      border: `1px solid ${T.accent}44`, background: T.accentBg, color: T.text,
+                      width: "100%", outline: "none", ...(opts?.style || {}),
+                    }}
+                  />
+                );
+                const cellSelect = (key, options) => (
+                  <select
+                    value={newRow[key]}
+                    onChange={e => setNewRow(r => ({ ...r, [key]: e.target.value }))}
+                    onKeyDown={e => { if (e.key === "Enter") saveNewRow(); if (e.key === "Escape") cancelAdd(); }}
+                    style={{
+                      fontFamily: sans, fontSize: F.xs, padding: "5px 4px", borderRadius: 6,
+                      border: `1px solid ${T.accent}44`, background: T.accentBg, color: T.text,
+                      width: "100%", outline: "none",
+                    }}
+                  >
+                    {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                );
+
+                return (
+                  <tr style={{ background: T.accentBg + "66" }}>
+                    <td style={{ ...tdStyle, verticalAlign: "top" }}>
+                      {cellInput("name", "Name")}
+                    </td>
+                    <td style={{ ...tdStyle, verticalAlign: "top" }}>
+                      {cellSelect("platform", PLAT_OPTIONS)}
+                    </td>
+                    <td style={{ ...tdStyle, verticalAlign: "top" }}>
+                      {cellSelect("interaction_type", TYPE_OPTIONS)}
+                    </td>
+                    <td style={{ ...tdStyle, verticalAlign: "top" }}>
+                      {cellInput("content", "Content (optional)")}
+                    </td>
+                    <td style={{ ...tdStyle, verticalAlign: "top", color: T.dim, fontSize: F.xs }}>
+                      —
+                    </td>
+                    <td style={{ ...tdStyle, verticalAlign: "top" }}>
+                      {cellSelect("zone", ZONE_OPTIONS)}
+                    </td>
+                    <td style={{ ...tdStyle, verticalAlign: "top", whiteSpace: "nowrap" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                        <input
+                          type="date"
+                          value={newRow.interacted_at}
+                          onChange={e => setNewRow(r => ({ ...r, interacted_at: e.target.value }))}
+                          onKeyDown={e => { if (e.key === "Enter") saveNewRow(); if (e.key === "Escape") cancelAdd(); }}
+                          style={{
+                            fontFamily: sans, fontSize: F.xs, padding: "5px 4px", borderRadius: 6,
+                            border: `1px solid ${T.accent}44`, background: T.accentBg, color: T.text,
+                            outline: "none", width: 110,
+                          }}
+                        />
+                        <button onClick={saveNewRow} disabled={saving} style={{
+                          fontFamily: sans, fontSize: 10, fontWeight: 700, padding: "4px 8px",
+                          borderRadius: 6, border: "none", background: T.accent, color: "#fff",
+                          cursor: saving ? "wait" : "pointer", opacity: saving ? 0.6 : 1, whiteSpace: "nowrap",
+                        }}>{saving ? "..." : "Save"}</button>
+                        <button onClick={cancelAdd} style={{
+                          fontFamily: sans, fontSize: 10, fontWeight: 600, padding: "4px 6px",
+                          borderRadius: 6, border: `1px solid ${T.border}`, background: T.card,
+                          color: T.dim, cursor: "pointer", whiteSpace: "nowrap",
+                        }}>Esc</button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })()}
+              {sorted.length === 0 && !addingRow && (
                 <tr>
                   <td colSpan={7} style={{ ...tdStyle, textAlign: "center", color: T.dim, padding: "40px 12px" }}>
                     No interactions found{platform && platform !== "all" ? ` on ${PLAT_LABEL[platform] || platform}` : ""}{weekFilter ? " for the selected week" : ""}.
