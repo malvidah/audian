@@ -602,8 +602,13 @@ function Outliers({ posts, activePlatform }) {
   const avg   = withEng.reduce((s, p) => s + p.engagement, 0) / withEng.length;
   const over  = withEng.filter(p => p.engagement > avg * 1.5)
                        .sort((a, b) => b.engagement - a.engagement).slice(0, 5);
-  const under = withEng.filter(p => p.engagement < avg * 0.5 && p.engagement >= 0)
-                       .sort((a, b) => a.engagement - b.engagement).slice(0, 5);
+  const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+  const under = withEng.filter(p =>
+      p.engagement < avg * 0.5 &&
+      p.engagement >= 0 &&
+      p.published_at &&
+      (Date.now() - new Date(p.published_at).getTime()) >= ONE_WEEK_MS
+    ).sort((a, b) => a.engagement - b.engagement).slice(0, 5);
 
   const Row = ({ p, isOver }) => (
     <div style={{ display: "flex", alignItems: "flex-start", gap: 12,
@@ -888,8 +893,10 @@ export default function PostsPage() {
             {/* Platform stats */}
             <PlatformStats posts={posts} />
 
-            {/* Top posts */}
-            {!selectedWeek && <TopPosts posts={posts} />}
+            {/* Outliers — updates with platform filter */}
+            {!selectedWeek && (
+              <Outliers posts={posts} activePlatform={activePlatform} />
+            )}
 
             {/* Weekly OKR — doubles as filter */}
             <WeeklyOKR
@@ -898,11 +905,6 @@ export default function PostsPage() {
               selectedWeek={selectedWeek}
               onWeekSelect={setSelectedWeek}
             />
-
-            {/* Outliers — updates with platform filter */}
-            {!selectedWeek && (
-              <Outliers posts={posts} activePlatform={activePlatform} />
-            )}
 
             {/* Posts table */}
             <PostsTable
