@@ -391,6 +391,18 @@ export default function InteractionsPage() {
   const [creating, setCreating] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
+  // Auto-merge duplicate handles on page load
+  useEffect(() => {
+    fetch("/api/handles/merge", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dry_run: false }),
+    })
+      .then(r => r.json())
+      .then(d => { if (d.groups > 0) setRefreshKey(k => k + 1); })
+      .catch(() => {});
+  }, []);
+
   return (
     <PageShell activeTab="interactions">
       {({ activePlatform, weekFilter, dateFrom, dateTo }) => (
