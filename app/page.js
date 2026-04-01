@@ -471,11 +471,9 @@ function Outliers({ posts, activePlatform, selectedWeek }) {
 function PostsTable({ posts, activePlatform, selectedWeek }) {
   const [sortBy,   setSortBy]   = useState("published_at");
   const [sortDesc, setSortDesc] = useState(true);
-  const [showAgg,  setShowAgg]  = useState(false);
-
   const visible = posts.filter(p => {
     if (activePlatform !== "all" && p.platform !== activePlatform) return false;
-    if (!showAgg && p.post_type === "daily_aggregate") return false;
+    if (p.post_type === "daily_aggregate") return false;
     if (selectedWeek && weekKey(p.published_at) !== selectedWeek) return false;
     return true;
   });
@@ -519,10 +517,6 @@ function PostsTable({ posts, activePlatform, selectedWeek }) {
             week of {weekLabel(selectedWeek)}
           </div>
         )}
-        <label style={{ display: "flex", alignItems: "center", gap: 6, fontFamily: sans, fontSize: F.xs, color: T.sub, cursor: "pointer", marginLeft: "auto" }}>
-          <input type="checkbox" checked={showAgg} onChange={e => setShowAgg(e.target.checked)} />
-          Show LinkedIn daily totals
-        </label>
       </div>
 
       <div style={{ overflowX: "auto", borderRadius: 12, border: `1px solid ${T.border}` }}>
