@@ -86,8 +86,8 @@ function normalizeInteractionType(type) {
   return raw || "unknown";
 }
 
-// ─── Elite Mentions ──────────────────────────────────────────────────────────
-function EliteMentions({ activePlatform, dateFrom, dateTo }) {
+// ─── Notable Interactions ────────────────────────────────────────────────────
+function NotableInteractions({ activePlatform, dateFrom, dateTo }) {
   const [mentions, setMentions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [hoveredId, setHoveredId] = useState(null);
@@ -187,14 +187,14 @@ function EliteMentions({ activePlatform, dateFrom, dateTo }) {
     return (
       <div style={{ marginBottom: 28 }}>
         <div style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text, marginBottom: 12 }}>
-          Elite Mentions
+          Notable Interactions
         </div>
         <div style={{
           background: T.card, border: `1px solid ${T.border}`, borderRadius: 12,
           padding: "32px 24px", textAlign: "center", boxShadow: T.shadowSm,
         }}>
           <div style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>
-            No elite mentions in this period
+            No notable interactions in this period
           </div>
         </div>
       </div>
@@ -206,7 +206,7 @@ function EliteMentions({ activePlatform, dateFrom, dateTo }) {
       {/* Section header */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
         <div style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text }}>
-          Elite Mentions
+          Notable Interactions
         </div>
         <span style={{
           fontFamily: sans, fontSize: F.xs, fontWeight: 600, color: T.dim,
@@ -261,19 +261,13 @@ function EliteMentions({ activePlatform, dateFrom, dateTo }) {
                     : (PLAT_ICON[m.platform] || "\u00B7"))}
                 </div>
 
-                {/* Name + handle */}
+                {/* Name */}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{
                     fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text,
                     overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                   }}>
                     {m.name}
-                  </div>
-                  <div style={{
-                    fontFamily: sans, fontSize: F.xs, color: T.dim,
-                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                  }}>
-                    @{m.handle}
                   </div>
                 </div>
 
@@ -386,7 +380,7 @@ export default function InteractionsPage() {
     <PageShell activeTab="interactions">
       {({ activePlatform, weekFilter, dateFrom, dateTo }) => (
         <>
-          <EliteMentions
+          <NotableInteractions
             activePlatform={activePlatform}
             dateFrom={dateFrom}
             dateTo={dateTo}

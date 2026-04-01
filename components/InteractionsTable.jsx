@@ -95,8 +95,8 @@ function StatCard({ label, value, color = T.text, active = false, onClick, click
       onClick={onClick}
       disabled={!clickable}
       style={{
-        flex: "1 1 180px",
-        minWidth: 150,
+        flex: "1 1 130px",
+        minWidth: 100,
         textAlign: "left",
         borderRadius: 14,
         padding: "18px 18px 16px",
@@ -485,9 +485,6 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
                   <span style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text }}>
                     {row.name}
                   </span>
-                  <span style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>
-                    @{row.handle}
-                  </span>
                   <span style={{
                     fontFamily: sans, fontSize: F.xs, color: T.dim,
                     background: T.well, borderRadius: 4, padding: "1px 6px",
@@ -545,7 +542,6 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
                   <td style={tdStyle}>
                     <div style={{ maxWidth: 260 }}>
                       <div style={{ fontWeight: 600, fontSize: F.sm, color: T.text, lineHeight: 1.3 }}>{row.name}</div>
-                      <div style={{ fontSize: F.xs, color: T.dim }}>@{row.handle}</div>
                       {row.bio && (
                         <div style={{ marginTop: 4, fontSize: F.xs, color: T.sub, lineHeight: 1.45, whiteSpace: "normal" }}>
                           {truncate(row.bio, 120)}
