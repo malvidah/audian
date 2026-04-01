@@ -31,7 +31,27 @@ const T = {
 
 const PLAT_COLORS = { youtube: "#FF0000", x: "#000000", instagram: "#E1306C", linkedin: "#0077B5" };
 const PLAT_LABEL  = { youtube: "YouTube", x: "X", instagram: "Instagram", linkedin: "LinkedIn" };
-const PLAT_ICON   = { youtube: "▶", x: "𝕏", instagram: "◉", linkedin: "in" };
+
+// ─── Platform SVG icons ───────────────────────────────────────────────────────
+function IgIcon({ size = 16 }) {
+  const id = `ig-grad-${Math.random().toString(36).slice(2,7)}`;
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id={id} x1="0%" y1="100%" x2="100%" y2="0%">
+          <stop offset="0%"   stopColor="#f09433"/>
+          <stop offset="25%"  stopColor="#e6683c"/>
+          <stop offset="50%"  stopColor="#dc2743"/>
+          <stop offset="75%"  stopColor="#cc2366"/>
+          <stop offset="100%" stopColor="#bc1888"/>
+        </linearGradient>
+      </defs>
+      <rect x="1.5" y="1.5" width="21" height="21" rx="6" ry="6" fill={`url(#${id})`}/>
+      <circle cx="12" cy="12" r="4.5" stroke="white" strokeWidth="1.8" fill="none"/>
+      <circle cx="17.8" cy="6.2" r="1.3" fill="white"/>
+    </svg>
+  );
+}
 
 const sans       = "-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif";
 const F          = { xl: 28, lg: 20, md: 15, sm: 13, xs: 11 };
@@ -89,14 +109,24 @@ function parseCSVLine(line) {
 
 // ─── Small components ─────────────────────────────────────────────────────────
 function PlatDot({ platform, size = 8 }) {
+  const boxSize = size + 8;
+  if (platform === "instagram") {
+    return (
+      <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center",
+        width: boxSize, height: boxSize, flexShrink: 0 }}>
+        <IgIcon size={boxSize} />
+      </span>
+    );
+  }
+  const icons = { youtube: "▶", x: "𝕏", linkedin: "in" };
   return (
     <span style={{
       display: "inline-flex", alignItems: "center", justifyContent: "center",
-      width: size + 8, height: size + 8, borderRadius: "50%",
+      width: boxSize, height: boxSize, borderRadius: "50%",
       background: (PLAT_COLORS[platform] || T.dim) + "18",
       fontSize: size * 0.85, color: PLAT_COLORS[platform] || T.dim, flexShrink: 0,
     }}>
-      {PLAT_ICON[platform] || "·"}
+      {icons[platform] || "·"}
     </span>
   );
 }
@@ -569,6 +599,103 @@ function TopPosts({ posts }) {
   );
 }
 
+// ─── Outliers ─────────────────────────────────────────────────────────────────
+function Outliers({ posts, activePlatform }) {
+  const filtered = posts.filter(p => {
+    if (p.post_type === "daily_aggregate") return false;
+    if (activePlatform !== "all" && p.platform !== activePlatform) return false;
+    return true;
+  });
+
+  if (filtered.length < 4) return null;
+
+  const withEng = filtered.map(p => ({
+    ...p,
+    engagement: parseInt(p.likes || 0) + parseInt(p.comments || 0),
+  }));
+
+  const avg   = withEng.reduce((s, p) => s + p.engagement, 0) / withEng.length;
+  const over  = withEng.filter(p => p.engagement > avg * 1.5)
+                       .sort((a, b) => b.engagement - a.engagement).slice(0, 5);
+  const under = withEng.filter(p => p.engagement < avg * 0.5 && p.engagement >= 0)
+                       .sort((a, b) => a.engagement - b.engagement).slice(0, 5);
+
+  const Row = ({ p, isOver }) => (
+    <div style={{ display: "flex", alignItems: "flex-start", gap: 12,
+      padding: "11px 18px", borderBottom: `1px solid ${T.border}` }}>
+      <div style={{ width: 30, height: 30, borderRadius: 8, flexShrink: 0,
+        background: isOver ? T.greenBg : T.well,
+        display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14 }}>
+        {isOver ? "🚀" : "📉"}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+          <PlatDot platform={p.platform} size={9} />
+          <span style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>
+            {p.published_at ? new Date(p.published_at).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : ""}
+          </span>
+        </div>
+        <div style={{ fontFamily: sans, fontSize: F.xs, color: T.text, lineHeight: 1.4,
+          overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
+          {p.permalink
+            ? <a href={p.permalink} target="_blank" rel="noreferrer"
+                 style={{ color: T.text, textDecoration: "none" }}>{p.content || "—"}</a>
+            : (p.content || "—")}
+        </div>
+        <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+          <span style={{ fontFamily: sans, fontSize: F.xs, color: T.sub }}>♥ {fmt(p.likes)}</span>
+          <span style={{ fontFamily: sans, fontSize: F.xs, color: T.sub }}>✦ {fmt(p.comments)}</span>
+        </div>
+      </div>
+      <span style={{
+        fontFamily: sans, fontSize: F.xs, fontWeight: 700, flexShrink: 0,
+        color: isOver ? T.green : T.red,
+        background: isOver ? T.greenBg : T.redBg,
+        border: `1px solid ${isOver ? T.greenBorder : T.redBorder}`,
+        borderRadius: 6, padding: "2px 7px",
+      }}>
+        {isOver ? "+" : ""}{avg > 0 ? Math.round((p.engagement / avg - 1) * 100) : 0}%
+      </span>
+    </div>
+  );
+
+  const platLabel = activePlatform === "all" ? "all platforms" : (PLAT_LABEL[activePlatform] || activePlatform);
+
+  return (
+    <div style={{ marginBottom: 28 }}>
+      <div style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text, marginBottom: 12 }}>
+        Outliers · {platLabel}
+        <span style={{ fontWeight: 400, color: T.dim, marginLeft: 8 }}>vs {fmt(Math.round(avg))} avg engagement</span>
+      </div>
+      <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 12,
+        boxShadow: T.shadowSm, display: "grid", gridTemplateColumns: "1fr 1fr", overflow: "hidden" }}>
+        {/* Overperforming */}
+        <div style={{ borderRight: `1px solid ${T.border}` }}>
+          <div style={{ padding: "10px 18px 8px", display: "flex", alignItems: "center", gap: 6,
+            borderBottom: `1px solid ${T.border}` }}>
+            <span style={{ fontFamily: sans, fontSize: F.xs, fontWeight: 700, color: T.green }}>↑ OVERPERFORMING</span>
+            <span style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>above 1.5× avg</span>
+          </div>
+          {over.length === 0
+            ? <div style={{ padding: "20px 18px", fontFamily: sans, fontSize: F.sm, color: T.dim }}>No posts above 1.5× avg</div>
+            : over.map((p, i) => <Row key={i} p={p} isOver={true} />)}
+        </div>
+        {/* Underperforming */}
+        <div>
+          <div style={{ padding: "10px 18px 8px", display: "flex", alignItems: "center", gap: 6,
+            borderBottom: `1px solid ${T.border}` }}>
+            <span style={{ fontFamily: sans, fontSize: F.xs, fontWeight: 700, color: T.red }}>↓ UNDERPERFORMING</span>
+            <span style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>below 0.5× avg</span>
+          </div>
+          {under.length === 0
+            ? <div style={{ padding: "20px 18px", fontFamily: sans, fontSize: F.sm, color: T.dim }}>No posts below 0.5× avg</div>
+            : under.map((p, i) => <Row key={i} p={p} isOver={false} />)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Posts table ──────────────────────────────────────────────────────────────
 function PostsTable({ posts, activePlatform, selectedWeek }) {
   const [sortBy,   setSortBy]   = useState("published_at");
@@ -786,6 +913,11 @@ export default function PostsPage() {
               selectedWeek={selectedWeek}
               onWeekSelect={setSelectedWeek}
             />
+
+            {/* Outliers — updates with platform filter */}
+            {!selectedWeek && (
+              <Outliers posts={posts} activePlatform={activePlatform} />
+            )}
 
             {/* Posts table */}
             <PostsTable
