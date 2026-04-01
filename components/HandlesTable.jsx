@@ -42,6 +42,10 @@ const ZONE_CFG = {
 
 const LIST_ORDER = ["ELITE", "INFLUENTIAL", "SIGNAL", "IGNORE"];
 
+function normalizeZone(zone) {
+  return LIST_ORDER.includes(zone) ? zone : "UNASSIGNED";
+}
+
 function fmt(n) {
   if (!n && n !== 0) return "\u2014";
   n = parseInt(n);
@@ -85,41 +89,63 @@ function ZoneBadge({ zone, onClick }) {
   );
 }
 
-function SummaryStats({ handles }) {
-  const total = handles.length;
-  const elite = handles.filter(h => h.zone === "ELITE").length;
-  const influential = handles.filter(h => h.zone === "INFLUENTIAL").length;
-  const signal = handles.filter(h => h.zone === "SIGNAL").length;
-  const withBio = handles.filter(h => h.bio).length;
+function StatCard({ label, value, color = T.text, active = false, onClick, clickable = false }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={!clickable}
+      style={{
+        flex: "1 1 180px",
+        minWidth: 150,
+        textAlign: "left",
+        borderRadius: 14,
+        padding: "18px 18px 16px",
+        border: `1px solid ${active ? color + "44" : T.border}`,
+        background: active ? color + "10" : T.card,
+        boxShadow: active ? T.shadowMd : T.shadowSm,
+        cursor: clickable ? "pointer" : "default",
+        transition: "all 0.15s ease",
+        fontFamily: sans,
+      }}
+    >
+      <div style={{
+        fontSize: 10,
+        color: clickable ? color : T.dim,
+        fontWeight: clickable ? 700 : 600,
+        marginBottom: 6,
+        textTransform: "uppercase",
+        letterSpacing: "0.08em",
+      }}>
+        {label}
+      </div>
+      <div style={{ fontSize: F.xl, lineHeight: 1, fontWeight: 800, color }}>
+        {value}
+      </div>
+    </button>
+  );
+}
 
-  const stats = [
-    { label: "Total handles", value: total, color: T.text },
-    { label: "With bio", value: withBio, color: T.text },
-  ];
-
-  const zones = [
-    { label: "ELITE", value: elite, ...ZONE_CFG.ELITE },
-    { label: "INFLUENTIAL", value: influential, ...ZONE_CFG.INFLUENTIAL },
-    { label: "SIGNAL", value: signal, ...ZONE_CFG.SIGNAL },
-  ];
+function SummaryStats({ handles, selectedZones, onToggleZone }) {
+  const counts = handles.reduce((acc, handle) => {
+    const zone = normalizeZone(handle.zone);
+    acc[zone] = (acc[zone] || 0) + 1;
+    return acc;
+  }, {});
 
   return (
-    <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 20 }}>
-      {stats.map(s => (
-        <div key={s.label} style={{
-          flex: "1 1 100px", minWidth: 90,
-        }}>
-          <div style={{ fontFamily: sans, fontSize: 10, color: T.dim, marginBottom: 2, textTransform: "uppercase", letterSpacing: "0.04em" }}>{s.label}</div>
-          <div style={{ fontFamily: sans, fontSize: F.lg, fontWeight: 700, color: s.color }}>{s.value}</div>
-        </div>
-      ))}
-      {zones.map(z => (
-        <div key={z.label} style={{
-          flex: "1 1 80px", minWidth: 80,
-        }}>
-          <div style={{ fontFamily: sans, fontSize: 10, color: z.color, fontWeight: 600, marginBottom: 2 }}>{z.label}</div>
-          <div style={{ fontFamily: sans, fontSize: F.lg, fontWeight: 700, color: z.color }}>{z.value}</div>
-        </div>
+    <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
+      <StatCard label="Total handles" value={handles.length} />
+      <StatCard label="With bio" value={handles.filter(h => h.bio).length} />
+      {["ELITE", "INFLUENTIAL", "SIGNAL"].map((zone) => (
+        <StatCard
+          key={zone}
+          label={zone}
+          value={counts[zone] || 0}
+          color={ZONE_CFG[zone].color}
+          active={selectedZones.has(zone)}
+          clickable
+          onClick={() => onToggleZone(zone)}
+        />
       ))}
     </div>
   );
@@ -129,7 +155,7 @@ function SummaryStats({ handles }) {
 export default function HandlesTable({ platform, refreshKey }) {
   const [handles, setHandles] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState("ALL");
+  const [selectedZones, setSelectedZones] = useState(new Set());
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("name");
   const [sortDesc, setSortDesc] = useState(false);
@@ -171,17 +197,12 @@ export default function HandlesTable({ platform, refreshKey }) {
     return t;
   }
 
-  const filtered = useMemo(() => {
+  const baseFiltered = useMemo(() => {
     let list = handles;
 
     // Platform filter
     if (platform && platform !== "all") {
       list = list.filter(h => h[`handle_${platform}`]);
-    }
-
-    // Zone filter
-    if (filter !== "ALL") {
-      list = list.filter(h => h.zone === filter);
     }
 
     // Search
@@ -196,7 +217,12 @@ export default function HandlesTable({ platform, refreshKey }) {
     }
 
     return list;
-  }, [handles, platform, filter, search]);
+  }, [handles, platform, search]);
+
+  const filtered = useMemo(() => {
+    if (!selectedZones.size) return baseFiltered;
+    return baseFiltered.filter(h => selectedZones.has(normalizeZone(h.zone)));
+  }, [baseFiltered, selectedZones]);
 
   const sorted = useMemo(() => {
     return [...filtered].sort((a, b) => {
@@ -225,6 +251,15 @@ export default function HandlesTable({ platform, refreshKey }) {
     else { setSortBy(col); setSortDesc(true); }
   }
 
+  function toggleZone(zone) {
+    setSelectedZones(prev => {
+      const next = new Set(prev);
+      if (next.has(zone)) next.delete(zone);
+      else next.add(zone);
+      return next;
+    });
+  }
+
   const thStyle = (col) => ({
     fontFamily: sans, fontSize: F.xs, fontWeight: 600,
     color: sortBy === col ? T.accent : T.sub,
@@ -249,28 +284,31 @@ export default function HandlesTable({ platform, refreshKey }) {
 
   return (
     <div>
-      <SummaryStats handles={filtered} />
+      <SummaryStats handles={baseFiltered} selectedZones={selectedZones} onToggleZone={toggleZone} />
 
       {/* Filters row */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
-        <div style={{ display: "flex", gap: 4 }}>
-          {["ALL", ...LIST_ORDER].map(z => {
-            const active = filter === z;
-            const zc = ZONE_CFG[z];
-            const count = z === "ALL" ? handles.length : handles.filter(h => h.zone === z).length;
-            return (
-              <button key={z} onClick={() => setFilter(z)} style={{
-                background: active ? (zc?.bg || T.well) : "transparent",
-                color: active ? (zc?.color || T.text) : T.dim,
-                border: `1px solid ${active ? (zc?.border || T.border) : "transparent"}`,
-                borderRadius: 6, padding: "4px 10px", fontFamily: sans, fontSize: F.xs,
-                fontWeight: 600, cursor: "pointer", transition: "all 0.12s",
-              }}>
-                {z} ({count})
-              </button>
-            );
-          })}
+        <div style={{ fontFamily: sans, fontSize: F.xs, color: T.sub, fontWeight: 600 }}>
+          {selectedZones.size
+            ? `Showing: ${[...selectedZones].join(", ")}`
+            : "Showing: all labels"}
         </div>
+
+        {selectedZones.size > 0 && (
+          <button onClick={() => setSelectedZones(new Set())} style={{
+            background: "transparent",
+            color: T.dim,
+            border: `1px solid ${T.border}`,
+            borderRadius: 999,
+            padding: "4px 10px",
+            fontFamily: sans,
+            fontSize: F.xs,
+            fontWeight: 600,
+            cursor: "pointer",
+          }}>
+            Clear filters
+          </button>
+        )}
 
         <input value={search} placeholder="Search..." onChange={e => setSearch(e.target.value)}
           style={{
@@ -316,7 +354,11 @@ export default function HandlesTable({ platform, refreshKey }) {
                 <td colSpan={6} style={{
                   ...tdStyle, textAlign: "center", color: T.dim, padding: "40px 12px",
                 }}>
-                  {search ? `No handles matching "${search}"` : "No handles yet. Import a CSV to get started."}
+                  {search
+                    ? `No handles matching "${search}"`
+                    : selectedZones.size
+                      ? "No handles match the selected label filters."
+                      : "No handles yet. Import a CSV to get started."}
                 </td>
               </tr>
             )}
