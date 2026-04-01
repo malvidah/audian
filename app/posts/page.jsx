@@ -33,22 +33,12 @@ const PLAT_COLORS = { youtube: "#FF0000", x: "#000000", instagram: "#E1306C", li
 const PLAT_LABEL  = { youtube: "YouTube", x: "X", instagram: "Instagram", linkedin: "LinkedIn" };
 
 // ─── Platform SVG icons ───────────────────────────────────────────────────────
-function IgIcon({ size = 16 }) {
-  const id = `ig-grad-${Math.random().toString(36).slice(2,7)}`;
+function IgIcon({ size = 16, color = "#E1306C" }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id={id} x1="0%" y1="100%" x2="100%" y2="0%">
-          <stop offset="0%"   stopColor="#f09433"/>
-          <stop offset="25%"  stopColor="#e6683c"/>
-          <stop offset="50%"  stopColor="#dc2743"/>
-          <stop offset="75%"  stopColor="#cc2366"/>
-          <stop offset="100%" stopColor="#bc1888"/>
-        </linearGradient>
-      </defs>
-      <rect x="1.5" y="1.5" width="21" height="21" rx="6" ry="6" fill={`url(#${id})`}/>
-      <circle cx="12" cy="12" r="4.5" stroke="white" strokeWidth="1.8" fill="none"/>
-      <circle cx="17.8" cy="6.2" r="1.3" fill="white"/>
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/>
+      <circle cx="12" cy="12" r="4.5"/>
+      <circle cx="17.5" cy="6.5" r="1" fill={color} stroke="none"/>
     </svg>
   );
 }
@@ -109,23 +99,18 @@ function parseCSVLine(line) {
 
 // ─── Small components ─────────────────────────────────────────────────────────
 function PlatDot({ platform, size = 8 }) {
-  const boxSize = size + 8;
+  const boxSize  = size + 8;
+  const color    = PLAT_COLORS[platform] || T.dim;
+  const bgCircle = { display: "inline-flex", alignItems: "center", justifyContent: "center",
+    width: boxSize, height: boxSize, borderRadius: "50%",
+    background: color + "18", flexShrink: 0 };
+
   if (platform === "instagram") {
-    return (
-      <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center",
-        width: boxSize, height: boxSize, flexShrink: 0 }}>
-        <IgIcon size={boxSize} />
-      </span>
-    );
+    return <span style={bgCircle}><IgIcon size={size + 2} color={color} /></span>;
   }
   const icons = { youtube: "▶", x: "𝕏", linkedin: "in" };
   return (
-    <span style={{
-      display: "inline-flex", alignItems: "center", justifyContent: "center",
-      width: boxSize, height: boxSize, borderRadius: "50%",
-      background: (PLAT_COLORS[platform] || T.dim) + "18",
-      fontSize: size * 0.85, color: PLAT_COLORS[platform] || T.dim, flexShrink: 0,
-    }}>
+    <span style={{ ...bgCircle, fontSize: size * 0.85, color }}>
       {icons[platform] || "·"}
     </span>
   );
