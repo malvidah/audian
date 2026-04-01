@@ -826,12 +826,14 @@ export default function PostsPage() {
   const [error,          setError]         = useState(null);
   const [activePlatform, setActivePlatform] = useState("all");
   const [selectedWeek,   setSelectedWeek]  = useState(null);
+  const [dateFrom,       setDateFrom]      = useState(H1_FROM);
+  const [dateTo,         setDateTo]        = useState("2026-03-31");
 
-  const loadPosts = useCallback(async () => {
+  const loadPosts = useCallback(async (from, to) => {
     setLoading(true);
     setError(null);
     try {
-      const res  = await fetch(`/api/posts?from=${H1_FROM}&to=${H1_TO}&limit=2000`);
+      const res  = await fetch(`/api/posts?from=${from}&to=${to}&limit=2000`);
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       setPosts(data.posts || []);
@@ -842,7 +844,7 @@ export default function PostsPage() {
     }
   }, []);
 
-  useEffect(() => { loadPosts(); }, [loadPosts]);
+  useEffect(() => { loadPosts(dateFrom, dateTo); }, [loadPosts, dateFrom, dateTo]);
 
   // Platform pills — derived from all posts (including aggregates so LinkedIn always shows)
   const platforms = ["all", ...Array.from(new Set(
@@ -863,20 +865,39 @@ export default function PostsPage() {
               Content Calendar
             </h1>
             <div style={{ fontFamily: sans, fontSize: F.sm, color: T.sub }}>
-              H1 2026 · Jan – Mar · OKR: 3 posts/week · 1 post at 2K+ likes
+              OKR: 3 posts/week · 1 post at 2K+ likes
             </div>
           </div>
-          <button onClick={loadPosts} disabled={loading} style={{
-            background: T.well, color: T.sub, border: `1px solid ${T.border}`,
-            borderRadius: 8, padding: "7px 14px", fontSize: F.xs, fontWeight: 600,
-            fontFamily: sans, cursor: "pointer",
-          }}>
-            {loading ? "Loading…" : "↻ Refresh"}
-          </button>
+
+          {/* Date range picker */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
+            {loading && (
+              <span style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>Loading…</span>
+            )}
+            {[
+              { label: "From", value: dateFrom, set: setDateFrom },
+              { label: "To",   value: dateTo,   set: setDateTo   },
+            ].map(({ label, value, set }) => (
+              <div key={label} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                <span style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>{label}</span>
+                <input
+                  type="date"
+                  value={value}
+                  onChange={e => { set(e.target.value); setSelectedWeek(null); }}
+                  style={{
+                    fontFamily: sans, fontSize: F.xs, color: T.text,
+                    background: T.card, border: `1px solid ${T.border}`,
+                    borderRadius: 7, padding: "5px 8px", cursor: "pointer",
+                    outline: "none",
+                  }}
+                />
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* Import */}
-        <ImportPanel posts={posts} onImported={loadPosts} />
+        <ImportPanel posts={posts} onImported={() => loadPosts(dateFrom, dateTo)} />
 
         {error && (
           <div style={{ background: T.redBg, border: `1px solid ${T.redBorder}`, borderRadius: 10,
