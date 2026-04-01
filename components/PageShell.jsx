@@ -764,19 +764,54 @@ export default function PageShell({ activeTab, children }) {
     setEnriching(true);
     setActionMessage(null);
     try {
-      const res = await fetch("/api/interactions/list");
-      const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error || "Could not load interactions.");
+      let handleIds = [];
 
-      const handleIds = [...new Set(
-        (data.interactions || [])
-          .filter(i => activePlatform === "all" || i.platform === activePlatform)
-          .map(i => i.handle_id)
-          .filter(Boolean)
-      )];
+      if (activeTab === "handles") {
+        const res = await fetch("/api/handles");
+        const data = await res.json();
+        if (!res.ok || data._error) throw new Error(data._error || "Could not load handles.");
+
+        const needsEnrichment = (handle) => {
+          const missingBio = !handle.bio?.trim();
+
+          const platformsToCheck = activePlatform === "all"
+            ? ["instagram", "x", "youtube", "linkedin"]
+            : [activePlatform];
+
+          const missingFollowers = platformsToCheck.some((platform) => {
+            const hasHandle = !!handle[`handle_${platform}`];
+            const hasFollowers = !!handle[`followers_${platform}`];
+            return hasHandle && !hasFollowers;
+          });
+
+          return missingBio || missingFollowers;
+        };
+
+        handleIds = (data.handles || [])
+          .filter((handle) => activePlatform === "all" || handle[`handle_${activePlatform}`])
+          .filter(needsEnrichment)
+          .map((handle) => handle.id)
+          .filter(Boolean);
+      } else {
+        const res = await fetch("/api/interactions/list");
+        const data = await res.json();
+        if (!res.ok || data.error) throw new Error(data.error || "Could not load interactions.");
+
+        handleIds = [...new Set(
+          (data.interactions || [])
+            .filter(i => activePlatform === "all" || i.platform === activePlatform)
+            .map(i => i.handle_id)
+            .filter(Boolean)
+        )];
+      }
 
       if (handleIds.length === 0) {
-        setActionMessage({ tone: "muted", text: "No handles found to enrich for this view." });
+        setActionMessage({
+          tone: "muted",
+          text: activeTab === "handles"
+            ? "No handles in this view still need bio or follower enrichment."
+            : "No handles found to enrich for this view.",
+        });
         return;
       }
 
