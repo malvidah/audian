@@ -37,8 +37,8 @@ const sans       = "-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans
 const F          = { xl: 28, lg: 20, md: 15, sm: 13, xs: 11 };
 const LIKES_GOAL = 2000;
 const POSTS_GOAL = 3;
-const H1_FROM    = "2026-01-01T00:00:00Z";
-const H1_TO      = "2026-04-01T00:00:00Z";
+const H1_FROM    = "2026-01-01";
+const H1_TO      = "2026-04-01";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmt(n) {
