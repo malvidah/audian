@@ -1091,17 +1091,14 @@ export default function PostsPage() {
   const [posts,          setPosts]         = useState([]);
   const [loading,        setLoading]       = useState(true);
   const [error,          setError]         = useState(null);
-<<<<<<< Updated upstream
   const [activePlatform, setActivePlatform] = useState("all");
   const [selectedWeek,   setSelectedWeek]  = useState(null);
   const [dateFrom,        setDateFrom]       = useState(H1_FROM);
   const [dateTo,          setDateTo]         = useState("2026-03-31");
   const [followerSnaps,   setFollowerSnaps]  = useState([]);
   const [followerLatest,  setFollowerLatest] = useState({});
-=======
   const [activeTab,      setActiveTab]     = useState("posts");
   const [weekFilter,     setWeekFilter]    = useState(null);
->>>>>>> Stashed changes
 
   const loadPosts = useCallback(async (from, to) => {
     setLoading(true);
@@ -1211,34 +1208,6 @@ export default function PostsPage() {
               followerLatest={followerLatest}
             />
 
-<<<<<<< Updated upstream
-            {/* Followers over time */}
-            <FollowersChart snapshots={followerSnaps} activePlatform={activePlatform} />
-
-            {/* Weekly — doubles as filter */}
-            <WeeklyOKR
-              posts={posts}
-              activePlatform={activePlatform}
-              selectedWeek={selectedWeek}
-              onWeekSelect={setSelectedWeek}
-              dateFrom={dateFrom}
-              dateTo={dateTo}
-            />
-
-            {/* Outliers — filters with platform + selected week */}
-            <Outliers
-              posts={posts}
-              activePlatform={activePlatform}
-              selectedWeek={selectedWeek}
-            />
-
-            {/* Posts table */}
-            <PostsTable
-              posts={posts}
-              activePlatform={activePlatform}
-              selectedWeek={selectedWeek}
-            />
-=======
             {/* Section tabs */}
             <div style={{ display: "flex", gap: 8, marginBottom: 28 }}>
               {[
@@ -1255,17 +1224,32 @@ export default function PostsPage() {
             {/* Tab content */}
             {activeTab === "posts" && (
               <>
-                {/* Platform stats */}
-                <PlatformStats posts={posts} />
+                {/* Followers over time */}
+                <FollowersChart snapshots={followerSnaps} activePlatform={activePlatform} />
 
-                {/* Top posts */}
-                <TopPosts posts={posts} />
+                {/* Weekly — doubles as filter */}
+                <WeeklyOKR
+                  posts={posts}
+                  activePlatform={activePlatform}
+                  selectedWeek={selectedWeek}
+                  onWeekSelect={setSelectedWeek}
+                  dateFrom={dateFrom}
+                  dateTo={dateTo}
+                />
 
-                {/* Weekly OKR */}
-                <WeeklyOKR posts={posts} activePlatform={activePlatform} />
+                {/* Outliers — filters with platform + selected week */}
+                <Outliers
+                  posts={posts}
+                  activePlatform={activePlatform}
+                  selectedWeek={selectedWeek}
+                />
 
                 {/* Posts table */}
-                <PostsTable posts={posts} activePlatform={activePlatform} />
+                <PostsTable
+                  posts={posts}
+                  activePlatform={activePlatform}
+                  selectedWeek={selectedWeek}
+                />
               </>
             )}
 
@@ -1276,7 +1260,6 @@ export default function PostsPage() {
             {activeTab === "comments" && (
               <CommentsTable platform={activePlatform} weekFilter={weekFilter} />
             )}
->>>>>>> Stashed changes
           </>
         )}
       </div>
