@@ -303,6 +303,18 @@ function ProfileMenu({ session, supabase, connections, onDisconnect, eliteList =
             </a>
           </div>
 
+          {/* Posts / Content Calendar link */}
+          <div style={{ borderTop: `1px solid ${T.border}` }}>
+            <a href="/posts"
+              style={{ display: "flex", alignItems: "center", gap: 8, padding: "11px 18px", textDecoration: "none" }}
+              onMouseEnter={e => e.currentTarget.style.background = T.well}
+              onMouseLeave={e => e.currentTarget.style.background = "none"}>
+              <span style={{ fontFamily: sans, fontSize: F.sm, color: T.text, fontWeight: 500 }}>📅 Content Calendar</span>
+              <span style={{ marginLeft: "auto", fontFamily: sans, fontSize: F.xs, color: T.dim }}>H1 OKR tracker</span>
+              <span style={{ color: T.dim, fontSize: F.xs }}>↗</span>
+            </a>
+          </div>
+
           {/* Footer */}
           <div style={{ borderTop: `1px solid ${T.border}`, padding: "10px 18px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <a href="https://audian.app" target="_blank" rel="noreferrer"
@@ -366,9 +378,10 @@ function SignIn({ supabase }) {
 }
 
 // ─── KPI Card ─────────────────────────────────────────────────────────────────
-function KPICard({ label, value, prev, color, icon, selected, onClick }) {
+function KPICard({ label, value, prev, color, icon, selected, onClick, formatter, subtitle }) {
   const d = pctDelta(value, prev);
   const [hov, setHov] = useState(false);
+  const display = formatter ? formatter(value) : fmt(value);
   return (
     <button onClick={onClick} onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
       style={{
@@ -381,7 +394,8 @@ function KPICard({ label, value, prev, color, icon, selected, onClick }) {
         <span style={{ fontFamily: sans, fontSize: F.xs, fontWeight: 500, color: selected ? color : T.sub, letterSpacing: "0.01em" }}>{label}</span>
         <span style={{ fontSize: 16, opacity: 0.7 }}>{icon}</span>
       </div>
-      <div style={{ fontFamily: sans, fontSize: F.xl, fontWeight: 700, color: selected ? color : T.text, letterSpacing: "-0.03em", lineHeight: 1 }}>{fmt(value)}</div>
+      <div style={{ fontFamily: sans, fontSize: F.xl, fontWeight: 700, color: selected ? color : T.text, letterSpacing: "-0.03em", lineHeight: 1 }}>{display}</div>
+      {subtitle && <div style={{ marginTop: 4, fontFamily: sans, fontSize: F.xs, color: T.dim }}>{subtitle}</div>}
       {d !== null && (
         <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 4 }}>
           <span style={{
@@ -1318,6 +1332,9 @@ export default function Dashboard() {
     kpis.likes.v    += m.likes || 0;           kpis.likes.p += prev?.likes || 0;
     kpis.comments.v += m.comments_count || 0;  kpis.comments.p += prev?.comments_count || 0;
   });
+  // Unique reach rate — computed as ratio of totals so it aggregates correctly across platforms
+  const uniqueReachRate = kpis.impressions.v > 0 ? kpis.reach.v / kpis.impressions.v : null;
+  const prevUniqueReachRate = kpis.impressions.p > 0 ? kpis.reach.p / kpis.impressions.p : null;
 
   const ytVideos = latestPerPlatform["youtube"]?.videos || [];
   const filteredComments = comments.filter(c => platform === "All" || c.platform === platform);
@@ -1369,6 +1386,15 @@ export default function Dashboard() {
     { key: "reach",       label: "Reach",       icon: "📡", color: T.purple },
     { key: "likes",       label: "Likes",       icon: "♥",  color: T.red },
     { key: "comments",    label: "Comments",    icon: "💬", color: T.green },
+    {
+      key: "unique_reach", label: "Unique %", icon: "🎯", color: T.accent,
+      value: uniqueReachRate !== null ? Math.round(uniqueReachRate * 100) : null,
+      prev:  prevUniqueReachRate !== null ? Math.round(prevUniqueReachRate * 100) : null,
+      formatter: v => v !== null ? `${v}%` : "—",
+      subtitle: uniqueReachRate !== null
+        ? `${Math.round((1 - uniqueReachRate) * 100)}% repeat viewers`
+        : "needs insights permission",
+    },
   ];
 
   const PLATS = ["All", "youtube", "x", "instagram", "linkedin"];
@@ -1441,8 +1467,13 @@ export default function Dashboard() {
               <div style={{ padding: "16px 20px" }}>
                 <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
                   {KPIS_DEF.map(k => (
-                    <KPICard key={k.key} label={k.label} value={kpis[k.key].v} prev={kpis[k.key].p || null}
-                      color={k.color} icon={k.icon} selected={activeMetric === k.key} onClick={() => setActiveMetric(k.key)} />
+                    <KPICard key={k.key} label={k.label}
+                      value={k.value !== undefined ? k.value : kpis[k.key]?.v}
+                      prev={k.prev !== undefined ? k.prev : (kpis[k.key]?.p || null)}
+                      color={k.color} icon={k.icon}
+                      formatter={k.formatter}
+                      subtitle={k.subtitle}
+                      selected={activeMetric === k.key} onClick={() => setActiveMetric(k.key)} />
                   ))}
                 </div>
                 <div style={{ background: T.well, borderRadius: 10, padding: "16px 16px 8px" }}>

@@ -24,14 +24,15 @@ create table if not exists platform_metrics (
   followers      bigint,
   total_views    bigint,
   video_count    int,
-  impressions    bigint,
-  reach          bigint,
-  likes          bigint,
-  shares         bigint,
-  saves          bigint,
-  comments_count bigint,
-  videos         jsonb,
-  raw            jsonb
+  impressions        bigint,
+  reach              bigint,
+  unique_reach_rate  float,   -- reach / impressions (0–1); null until insights permission granted
+  likes              bigint,
+  shares             bigint,
+  saves              bigint,
+  comments_count     bigint,
+  videos             jsonb,
+  raw                jsonb
 );
 
 -- ── Platform comments (YouTube/X/Instagram comments) ─────────────────────────
@@ -122,6 +123,27 @@ create table if not exists screenshots (
   parsed_at         timestamptz default now()
 );
 
+-- ── Posts (individual post tracking across all platforms) ────────────────────
+create table if not exists posts (
+  id            uuid default gen_random_uuid() primary key,
+  platform      text not null,
+  post_id       text,
+  content       text,
+  permalink     text,
+  published_at  timestamptz,
+  likes         bigint default 0,
+  comments      bigint default 0,
+  impressions   bigint default 0,
+  shares        bigint default 0,
+  saves         bigint default 0,
+  views         bigint default 0,
+  post_type     text default 'post',   -- 'post', 'reel', 'video', 'story', 'daily_aggregate'
+  thumbnail_url text,
+  source        text default 'api',    -- 'api', 'csv_import', 'manual'
+  synced_at     timestamptz default now(),
+  unique(platform, post_id)
+);
+
 -- ── RLS policies (run this AFTER creating tables) ─────────────────────────────
 -- Audian is a single-user tool — disable RLS on all tables so the browser
 -- anon client can read data. The service role key is used for all writes.
@@ -133,6 +155,7 @@ alter table platform_interactions  disable row level security;
 alter table handles                disable row level security;
 alter table interactions           disable row level security;
 alter table screenshots            disable row level security;
+alter table posts                  disable row level security;
 
 -- If you prefer to keep RLS on, run these policies instead:
 -- alter table platform_connections enable row level security;
