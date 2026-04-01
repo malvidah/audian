@@ -1,6 +1,12 @@
 "use client";
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import dynamic from "next/dynamic";
+import { createClient } from "@supabase/supabase-js";
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
 
 const InteractionsTable = dynamic(() => import("../components/InteractionsTable"), {
   ssr: false,
@@ -1045,8 +1051,141 @@ function PostsTable({ posts, activePlatform, selectedWeek }) {
   );
 }
 
+// ─── Sign In ─────────────────────────────────────────────────────────────────
+function SignIn() {
+  const [email, setEmail] = useState("");
+  const [sent, setSent] = useState(false);
+  const [loading, setLoading] = useState(false);
+  async function go() {
+    if (!email) return;
+    setLoading(true);
+    const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: window.location.origin } });
+    if (!error) setSent(true);
+    setLoading(false);
+  }
+  return (
+    <div style={{ minHeight: "100vh", background: T.bg, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: sans }}>
+      <div style={{ background: T.card, borderRadius: 16, border: `1px solid ${T.border}`, padding: "40px 44px", maxWidth: 380, width: "100%", boxShadow: T.shadowMd }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 28 }}>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: T.accent, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <span style={{ color: "#fff", fontSize: 16, fontWeight: 700 }}>A</span>
+          </div>
+          <div>
+            <div style={{ fontSize: F.md, fontWeight: 700, color: T.text, letterSpacing: "-0.02em" }}>Audian</div>
+            <div style={{ fontSize: F.xs, color: T.sub }}>Social Intelligence</div>
+          </div>
+        </div>
+        <div style={{ fontSize: F.lg, fontWeight: 600, color: T.text, marginBottom: 6, letterSpacing: "-0.02em" }}>Welcome back</div>
+        <div style={{ fontSize: F.sm, color: T.sub, marginBottom: 24 }}>Sign in to your workspace</div>
+        {sent ? (
+          <div style={{ background: T.greenBg, border: `1px solid ${T.greenBorder}`, borderRadius: 8, padding: "12px 14px", fontSize: F.sm, color: T.green }}>
+            Check your email for the magic link.
+          </div>
+        ) : (
+          <>
+            <input type="email" placeholder="you@company.com" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && go()}
+              style={{ width: "100%", background: T.well, border: `1px solid ${T.border}`, borderRadius: 8, padding: "10px 12px", color: T.text, fontFamily: sans, fontSize: F.sm, outline: "none", boxSizing: "border-box", marginBottom: 10 }} />
+            <button onClick={go} disabled={loading}
+              style={{ width: "100%", background: T.accent, border: "none", borderRadius: 8, padding: "11px", color: "#fff", fontFamily: sans, fontSize: F.sm, fontWeight: 600, cursor: "pointer" }}>
+              {loading ? "Sending..." : "Continue with email"}
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Profile Menu ────────────────────────────────────────────────────────────
+function ProfileMenu({ session, avatarUrl }) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef(null);
+  const email = session?.user?.email || "";
+  const initial = email[0]?.toUpperCase() || "?";
+
+  useEffect(() => {
+    if (!open) return;
+    function handle(e) {
+      if (menuRef.current && !menuRef.current.contains(e.target)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handle);
+    return () => document.removeEventListener("mousedown", handle);
+  }, [open]);
+
+  return (
+    <div ref={menuRef} style={{ position: "relative" }}>
+      <button onClick={() => setOpen(o => !o)}
+        style={{
+          width: 36, height: 36, borderRadius: "50%",
+          background: avatarUrl ? `url(${avatarUrl}) center/cover` : `linear-gradient(135deg, ${T.accent} 0%, #ff9060 100%)`,
+          border: open ? `2px solid ${T.accent}` : "2px solid transparent",
+          boxShadow: open ? `0 0 0 3px ${T.accent}30` : "none",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          cursor: "pointer", transition: "all 0.15s",
+          fontFamily: sans, fontSize: 14, fontWeight: 700, color: "#fff",
+          overflow: "hidden", flexShrink: 0,
+        }}>
+        {!avatarUrl && initial}
+      </button>
+
+      {open && (
+        <div style={{
+          position: "absolute", top: "calc(100% + 10px)", left: 0,
+          width: 240, background: T.card,
+          border: `1px solid ${T.border}`, borderRadius: 14,
+          boxShadow: "0 8px 40px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06)",
+          zIndex: 500, overflow: "hidden",
+          animation: "fadeSlideDown 0.12s ease-out",
+        }}>
+          <style>{`
+            @keyframes fadeSlideDown {
+              from { opacity: 0; transform: translateY(-6px); }
+              to   { opacity: 1; transform: translateY(0); }
+            }
+          `}</style>
+
+          {/* User info */}
+          <div style={{ padding: "16px 18px 14px", borderBottom: `1px solid ${T.border}` }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{
+                width: 38, height: 38, borderRadius: "50%", flexShrink: 0,
+                background: avatarUrl ? `url(${avatarUrl}) center/cover` : `linear-gradient(135deg, ${T.accent} 0%, #ff9060 100%)`,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontFamily: sans, fontSize: 15, fontWeight: 700, color: "#fff", overflow: "hidden",
+              }}>{!avatarUrl && initial}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{email.split("@")[0]}</div>
+                <div style={{ fontFamily: sans, fontSize: F.xs, color: T.dim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{email}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Menu items */}
+          <div style={{ padding: "6px 0" }}>
+            <a href="/backup" style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 18px", textDecoration: "none", fontFamily: sans, fontSize: F.sm, color: T.text }}
+              onMouseEnter={e => e.currentTarget.style.background = T.well}
+              onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+              Settings
+            </a>
+          </div>
+
+          {/* Sign out */}
+          <div style={{ borderTop: `1px solid ${T.border}`, padding: "10px 18px", display: "flex", justifyContent: "flex-end" }}>
+            <button onClick={() => supabase.auth.signOut()}
+              style={{ background: "none", border: "none", cursor: "pointer", fontFamily: sans, fontSize: F.xs, color: T.sub, fontWeight: 500 }}>
+              Sign out
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function PostsPage() {
+  const [session,        setSession]       = useState(null);
+  const [authLoading,    setAuthLoading]   = useState(true);
   const [posts,          setPosts]         = useState([]);
   const [loading,        setLoading]       = useState(true);
   const [error,          setError]         = useState(null);
@@ -1059,12 +1198,23 @@ export default function PostsPage() {
   const [activeTab,      setActiveTab]     = useState("posts");
   const [weekFilter,     setWeekFilter]    = useState(null);
   const [accountName,    setAccountName]   = useState("");
+  const [avatarUrl,      setAvatarUrl]     = useState("");
 
+  // Auth
   useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => { setSession(session); setAuthLoading(false); });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Settings
+  useEffect(() => {
+    if (!session) return;
     fetch("/api/settings").then(r => r.json()).then(d => {
       if (d.settings?.account_name) setAccountName(d.settings.account_name);
+      if (d.settings?.avatar_url) setAvatarUrl(d.settings.avatar_url);
     }).catch(() => {});
-  }, []);
+  }, [session]);
 
   const loadPosts = useCallback(async (from, to) => {
     setLoading(true);
@@ -1087,20 +1237,31 @@ export default function PostsPage() {
     }
   }, []);
 
-  useEffect(() => { loadPosts(dateFrom, dateTo); }, [loadPosts, dateFrom, dateTo]);
+  useEffect(() => { if (session) loadPosts(dateFrom, dateTo); }, [session, loadPosts, dateFrom, dateTo]);
 
   // Platform pills — derived from all posts (including aggregates so LinkedIn always shows)
   const platforms = ["all", ...Array.from(new Set(
     posts.map(p => p.platform)
   )).sort()];
 
+  if (authLoading) {
+    return (
+      <div style={{ minHeight: "100vh", background: T.bg, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ fontFamily: sans, fontSize: F.sm, color: T.dim }}>Loading...</div>
+      </div>
+    );
+  }
+
+  if (!session) return <SignIn />;
+
   return (
     <div style={{ background: T.bg, minHeight: "100vh", fontFamily: sans }}>
       <div style={{ maxWidth: 1100, margin: "0 auto", padding: "32px 24px" }}>
 
         {/* Header */}
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 28 }}>
-          <div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 28 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            <ProfileMenu session={session} avatarUrl={avatarUrl} />
             <h1 style={{ fontFamily: sans, fontSize: F.xl, fontWeight: 700, color: T.text, margin: 0, letterSpacing: "-0.02em" }}>
               {accountName || "Analytics"}
             </h1>
