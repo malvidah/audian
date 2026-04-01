@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 export async function POST(req) {
   try {
     const body = await req.json();
-    const { name, platform, handle, interaction_type, content, mention_url, post_url, zone, interacted_at } = body;
+    const { name, platform, handle, interaction_type, content, mention_url, post_url, zone, interacted_at, followers } = body;
 
     if (!name || !platform || !interaction_type) {
       return NextResponse.json({ error: 'Name, platform, and type are required' }, { status: 400 });
@@ -21,24 +21,39 @@ export async function POST(req) {
     const handleCol = `handle_${platform}`;
     const cleanHandle = handle ? handle.toLowerCase().replace(/^@/, '') : null;
 
-    // Look up existing handle by name or platform handle
+    const followersCol = `followers_${platform}`;
+    const parsedFollowers = followers ? parseInt(followers, 10) || null : null;
+
+    // Look up existing handle by platform handle or name
     let handleId = null;
+    let existingHandle = null;
     if (cleanHandle) {
-      const { data: byHandle } = await supabase
+      const { data } = await supabase
         .from('handles')
-        .select('id, zone')
+        .select(`id, zone, ${followersCol}`)
         .eq(handleCol, cleanHandle)
         .maybeSingle();
-      if (byHandle) handleId = byHandle.id;
+      if (data) { handleId = data.id; existingHandle = data; }
     }
 
     if (!handleId) {
-      const { data: byName } = await supabase
+      const { data } = await supabase
         .from('handles')
-        .select('id, zone')
+        .select(`id, zone, ${followersCol}`)
         .eq('name', name)
         .maybeSingle();
-      if (byName) handleId = byName.id;
+      if (data) { handleId = data.id; existingHandle = data; }
+    }
+
+    // Update followers on existing handle if new count is higher
+    if (existingHandle && parsedFollowers) {
+      const current = existingHandle[followersCol] || 0;
+      if (parsedFollowers > current) {
+        await supabase.from('handles').update({
+          [followersCol]: parsedFollowers,
+          updated_at: now,
+        }).eq('id', handleId);
+      }
     }
 
     // Create handle if not found
@@ -50,6 +65,7 @@ export async function POST(req) {
         updated_at: now,
       };
       if (cleanHandle) insert[handleCol] = cleanHandle;
+      if (parsedFollowers) insert[followersCol] = parsedFollowers;
 
       const { data: created, error } = await supabase
         .from('handles')

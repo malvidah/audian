@@ -218,7 +218,8 @@ const ZONE_OPTIONS = [
 
 const EMPTY_ROW = {
   name: "", platform: "x", handle: "", interaction_type: "mention",
-  content: "", zone: "SIGNAL", interacted_at: new Date().toISOString().slice(0, 10),
+  content: "", mention_url: "", followers: "", zone: "SIGNAL",
+  interacted_at: new Date().toISOString().slice(0, 10),
 };
 
 export default function InteractionsTable({ platform, weekFilter, refreshKey, commentsOnly = false }) {
@@ -431,10 +432,13 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
     if (!newRow.name.trim()) return;
     setSaving(true);
     try {
+      const payload = { ...newRow, name: newRow.name.trim(), handle: newRow.handle.trim() };
+      if (payload.followers) payload.followers = parseInt(payload.followers, 10) || null;
+      else payload.followers = null;
       const res = await fetch("/api/interactions/add", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...newRow, name: newRow.name.trim(), handle: newRow.handle.trim() }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
       setAddingRow(false);
@@ -636,10 +640,13 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
                       {cellSelect("interaction_type", TYPE_OPTIONS)}
                     </td>
                     <td style={{ ...tdStyle, verticalAlign: "top" }}>
-                      {cellInput("content", "Content (optional)")}
+                      <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                        {cellInput("content", "Content (optional)")}
+                        {cellInput("mention_url", "Mention URL", { style: { fontSize: 10 } })}
+                      </div>
                     </td>
-                    <td style={{ ...tdStyle, verticalAlign: "top", color: T.dim, fontSize: F.xs }}>
-                      —
+                    <td style={{ ...tdStyle, verticalAlign: "top" }}>
+                      {cellInput("followers", "Followers", { style: { width: 70 } })}
                     </td>
                     <td style={{ ...tdStyle, verticalAlign: "top" }}>
                       {cellSelect("zone", ZONE_OPTIONS)}
