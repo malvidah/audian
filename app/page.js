@@ -208,11 +208,20 @@ function FollowersChart({ snapshots, activePlatform }) {
     ? snapshots.filter(s => s.platform === activePlatform)
     : snapshots;
 
-  const byDate = {};
+  const latestPerPlatformDay = {};
   for (const s of filtered) {
-    const key = s.snapshot_at.slice(0, 10);
-    if (!byDate[key]) byDate[key] = { date: new Date(s.snapshot_at), total: 0 };
-    byDate[key].total += (s.followers || 0);
+    const day = s.snapshot_at.slice(0, 10);
+    const key = `${s.platform}:${day}`;
+    const prev = latestPerPlatformDay[key];
+    if (!prev || new Date(s.snapshot_at) > new Date(prev.snapshot_at)) {
+      latestPerPlatformDay[key] = s;
+    }
+  }
+  const byDate = {};
+  for (const s of Object.values(latestPerPlatformDay)) {
+    const day = s.snapshot_at.slice(0, 10);
+    if (!byDate[day]) byDate[day] = { date: new Date(`${day}T00:00:00Z`), total: 0 };
+    byDate[day].total += (s.followers || 0);
   }
   const pts = Object.values(byDate).sort((a, b) => a.date - b.date);
   if (pts.length === 0) return null;

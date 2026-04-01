@@ -44,24 +44,28 @@ export const F    = { xl: 28, lg: 20, md: 15, sm: 13, xs: 11 };
 const H1_FROM = "2026-01-01";
 
 const TAB_STYLE = (active) => ({
-  display: "inline-block",
-  padding: "10px 24px",
-  fontSize: 15,
-  fontWeight: active ? 700 : 500,
-  color: active ? T.accent : T.sub,
-  background: active ? T.accentBg : "transparent",
-  border: `1.5px solid ${active ? T.accentBorder : T.border}`,
-  borderRadius: 10,
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 6,
+  padding: "8px 4px",
+  fontSize: 14,
+  fontWeight: active ? 600 : 500,
+  color: active ? T.accent : T.dim,
+  background: "transparent",
+  border: "none",
+  borderBottom: active ? `2px solid ${T.accent}` : "2px solid transparent",
   cursor: "pointer",
   transition: "all 0.15s ease",
   fontFamily: sans,
   textDecoration: "none",
+  marginBottom: -1,
 });
 
 const TABS = [
-  { key: "engagement",   label: "Engagement",   href: "/" },
-  { key: "interactions", label: "Interactions",  href: "/interactions" },
-  { key: "comments",     label: "Comments",      href: "/comments" },
+  { key: "engagement",   label: "Engagement",   emoji: "\uD83D\uDCCA", href: "/" },
+  { key: "interactions", label: "Interactions",  emoji: "\uD83E\uDD1D", href: "/interactions" },
+  { key: "comments",     label: "Comments",      emoji: "\uD83D\uDCAC", href: "/comments" },
+  { key: "handles",      label: "Handles",       emoji: "\uD83D\uDC64", href: "/handles" },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -403,29 +407,29 @@ function PlatformStats({ posts, activePlatform, onPlatformSelect, followerLatest
   const cards = [["all", allStats], ...entries];
 
   return (
-    <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 28 }}>
+    <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 24 }}>
       {cards.map(([plat, s]) => {
         const isActive = activePlatform === plat;
         const color    = PLAT_COLORS[plat] || T.accent;
         return (
           <div key={plat} onClick={() => onPlatformSelect(isActive ? "all" : plat)}
             style={{
-              background: isActive ? color + "12" : T.card,
-              border:     `2px solid ${isActive ? color : T.border}`,
-              borderRadius: 12, padding: "14px 18px", flex: "1 1 150px",
-              boxShadow: isActive ? `0 0 0 3px ${color}22` : T.shadowSm,
+              background: isActive ? color + "08" : T.card,
+              border:     `1px solid ${isActive ? color + "44" : T.border}`,
+              borderRadius: 12, padding: "12px 16px", flex: "1 1 140px",
+              boxShadow: isActive ? "none" : "none",
               cursor: "pointer", transition: "all 0.12s",
             }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8 }}>
               {plat === "all"
-                ? <span style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 700,
+                ? <span style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600,
                     color: isActive ? T.accent : T.text }}>All</span>
-                : <><PlatDot platform={plat} size={12} />
+                : <><PlatDot platform={plat} size={10} />
                    <span style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600,
                      color: isActive ? color : T.text }}>{PLAT_LABEL[plat] || plat}</span></>
               }
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 16px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px 14px" }}>
               {[
                 ["Posts",      s.count],
                 ["Total likes", fmt(s.likes)],
@@ -438,8 +442,8 @@ function PlatformStats({ posts, activePlatform, onPlatformSelect, followerLatest
                   : []),
               ].map(([lbl, val]) => (
                 <div key={lbl}>
-                  <div style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>{lbl}</div>
-                  <div style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600,
+                  <div style={{ fontFamily: sans, fontSize: 10, color: T.dim, marginBottom: 1 }}>{lbl}</div>
+                  <div style={{ fontFamily: sans, fontSize: F.xs, fontWeight: 600,
                     color: isActive && plat !== "all" ? color : T.text }}>{val}</div>
                 </div>
               ))}
@@ -691,6 +695,9 @@ export default function PageShell({ activeTab, children }) {
   const [accountName,    setAccountName]   = useState("");
   const [avatarUrl,      setAvatarUrl]     = useState("");
   const [connections,    setConnections]   = useState([]);
+  const [actionMessage,  setActionMessage] = useState(null);
+  const [enriching,      setEnriching]     = useState(false);
+  const [refreshKey,     setRefreshKey]    = useState(0);
 
   // Auth
   useEffect(() => {
@@ -744,6 +751,66 @@ export default function PageShell({ activeTab, children }) {
 
   if (!session) return <SignIn />;
 
+  const importHref = (() => {
+    const params = new URLSearchParams();
+    if (activePlatform && activePlatform !== "all") params.set("platform", activePlatform);
+    if (activeTab === "interactions") params.set("mode", "interactions");
+    if (activeTab === "handles") params.set("mode", "handles");
+    const query = params.toString();
+    return query ? `/import?${query}` : "/import";
+  })();
+
+  async function runInteractionEnrichment() {
+    setEnriching(true);
+    setActionMessage(null);
+    try {
+      const res = await fetch("/api/interactions/list");
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || "Could not load interactions.");
+
+      const handleIds = [...new Set(
+        (data.interactions || [])
+          .filter(i => activePlatform === "all" || i.platform === activePlatform)
+          .map(i => i.handle_id)
+          .filter(Boolean)
+      )];
+
+      if (handleIds.length === 0) {
+        setActionMessage({ tone: "muted", text: "No handles found to enrich for this view." });
+        return;
+      }
+
+      let enriched = 0;
+      let checked = 0;
+      for (let i = 0; i < handleIds.length; i += 50) {
+        const batch = handleIds.slice(i, i + 50);
+        const enrichRes = await fetch("/api/enrich/handles", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids: batch }),
+        });
+        const enrichData = await enrichRes.json();
+        if (!enrichRes.ok || enrichData.error) {
+          throw new Error(enrichData.error || "Enrichment failed.");
+        }
+        enriched += enrichData.enriched || 0;
+        checked += enrichData.total || batch.length;
+      }
+
+      setRefreshKey(v => v + 1);
+      setActionMessage({
+        tone: enriched > 0 ? "success" : "muted",
+        text: enriched > 0
+          ? `Enriched ${enriched} handle${enriched === 1 ? "" : "s"} across ${checked} checked profile${checked === 1 ? "" : "s"}.`
+          : `Checked ${checked} profile${checked === 1 ? "" : "s"} and everything already looked filled in.`,
+      });
+    } catch (e) {
+      setActionMessage({ tone: "error", text: e.message || "Enrichment failed." });
+    } finally {
+      setEnriching(false);
+    }
+  }
+
   // Build the props that children will receive
   const childProps = {
     posts,
@@ -757,6 +824,7 @@ export default function PageShell({ activeTab, children }) {
     followerLatest,
     weekFilter,
     loadPosts,
+    refreshKey,
   };
 
   return (
@@ -767,16 +835,16 @@ export default function PageShell({ activeTab, children }) {
         position: "sticky", top: 0, zIndex: 100, background: T.bg,
         borderBottom: `1px solid ${T.border}`,
       }}>
-        <div style={{ maxWidth: 1100, margin: "0 auto", padding: "18px 24px",
+        <div style={{ maxWidth: 1100, margin: "0 auto", padding: "12px 24px",
           display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <ProfileMenu session={session} avatarUrl={avatarUrl} connections={connections}
               onDisconnect={async (id) => {
                 await fetch("/api/disconnect", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ platform: id }) });
                 setConnections(c => c.filter(x => x.platform !== id));
               }}
               posts={posts} onImported={() => loadPosts(dateFrom, dateTo)} />
-            <h1 style={{ fontFamily: sans, fontSize: F.xl, fontWeight: 700, color: T.text, margin: 0, letterSpacing: "-0.02em" }}>
+            <h1 style={{ fontFamily: sans, fontSize: F.lg, fontWeight: 700, color: T.text, margin: 0, letterSpacing: "-0.02em" }}>
               {accountName || "Analytics"}
             </h1>
           </div>
@@ -822,38 +890,87 @@ export default function PageShell({ activeTab, children }) {
           <div style={{ textAlign: "center", padding: "80px 0", fontFamily: sans, fontSize: F.sm, color: T.dim }}>
             Loading posts…
           </div>
-        ) : posts.length === 0 ? (
-          <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14,
-            padding: "60px 40px", textAlign: "center", boxShadow: T.shadowSm }}>
-            <div style={{ fontSize: 32, marginBottom: 12 }}>📭</div>
-            <div style={{ fontFamily: sans, fontSize: F.md, fontWeight: 600, color: T.text, marginBottom: 6 }}>
-              No posts yet
-            </div>
-            <div style={{ fontFamily: sans, fontSize: F.sm, color: T.sub }}>
-              Use the Import panel above to load your X CSV, LinkedIn export, Buffer export, or sync Instagram.
-            </div>
-          </div>
         ) : (
           <>
-            {/* Platform stats cards */}
-            <PlatformStats
-              posts={posts}
-              activePlatform={activePlatform}
-              onPlatformSelect={(p) => { setActivePlatform(p); setSelectedWeek(null); }}
-              followerLatest={followerLatest}
-            />
+            {posts.length > 0 && (
+              <PlatformStats
+                posts={posts}
+                activePlatform={activePlatform}
+                onPlatformSelect={(p) => { setActivePlatform(p); setSelectedWeek(null); }}
+                followerLatest={followerLatest}
+              />
+            )}
 
-            {/* Section tabs — route links */}
-            <div style={{ display: "flex", gap: 8, marginBottom: 28 }}>
-              {TABS.map(tab => (
-                <a key={tab.key} href={tab.href} style={TAB_STYLE(activeTab === tab.key)}>
-                  {tab.label}
+            {/* Section tabs + actions */}
+            <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 16, borderBottom: `1px solid ${T.border}`, marginBottom: 16, flexWrap: "wrap" }}>
+              <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
+                {TABS.map(tab => (
+                  <a key={tab.key} href={tab.href} style={TAB_STYLE(activeTab === tab.key)}
+                    onMouseEnter={e => { if (activeTab !== tab.key) e.currentTarget.style.color = T.sub; }}
+                    onMouseLeave={e => { if (activeTab !== tab.key) e.currentTarget.style.color = T.dim; }}>
+                    <span>{tab.emoji}</span>
+                    {tab.label}
+                  </a>
+                ))}
+              </div>
+              <div style={{ display: "flex", gap: 8, paddingBottom: 8, flexWrap: "wrap" }}>
+                <a href={importHref} style={{
+                  display: "inline-flex", alignItems: "center", gap: 5,
+                  background: T.card, color: T.sub, border: `1px solid ${T.border}`,
+                  borderRadius: 999, padding: "7px 14px", fontSize: F.xs, fontWeight: 600,
+                  fontFamily: sans, cursor: "pointer", textDecoration: "none",
+                  transition: "all 0.12s", boxShadow: T.shadowSm,
+                }}
+                  onMouseEnter={e => { e.currentTarget.style.background = T.well; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = T.card; }}>
+                  <span style={{ fontSize: 12 }}>{"\u2191"}</span> Import
                 </a>
-              ))}
+                {activeTab === "interactions" && (
+                  <button onClick={runInteractionEnrichment} disabled={enriching} style={{
+                    display: "inline-flex", alignItems: "center", gap: 5,
+                    background: T.accent, color: "#fff", border: "none",
+                    borderRadius: 999, padding: "7px 14px", fontSize: F.xs, fontWeight: 600,
+                    fontFamily: sans, cursor: enriching ? "wait" : "pointer", transition: "all 0.12s",
+                    boxShadow: T.shadowSm, opacity: enriching ? 0.75 : 1,
+                  }}
+                    onMouseEnter={e => { e.currentTarget.style.opacity = "0.85"; }}
+                    onMouseLeave={e => { e.currentTarget.style.opacity = "1"; }}>
+                    <span style={{ fontSize: 11 }}>{"\u2728"}</span> {enriching ? "Enriching…" : "Enrich"}
+                  </button>
+                )}
+              </div>
             </div>
 
-            {/* Tab content — rendered by each page */}
-            {typeof children === "function" ? children(childProps) : children}
+            {actionMessage && (
+              <div style={{
+                marginBottom: 18,
+                fontFamily: sans,
+                fontSize: F.xs,
+                fontWeight: 600,
+                color: actionMessage.tone === "success" ? T.green : actionMessage.tone === "error" ? T.red : T.sub,
+                background: actionMessage.tone === "success" ? T.greenBg : actionMessage.tone === "error" ? T.redBg : T.well,
+                border: `1px solid ${actionMessage.tone === "success" ? T.greenBorder : actionMessage.tone === "error" ? T.redBorder : T.border}`,
+                borderRadius: 10,
+                padding: "10px 12px",
+              }}>
+                {actionMessage.text}
+              </div>
+            )}
+
+            {posts.length === 0 && activeTab === "engagement" ? (
+              <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14,
+                padding: "60px 40px", textAlign: "center", boxShadow: T.shadowSm }}>
+                <div style={{ fontSize: 32, marginBottom: 12 }}>📭</div>
+                <div style={{ fontFamily: sans, fontSize: F.md, fontWeight: 600, color: T.text, marginBottom: 6 }}>
+                  No posts yet
+                </div>
+                <div style={{ fontFamily: sans, fontSize: F.sm, color: T.sub }}>
+                  Use the Import panel above to load your X CSV, LinkedIn export, Buffer export, or sync Instagram.
+                </div>
+              </div>
+            ) : (
+              typeof children === "function" ? children(childProps) : children
+            )}
           </>
         )}
       </div>

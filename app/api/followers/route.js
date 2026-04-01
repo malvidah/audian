@@ -29,6 +29,21 @@ export async function GET(request) {
     const { data: snapshots, error } = await query;
     if (error) throw error;
 
+    // Keep only the latest snapshot per platform per UTC day.
+    // Multiple syncs in one day should replace the earlier point, not stack.
+    const dedupedByDay = new Map();
+    for (const row of (snapshots || [])) {
+      const day = row.snapshot_at?.slice(0, 10);
+      if (!day) continue;
+      const key = `${row.platform}:${day}`;
+      const existing = dedupedByDay.get(key);
+      if (!existing || new Date(row.snapshot_at) > new Date(existing.snapshot_at)) {
+        dedupedByDay.set(key, row);
+      }
+    }
+    const dedupedSnapshots = [...dedupedByDay.values()]
+      .sort((a, b) => new Date(a.snapshot_at) - new Date(b.snapshot_at));
+
     // Also fetch latest count per platform from platform_connections
     const { data: connections } = await supabaseAdmin
       .from('platform_connections')
@@ -39,12 +54,12 @@ export async function GET(request) {
       if (c.subscriber_count) latestByPlatform[c.platform] = c.subscriber_count;
     }
     // Also check latest snapshot per platform (overrides connection if more recent)
-    for (const s of (snapshots || [])) {
+    for (const s of dedupedSnapshots) {
       if (s.followers) latestByPlatform[s.platform] = s.followers;
     }
 
     return NextResponse.json({
-      snapshots: snapshots || [],
+      snapshots: dedupedSnapshots,
       latest:    latestByPlatform,
     });
   } catch (err) {

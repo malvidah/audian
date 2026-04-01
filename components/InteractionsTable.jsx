@@ -192,19 +192,17 @@ function SummaryStats({ data }) {
     <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 20 }}>
       {stats.map(s => (
         <div key={s.label} style={{
-          background: T.card, border: `1px solid ${T.border}`, borderRadius: 10,
-          padding: "12px 18px", flex: "1 1 120px", boxShadow: T.shadowSm,
+          flex: "1 1 100px", minWidth: 90,
         }}>
-          <div style={{ fontFamily: sans, fontSize: F.xs, color: T.dim, marginBottom: 4 }}>{s.label}</div>
+          <div style={{ fontFamily: sans, fontSize: 10, color: T.dim, marginBottom: 2, textTransform: "uppercase", letterSpacing: "0.04em" }}>{s.label}</div>
           <div style={{ fontFamily: sans, fontSize: F.lg, fontWeight: 700, color: s.color }}>{s.value}</div>
         </div>
       ))}
       {zones.map(z => (
         <div key={z.label} style={{
-          background: z.bg, border: `1px solid ${z.border}`, borderRadius: 10,
-          padding: "12px 18px", flex: "1 1 100px",
+          flex: "1 1 80px", minWidth: 80,
         }}>
-          <div style={{ fontFamily: sans, fontSize: F.xs, color: z.color, fontWeight: 600, marginBottom: 4 }}>{z.label}</div>
+          <div style={{ fontFamily: sans, fontSize: 10, color: z.color, fontWeight: 600, marginBottom: 2 }}>{z.label}</div>
           <div style={{ fontFamily: sans, fontSize: F.lg, fontWeight: 700, color: z.color }}>{z.value}</div>
         </div>
       ))}
@@ -213,7 +211,7 @@ function SummaryStats({ data }) {
 }
 
 // ─── Main component ──────────────────────────────────────────────────────────
-export default function InteractionsTable({ platform, weekFilter }) {
+export default function InteractionsTable({ platform, weekFilter, refreshKey }) {
   const [sortBy, setSortBy] = useState("date");
   const [sortDesc, setSortDesc] = useState(true);
   const [liveData, setLiveData] = useState(null);
@@ -257,6 +255,7 @@ export default function InteractionsTable({ platform, weekFilter }) {
             id: row.id || i + 1,
             name: h.name || "Unknown",
             handle: handle,
+            bio: h.bio || null,
             platform: plat,
             type: row.interaction_type || "liked",
             content: row.content || null,
@@ -274,7 +273,7 @@ export default function InteractionsTable({ platform, weekFilter }) {
     }
     fetchInteractions();
     return () => { cancelled = true; };
-  }, []);
+  }, [refreshKey]);
 
   const allData = liveData || SAMPLE_DATA;
 
@@ -409,14 +408,25 @@ export default function InteractionsTable({ platform, weekFilter }) {
             {sorted.map((row, i) => (
               <tr key={row.id} style={{ background: i % 2 === 0 ? T.card : T.well + "88" }}>
                 {/* Person */}
-                <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>
-                  <div>
+                <td style={{ ...tdStyle }}>
+                  <div style={{ maxWidth: 260 }}>
                     <div style={{ fontWeight: 600, fontSize: F.sm, color: T.text, lineHeight: 1.3 }}>
                       {row.name}
                     </div>
                     <div style={{ fontSize: F.xs, color: T.dim }}>
                       @{row.handle}
                     </div>
+                    {row.bio && (
+                      <div style={{
+                        marginTop: 4,
+                        fontSize: F.xs,
+                        color: T.sub,
+                        lineHeight: 1.45,
+                        whiteSpace: "normal",
+                      }}>
+                        {truncate(row.bio, 120)}
+                      </div>
+                    )}
                   </div>
                 </td>
                 {/* Platform */}

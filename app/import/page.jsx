@@ -95,6 +95,131 @@ function Btn({ onClick, disabled, children, variant = "primary", style = {} }) {
   );
 }
 
+function HandlesCsvImport({ platform }) {
+  const [csvText, setCsvText] = useState("");
+  const [category, setCategory] = useState("SIGNAL");
+  const [importing, setImporting] = useState(false);
+  const [result, setResult] = useState(null);
+  const fileRef = useRef(null);
+
+  async function loadFile(file) {
+    if (!file) return;
+    setCsvText(await file.text());
+    setResult(null);
+  }
+
+  async function handleImport() {
+    if (!csvText.trim()) return;
+    setImporting(true);
+    setResult(null);
+    try {
+      const res = await fetch("/api/accounts/csv", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ csv: csvText, category }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || "CSV import failed");
+      setResult({ ok: true, ...data });
+    } catch (e) {
+      setResult({ ok: false, error: e.message });
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  return (
+    <div style={{ display: "grid", gap: 18 }}>
+      <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: 22, boxShadow: T.shadow }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
+          <div>
+            <div style={{ fontFamily: sans, fontSize: F.lg, fontWeight: 700, color: T.text, marginBottom: 4 }}>
+              Import handle CSV
+            </div>
+            <div style={{ fontFamily: sans, fontSize: F.sm, color: T.sub, lineHeight: 1.6 }}>
+              Paste a spreadsheet export or upload a CSV with names, bios, labels, and platform handles.
+              {platform && platform !== "all" ? ` Current filter: ${PLATFORM_LABELS[platform] || platform}.` : ""}
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <select
+              value={category}
+              onChange={e => setCategory(e.target.value)}
+              style={{
+                fontFamily: sans, fontSize: F.sm, color: T.text, background: T.card,
+                border: `1px solid ${T.border}`, borderRadius: 8, padding: "8px 10px",
+              }}
+            >
+              {["ELITE", "INFLUENTIAL", "SIGNAL", "IGNORE"].map(zone => (
+                <option key={zone} value={zone}>{zone} default</option>
+              ))}
+            </select>
+            <Btn variant="secondary" onClick={() => fileRef.current?.click()}>
+              Upload CSV
+            </Btn>
+            <Btn onClick={handleImport} disabled={importing || !csvText.trim()}>
+              {importing ? "Importing…" : "Import handles"}
+            </Btn>
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".csv,text/csv"
+              style={{ display: "none" }}
+              onChange={e => loadFile(e.target.files?.[0])}
+            />
+          </div>
+        </div>
+
+        <textarea
+          value={csvText}
+          onChange={e => setCsvText(e.target.value)}
+          placeholder="name,instagram handle,x handle,bio,label"
+          style={{
+            width: "100%",
+            minHeight: 320,
+            resize: "vertical",
+            boxSizing: "border-box",
+            borderRadius: 12,
+            border: `1px solid ${T.border}`,
+            background: T.well,
+            color: T.text,
+            padding: "14px 16px",
+            fontFamily: "'SFMono-Regular', ui-monospace, Menlo, monospace",
+            fontSize: 12,
+            lineHeight: 1.6,
+            outline: "none",
+          }}
+        />
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1.25fr 0.75fr", gap: 18 }}>
+        <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: 20, boxShadow: T.shadow }}>
+          <div style={{ fontFamily: sans, fontSize: F.md, fontWeight: 700, color: T.text, marginBottom: 8 }}>
+            Expected columns
+          </div>
+          <div style={{ fontFamily: sans, fontSize: F.sm, color: T.sub, lineHeight: 1.7 }}>
+            `name`, `bio`, `label`, `source list`, `platform`, `handle`
+            <br />
+            `instagram handle`, `x handle`, `youtube handle`, `linkedin handle`
+          </div>
+        </div>
+        <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: 20, boxShadow: T.shadow }}>
+          <div style={{ fontFamily: sans, fontSize: F.md, fontWeight: 700, color: T.text, marginBottom: 8 }}>
+            Result
+          </div>
+          <div style={{ fontFamily: sans, fontSize: F.sm, color: T.sub, lineHeight: 1.7 }}>
+            {result?.ok && `Imported ${result.imported || 0} rows`}
+            {result?.ok && result.dupes ? `, deduped ${result.dupes}` : ""}
+            {result?.ok && result.skipped ? `, skipped ${result.skipped}` : ""}
+            {!result && "Import results will show here."}
+            {result && !result.ok && result.error}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Drop Zone ─────────────────────────────────────────────────────────────────
 function DropZone({ onFiles, disabled }) {
   const [dragging, setDragging] = useState(false);
@@ -427,6 +552,8 @@ function ManualAddRow({ onAdd }) {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function ImportPage() {
+  const [mode, setMode] = useState("interactions");
+  const [platform, setPlatform] = useState("all");
   const [screenshots, setScreenshots] = useState([]); // { filename, preview, interactions, error, parsing }
   const [allInteractions, setAllInteractions] = useState([]); // flat merged list for review
   const [parsing, setParsing] = useState(false);
@@ -437,13 +564,20 @@ export default function ImportPage() {
   const [showManualAdd, setShowManualAdd] = useState(false);
   const [knownProfiles, setKnownProfiles] = useState({}); // handle → all previously seen accounts
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setMode(params.get("mode") === "handles" ? "handles" : "interactions");
+    setPlatform(params.get("platform") || "all");
+  }, []);
+
   // Load known elite profiles on mount for autofill
   useEffect(() => {
+    if (mode !== "interactions") return;
     fetch("/api/elite/profiles")
       .then(r => r.json())
       .then(d => { if (d.profiles) setKnownProfiles(d.profiles); })
       .catch(() => {});
-  }, []);
+  }, [mode]);
 
   // Autofill helper — looks up by "platform:handle" key, falls back to any platform match
   const autofillKnown = (interaction) => {
@@ -843,11 +977,27 @@ export default function ImportPage() {
         </a>
         <span style={{ color: T.border2 }}>›</span>
         <span style={{ fontFamily: sans, fontSize: F.sm, color: T.sub,
-          fontWeight: 500 }}>Screenshot Import</span>
+          fontWeight: 500 }}>{mode === "handles" ? "Handle Import" : "Screenshot Import"}</span>
         <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
-          <a href="/" style={{ fontFamily: sans, fontSize: F.sm, color: T.sub,
+          <div style={{ display: "flex", background: T.well, borderRadius: 999, padding: 4, gap: 4 }}>
+            {[
+              { key: "interactions", label: "🤝 Interactions", href: `/import?mode=interactions${platform !== "all" ? `&platform=${platform}` : ""}` },
+              { key: "handles", label: "👤 Handles", href: `/import?mode=handles${platform !== "all" ? `&platform=${platform}` : ""}` },
+            ].map(tab => (
+              <a key={tab.key} href={tab.href} style={{
+                fontFamily: sans, fontSize: F.xs, fontWeight: 600, textDecoration: "none",
+                color: mode === tab.key ? T.text : T.sub,
+                background: mode === tab.key ? T.card : "transparent",
+                border: mode === tab.key ? `1px solid ${T.border}` : "1px solid transparent",
+                borderRadius: 999, padding: "6px 10px",
+              }}>
+                {tab.label}
+              </a>
+            ))}
+          </div>
+          <a href={mode === "handles" ? "/handles" : "/interactions"} style={{ fontFamily: sans, fontSize: F.sm, color: T.sub,
             textDecoration: "none", padding: "6px 12px", borderRadius: 8,
-            border: `1px solid ${T.border}` }}>← Back to Dashboard</a>
+            border: `1px solid ${T.border}` }}>← Back</a>
         </div>
       </div>
 
@@ -857,49 +1007,54 @@ export default function ImportPage() {
         <div style={{ marginBottom: 28 }}>
           <h1 style={{ fontFamily: sans, fontSize: F.xl, fontWeight: 700,
             color: T.text, margin: 0, marginBottom: 6 }}>
-            Import from Screenshots
+            {mode === "handles" ? "Import Handle Lists" : "Import from Screenshots"}
           </h1>
           <p style={{ fontFamily: sans, fontSize: F.sm, color: T.sub, margin: 0, lineHeight: 1.6 }}>
-            Drop any Instagram screenshots — notifications, likers, followers, comments.<br />
-            Claude reads each one and extracts interactions. Review and edit before saving.
+            {mode === "handles"
+              ? "Bring in your curated handle lists, bios, and labels so the Handles tab stays in sync with your existing spreadsheets."
+              : <>Drop any Instagram screenshots — notifications, likers, followers, comments.<br />Claude reads each one and extracts interactions. Review and edit before saving.</>}
           </p>
         </div>
 
-        {/* Drop zone */}
-        <div style={{ marginBottom: 28 }}>
-          <DropZone onFiles={handleFiles} disabled={parsing} />
-          {parsing && (
-            <div style={{ textAlign: "center", marginTop: 16, fontFamily: sans,
-              fontSize: F.sm, color: T.sub }}>
-              <span style={{ display: "inline-block", animation: "spin 1s linear infinite",
-                marginRight: 8 }}>⟳</span>
-              Parsing screenshots with Claude Vision…
+        {mode === "handles" ? (
+          <HandlesCsvImport platform={platform} />
+        ) : (
+          <>
+            {/* Drop zone */}
+            <div style={{ marginBottom: 28 }}>
+              <DropZone onFiles={handleFiles} disabled={parsing} />
+              {parsing && (
+                <div style={{ textAlign: "center", marginTop: 16, fontFamily: sans,
+                  fontSize: F.sm, color: T.sub }}>
+                  <span style={{ display: "inline-block", animation: "spin 1s linear infinite",
+                    marginRight: 8 }}>⟳</span>
+                  Parsing screenshots with Claude Vision…
+                </div>
+              )}
             </div>
-          )}
-        </div>
 
-        {/* Screenshot cards */}
-        {screenshots.length > 0 && (
-          <div style={{ marginBottom: 28 }}>
-            <div style={{ fontFamily: sans, fontSize: F.xs, fontWeight: 600,
-              color: T.dim, textTransform: "uppercase", letterSpacing: "0.06em",
-              marginBottom: 12 }}>
-              {screenshots.length} screenshot{screenshots.length !== 1 ? "s" : ""} processed
-            </div>
-            {screenshots.map(s => (
-              <ScreenshotCard
-                key={s.filename + s.preview}
-                result={s}
-                onRemoveScreenshot={() => removeScreenshot(s.filename)}
-              />
-            ))}
-          </div>
-        )}
+            {/* Screenshot cards */}
+            {screenshots.length > 0 && (
+              <div style={{ marginBottom: 28 }}>
+                <div style={{ fontFamily: sans, fontSize: F.xs, fontWeight: 600,
+                  color: T.dim, textTransform: "uppercase", letterSpacing: "0.06em",
+                  marginBottom: 12 }}>
+                  {screenshots.length} screenshot{screenshots.length !== 1 ? "s" : ""} processed
+                </div>
+                {screenshots.map(s => (
+                  <ScreenshotCard
+                    key={s.filename + s.preview}
+                    result={s}
+                    onRemoveScreenshot={() => removeScreenshot(s.filename)}
+                  />
+                ))}
+              </div>
+            )}
 
-        {/* Review table */}
-        {allInteractions.length > 0 && (
-          <div style={{ background: T.card, borderRadius: 14, border: `1px solid ${T.border}`,
-            boxShadow: T.shadow, overflow: "hidden" }}>
+            {/* Review table */}
+            {allInteractions.length > 0 && (
+              <div style={{ background: T.card, borderRadius: 14, border: `1px solid ${T.border}`,
+                boxShadow: T.shadow, overflow: "hidden" }}>
 
             {/* Table header */}
             <div style={{ padding: "16px 20px", borderBottom: `1px solid ${T.border}`,
@@ -1000,20 +1155,22 @@ export default function ImportPage() {
                 {saving ? "Saving…" : `💾 Save ${filtered.length} interactions`}
               </Btn>
             </div>
-          </div>
-        )}
+              </div>
+            )}
 
-        {/* Empty state */}
-        {!parsing && screenshots.length === 0 && (
-          <div style={{ textAlign: "center", padding: "48px 0", color: T.dim }}>
-            <div style={{ fontSize: 48, marginBottom: 12, opacity: 0.4 }}>📱</div>
-            <div style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 500 }}>
-              Drop your Instagram screenshots above to get started
-            </div>
-            <div style={{ fontFamily: sans, fontSize: F.xs, marginTop: 8, lineHeight: 1.6 }}>
-              Works best with: Activity/Notifications feed · Post likers · Follower lists · Comment sections
-            </div>
-          </div>
+            {/* Empty state */}
+            {!parsing && screenshots.length === 0 && (
+              <div style={{ textAlign: "center", padding: "48px 0", color: T.dim }}>
+                <div style={{ fontSize: 48, marginBottom: 12, opacity: 0.4 }}>📱</div>
+                <div style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 500 }}>
+                  Drop your Instagram screenshots above to get started
+                </div>
+                <div style={{ fontFamily: sans, fontSize: F.xs, marginTop: 8, lineHeight: 1.6 }}>
+                  Works best with: Activity/Notifications feed · Post likers · Follower lists · Comment sections
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
 
