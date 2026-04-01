@@ -1,4 +1,2 @@
-"use client";
-import dynamic from "next/dynamic";
-const Dashboard = dynamic(() => import("../components/Dashboard"), { ssr: false });
-export default function Page() { return <Dashboard />; }
+import { redirect } from 'next/navigation';
+export default function Page() { redirect('/posts'); }

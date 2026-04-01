@@ -1,5 +1,16 @@
 "use client";
 import React, { useState, useEffect, useCallback } from "react";
+import dynamic from "next/dynamic";
+
+const InteractionsTable = dynamic(() => import("../../components/InteractionsTable"), {
+  ssr: false,
+  loading: () => <div style={{padding:"2rem",textAlign:"center",color:"#6B6560"}}>Loading interactions...</div>
+});
+
+const CommentsTable = dynamic(() => import("../../components/CommentsTable"), {
+  ssr: false,
+  loading: () => <div style={{padding:"2rem",textAlign:"center",color:"#6B6560"}}>Loading comments...</div>
+});
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const T = {
@@ -49,6 +60,19 @@ const LIKES_GOAL = 2000;
 const POSTS_GOAL = 3;
 const H1_FROM    = "2026-01-01";
 const H1_TO      = "2026-04-01";
+
+const TAB_STYLE = (active) => ({
+  padding: "10px 24px",
+  fontSize: 15,
+  fontWeight: active ? 700 : 500,
+  color: active ? T.accent : T.sub,
+  background: active ? T.accentBg : "transparent",
+  border: `1.5px solid ${active ? T.accentBorder : T.border}`,
+  borderRadius: 10,
+  cursor: "pointer",
+  transition: "all 0.15s ease",
+  fontFamily: sans,
+});
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function fmt(n) {
@@ -1067,12 +1091,17 @@ export default function PostsPage() {
   const [posts,          setPosts]         = useState([]);
   const [loading,        setLoading]       = useState(true);
   const [error,          setError]         = useState(null);
+<<<<<<< Updated upstream
   const [activePlatform, setActivePlatform] = useState("all");
   const [selectedWeek,   setSelectedWeek]  = useState(null);
   const [dateFrom,        setDateFrom]       = useState(H1_FROM);
   const [dateTo,          setDateTo]         = useState("2026-03-31");
   const [followerSnaps,   setFollowerSnaps]  = useState([]);
   const [followerLatest,  setFollowerLatest] = useState({});
+=======
+  const [activeTab,      setActiveTab]     = useState("posts");
+  const [weekFilter,     setWeekFilter]    = useState(null);
+>>>>>>> Stashed changes
 
   const loadPosts = useCallback(async (from, to) => {
     setLoading(true);
@@ -1182,6 +1211,7 @@ export default function PostsPage() {
               followerLatest={followerLatest}
             />
 
+<<<<<<< Updated upstream
             {/* Followers over time */}
             <FollowersChart snapshots={followerSnaps} activePlatform={activePlatform} />
 
@@ -1208,6 +1238,45 @@ export default function PostsPage() {
               activePlatform={activePlatform}
               selectedWeek={selectedWeek}
             />
+=======
+            {/* Section tabs */}
+            <div style={{ display: "flex", gap: 8, marginBottom: 28 }}>
+              {[
+                { key: "posts",        label: "Posts" },
+                { key: "interactions", label: "Interactions" },
+                { key: "comments",     label: "Comments" },
+              ].map(tab => (
+                <button key={tab.key} onClick={() => setActiveTab(tab.key)} style={TAB_STYLE(activeTab === tab.key)}>
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Tab content */}
+            {activeTab === "posts" && (
+              <>
+                {/* Platform stats */}
+                <PlatformStats posts={posts} />
+
+                {/* Top posts */}
+                <TopPosts posts={posts} />
+
+                {/* Weekly OKR */}
+                <WeeklyOKR posts={posts} activePlatform={activePlatform} />
+
+                {/* Posts table */}
+                <PostsTable posts={posts} activePlatform={activePlatform} />
+              </>
+            )}
+
+            {activeTab === "interactions" && (
+              <InteractionsTable platform={activePlatform} weekFilter={weekFilter} />
+            )}
+
+            {activeTab === "comments" && (
+              <CommentsTable platform={activePlatform} weekFilter={weekFilter} />
+            )}
+>>>>>>> Stashed changes
           </>
         )}
       </div>
