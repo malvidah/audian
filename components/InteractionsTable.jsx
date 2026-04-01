@@ -362,15 +362,16 @@ function CreatePanel({ onClose, onCreated }) {
       const result = await res.json();
       if (!res.ok) throw new Error(result.error);
 
-      // Save additional handle fields (other platform handles, bio, followers)
+      // Save additional handle fields — only non-empty values
       if (result.interaction_id) {
         const extra = {};
-        if (draft.bio) extra.bio = draft.bio;
+        if (draft.bio && draft.bio.trim()) extra.bio = draft.bio.trim();
         for (const { key } of PLAT_HANDLES) {
-          if (draft[key]) extra[key] = draft[key];
+          if (draft[key] && draft[key].trim()) extra[key] = draft[key].trim();
         }
         for (const { key } of FOLLOWER_FIELDS) {
-          if (draft[key]) extra[key] = parseInt(draft[key], 10) || null;
+          const v = parseInt(draft[key], 10);
+          if (v > 0) extra[key] = v;
         }
         if (Object.keys(extra).length > 0) {
           await fetch("/api/interactions/update", {

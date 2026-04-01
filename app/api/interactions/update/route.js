@@ -57,10 +57,11 @@ export async function PATCH(req) {
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // ── Update handles table fields ──────────────────────────────────────
+    // ── Update handles table fields (never overwrite with empty) ────────
     const handleUpdates = Object.fromEntries(
       Object.entries(updates)
         .filter(([k]) => handleFields.includes(k))
+        .filter(([k, v]) => v != null && v !== '')  // never blank out existing data
         .map(([k, v]) => k.startsWith("followers_") ? [k, parseInt(v, 10) || null] : [k, v])
     );
 
