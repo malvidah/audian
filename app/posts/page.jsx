@@ -507,9 +507,14 @@ function ImportPanel({ posts, onImported }) {
   );
 }
 
-// ─── Followers line chart ─────────────────────────────────────────────────────
+// ─── Followers area chart ─────────────────────────────────────────────────────
 function FollowersChart({ snapshots, activePlatform }) {
-  if (!snapshots || snapshots.length === 0) {
+  const [hover, setHover] = useState(null); // { x, y, platform, followers, date }
+
+  const empty = !snapshots || snapshots.length === 0 ||
+    snapshots.every(s => !s.followers || s.followers === 0);
+
+  if (empty) {
     return (
       <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 12,
         padding: "32px 24px", textAlign: "center", marginBottom: 28, boxShadow: T.shadowSm }}>
@@ -517,70 +522,104 @@ function FollowersChart({ snapshots, activePlatform }) {
           Followers over time
         </div>
         <div style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>
-          No follower data yet — run <code>seed_followers.sql</code> in Supabase with your counts
+          No follower data yet — export from Buffer (Analytics → Export CSV) and share the file
         </div>
       </div>
     );
   }
 
-  const W = 900, H = 180, PAD = { top: 16, right: 16, bottom: 32, left: 52 };
+  const W = 900, H = 200, PAD = { top: 20, right: 20, bottom: 36, left: 58 };
   const chartW = W - PAD.left - PAD.right;
   const chartH = H - PAD.top - PAD.bottom;
 
-  // Filter by platform
   const visible = activePlatform === "all"
     ? snapshots
     : snapshots.filter(s => s.platform === activePlatform);
-
   if (visible.length === 0) return null;
 
-  // Group by platform → sorted array of {date, followers}
   const byPlat = {};
   for (const s of visible) {
     if (!byPlat[s.platform]) byPlat[s.platform] = [];
-    byPlat[s.platform].push({ date: new Date(s.snapshot_at), followers: s.followers || 0 });
+    byPlat[s.platform].push({ date: new Date(s.snapshot_at), f: s.followers || 0 });
   }
-  for (const k of Object.keys(byPlat)) {
-    byPlat[k].sort((a, b) => a.date - b.date);
-  }
+  for (const k of Object.keys(byPlat)) byPlat[k].sort((a, b) => a.date - b.date);
 
-  const allDates   = visible.map(s => new Date(s.snapshot_at));
-  const minDate    = new Date(Math.min(...allDates));
-  const maxDate    = new Date(Math.max(...allDates));
-  const allFollowers = visible.map(s => s.followers || 0);
-  const minF = Math.min(...allFollowers);
-  const maxF = Math.max(...allFollowers);
-  const rangeF = maxF - minF || 1;
+  const allDates = visible.map(s => new Date(s.snapshot_at));
+  const minDate  = new Date(Math.min(...allDates));
+  const maxDate  = new Date(Math.max(...allDates));
+  const allF     = visible.map(s => s.followers || 0);
+  // pad min slightly so the area fill has breathing room at the bottom
+  const rawMin   = Math.min(...allF);
+  const rawMax   = Math.max(...allF);
+  const pad5     = (rawMax - rawMin) * 0.08;
+  const minF     = Math.max(0, rawMin - pad5);
+  const maxF     = rawMax + pad5;
+  const rangeF   = maxF - minF || 1;
 
-  const xPos = d => ((d - minDate) / ((maxDate - minDate) || 1)) * chartW;
-  const yPos = f => chartH - ((f - minF) / rangeF) * chartH;
+  const xPos = d  => ((d - minDate) / ((maxDate - minDate) || 1)) * chartW;
+  const yPos = f  => chartH - ((f - minF) / rangeF) * chartH;
+  const fmtK = n  => n >= 1_000_000 ? (n/1_000_000).toFixed(1)+'M'
+                   : n >= 1000       ? (n/1000).toFixed(n >= 10000 ? 0 : 1)+'K'
+                   : String(n);
 
   const platKeys = Object.keys(byPlat);
-  const fmtK = n => n >= 1000 ? (n/1000).toFixed(1) + 'K' : n;
 
-  // Y axis ticks
-  const yTicks = [minF, minF + rangeF * 0.5, maxF].map(v => Math.round(v));
+  // Smooth cubic bezier path
+  const smoothPath = pts => pts.map(({ date, f }, i) => {
+    const x = xPos(date), y = yPos(f);
+    if (i === 0) return `M${x.toFixed(1)},${y.toFixed(1)}`;
+    const prev = pts[i - 1];
+    const px = xPos(prev.date), py = yPos(prev.f);
+    const cpx = (px + x) / 2;
+    return `C${cpx.toFixed(1)},${py.toFixed(1)} ${cpx.toFixed(1)},${y.toFixed(1)} ${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(" ");
 
-  // X axis ticks — monthly
+  const areaPath = (pts, linePath) =>
+    `${linePath} L${xPos(pts[pts.length-1].date).toFixed(1)},${chartH} L${xPos(pts[0].date).toFixed(1)},${chartH} Z`;
+
+  // Y ticks — 4 clean round numbers
+  const step = (rawMax - rawMin) / 3;
+  const yTicks = [0,1,2,3].map(i => Math.round((rawMin + i * step) / 1000) * 1000);
+
+  // X ticks — monthly
   const xTicks = [];
-  const cur = new Date(minDate); cur.setUTCDate(1);
-  while (cur <= maxDate) {
-    xTicks.push(new Date(cur));
-    cur.setUTCMonth(cur.getUTCMonth() + 1);
-  }
+  const tc = new Date(minDate); tc.setUTCDate(1);
+  while (tc <= maxDate) { xTicks.push(new Date(tc)); tc.setUTCMonth(tc.getUTCMonth() + 1); }
+
+  // Hover detection: find closest point across all platforms
+  const handleMouseMove = e => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const mx   = (e.clientX - rect.left) / rect.width * W - PAD.left;
+    if (mx < 0 || mx > chartW) { setHover(null); return; }
+    const tAtX = minDate.getTime() + (mx / chartW) * (maxDate - minDate);
+    let best = null, bestDist = Infinity;
+    for (const [plat, pts] of Object.entries(byPlat)) {
+      for (const pt of pts) {
+        const dist = Math.abs(pt.date.getTime() - tAtX);
+        if (dist < bestDist) { bestDist = dist; best = { plat, pt }; }
+      }
+    }
+    if (best) {
+      const cx = PAD.left + xPos(best.pt.date);
+      const cy = PAD.top  + yPos(best.pt.f);
+      setHover({ x: cx, y: cy, platform: best.plat, followers: best.pt.f, date: best.pt.date });
+    }
+  };
 
   return (
     <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 12,
-      padding: "16px 20px 12px", marginBottom: 28, boxShadow: T.shadowSm }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+      padding: "18px 20px 14px", marginBottom: 28, boxShadow: T.shadowSm }}>
+
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
         <div style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text }}>
           Followers over time
         </div>
         {platKeys.length > 1 && (
-          <div style={{ display: "flex", gap: 12 }}>
+          <div style={{ display: "flex", gap: 16 }}>
             {platKeys.map(p => (
-              <div key={p} style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                <div style={{ width: 10, height: 2, borderRadius: 2,
+              <div key={p} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <div style={{ width: 12, height: 3, borderRadius: 2,
                   background: PLAT_COLORS[p] || T.dim }} />
                 <span style={{ fontFamily: sans, fontSize: F.xs, color: T.sub }}>
                   {PLAT_LABEL[p] || p}
@@ -590,43 +629,97 @@ function FollowersChart({ snapshots, activePlatform }) {
           </div>
         )}
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", display: "block" }}>
-        <g transform={`translate(${PAD.left},${PAD.top})`}>
-          {/* Grid lines + Y labels */}
-          {yTicks.map((v, i) => (
-            <g key={i}>
-              <line x1={0} y1={yPos(v)} x2={chartW} y2={yPos(v)}
-                stroke={T.border} strokeWidth={1} />
-              <text x={-6} y={yPos(v) + 4} textAnchor="end"
-                style={{ fontFamily: sans, fontSize: 10, fill: T.dim }}>{fmtK(v)}</text>
-            </g>
-          ))}
-          {/* X labels */}
-          {xTicks.map((d, i) => (
-            <text key={i} x={xPos(d)} y={chartH + 20} textAnchor="middle"
-              style={{ fontFamily: sans, fontSize: 10, fill: T.dim }}>
-              {d.toLocaleDateString("en-US", { month: "short", timeZone: "UTC" })}
-            </text>
-          ))}
-          {/* Lines per platform */}
-          {platKeys.map(p => {
-            const pts = byPlat[p];
-            const color = PLAT_COLORS[p] || T.accent;
-            const d = pts.map((pt, i) =>
-              `${i === 0 ? "M" : "L"}${xPos(pt.date).toFixed(1)},${yPos(pt.followers).toFixed(1)}`
-            ).join(" ");
-            return (
-              <g key={p}>
-                <path d={d} fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-                {pts.map((pt, i) => (
-                  <circle key={i} cx={xPos(pt.date)} cy={yPos(pt.followers)} r={3}
-                    fill={color} stroke={T.card} strokeWidth={1.5} />
-                ))}
+
+      {/* Chart */}
+      <div style={{ position: "relative" }}>
+        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", display: "block", overflow: "visible" }}
+          onMouseMove={handleMouseMove} onMouseLeave={() => setHover(null)}>
+          <defs>
+            {platKeys.map(p => {
+              const color = PLAT_COLORS[p] || T.accent;
+              return (
+                <linearGradient key={p} id={`grad-${p}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%"   stopColor={color} stopOpacity="0.18" />
+                  <stop offset="100%" stopColor={color} stopOpacity="0.01" />
+                </linearGradient>
+              );
+            })}
+          </defs>
+
+          <g transform={`translate(${PAD.left},${PAD.top})`}>
+            {/* Subtle horizontal grid */}
+            {yTicks.map((v, i) => (
+              <g key={i}>
+                <line x1={0} y1={yPos(v)} x2={chartW} y2={yPos(v)}
+                  stroke={T.border} strokeWidth={0.75} strokeDasharray="0" />
+                <text x={-10} y={yPos(v) + 4} textAnchor="end"
+                  style={{ fontFamily: sans, fontSize: 10, fill: T.dim }}>{fmtK(v)}</text>
               </g>
-            );
-          })}
-        </g>
-      </svg>
+            ))}
+
+            {/* X axis labels */}
+            {xTicks.map((d, i) => (
+              <text key={i} x={xPos(d)} y={chartH + 24} textAnchor="middle"
+                style={{ fontFamily: sans, fontSize: 10, fill: T.dim }}>
+                {d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}
+              </text>
+            ))}
+
+            {/* Area + line per platform */}
+            {platKeys.map(p => {
+              const pts   = byPlat[p];
+              const color = PLAT_COLORS[p] || T.accent;
+              const line  = smoothPath(pts);
+              const area  = areaPath(pts, line);
+              return (
+                <g key={p}>
+                  <path d={area} fill={`url(#grad-${p})`} />
+                  <path d={line} fill="none" stroke={color} strokeWidth={2}
+                    strokeLinecap="round" strokeLinejoin="round" />
+                </g>
+              );
+            })}
+
+            {/* Hover crosshair + dot */}
+            {hover && (() => {
+              const hx = hover.x - PAD.left;
+              const hy = hover.y - PAD.top;
+              const color = PLAT_COLORS[hover.platform] || T.accent;
+              return (
+                <g>
+                  <line x1={hx} y1={0} x2={hx} y2={chartH}
+                    stroke={T.border2} strokeWidth={1} strokeDasharray="4 3" />
+                  <circle cx={hx} cy={hy} r={5} fill={color} stroke={T.card} strokeWidth={2} />
+                </g>
+              );
+            })()}
+          </g>
+        </svg>
+
+        {/* Tooltip */}
+        {hover && (() => {
+          const svgRect = { w: 900 };
+          const tipW = 140, tipH = 52;
+          const pct  = (hover.x - PAD.left) / chartW;
+          const left = pct > 0.75 ? hover.x - tipW - 12 : hover.x + 12;
+          return (
+            <div style={{
+              position: "absolute", top: hover.y - 28, left: `${(left / W) * 100}%`,
+              background: T.text, color: "#fff", borderRadius: 8,
+              padding: "8px 12px", pointerEvents: "none", zIndex: 10,
+              boxShadow: T.shadowMd, minWidth: tipW,
+            }}>
+              <div style={{ fontFamily: sans, fontSize: F.xs, opacity: 0.7, marginBottom: 2 }}>
+                {hover.date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })}
+                {platKeys.length > 1 && ` · ${PLAT_LABEL[hover.platform]}`}
+              </div>
+              <div style={{ fontFamily: sans, fontSize: F.md, fontWeight: 700 }}>
+                {fmtK(hover.followers)} followers
+              </div>
+            </div>
+          );
+        })()}
+      </div>
     </div>
   );
 }
