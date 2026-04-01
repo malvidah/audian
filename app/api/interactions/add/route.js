@@ -19,18 +19,18 @@ export async function POST(req) {
 
     const now = new Date().toISOString();
     const handleCol = `handle_${platform}`;
-    const cleanHandle = handle ? handle.toLowerCase().replace(/^@/, '') : null;
-
     const followersCol = `followers_${platform}`;
+    const cleanHandle = handle ? handle.toLowerCase().replace(/^@/, '') : null;
     const parsedFollowers = followers ? parseInt(followers, 10) || null : null;
 
-    // Look up existing handle by platform handle or name
+    // ── Look up existing handle by platform handle or name ──────────────
     let handleId = null;
     let existingHandle = null;
+
     if (cleanHandle) {
       const { data } = await supabase
         .from('handles')
-        .select(`id, zone, ${followersCol}`)
+        .select('*')
         .eq(handleCol, cleanHandle)
         .maybeSingle();
       if (data) { handleId = data.id; existingHandle = data; }
@@ -39,25 +39,27 @@ export async function POST(req) {
     if (!handleId) {
       const { data } = await supabase
         .from('handles')
-        .select(`id, zone, ${followersCol}`)
+        .select('*')
         .eq('name', name)
         .maybeSingle();
       if (data) { handleId = data.id; existingHandle = data; }
     }
 
-    // Update followers on existing handle if new count is higher
-    if (existingHandle && parsedFollowers) {
-      const current = existingHandle[followersCol] || 0;
-      if (parsedFollowers > current) {
-        await supabase.from('handles').update({
-          [followersCol]: parsedFollowers,
-          updated_at: now,
-        }).eq('id', handleId);
-      }
-    }
+    if (existingHandle) {
+      // ── Merge: update existing handle with any new non-empty fields ──
+      const mergeUpdates = {};
 
-    // Create handle if not found
-    if (!handleId) {
+      // New data from this request fills in blanks on the existing handle
+      if (cleanHandle && !existingHandle[handleCol]) mergeUpdates[handleCol] = cleanHandle;
+      if (parsedFollowers && parsedFollowers > (existingHandle[followersCol] || 0)) mergeUpdates[followersCol] = parsedFollowers;
+      if (zone && zone !== 'SIGNAL' && existingHandle.zone !== 'ELITE') mergeUpdates.zone = zone;
+
+      if (Object.keys(mergeUpdates).length > 0) {
+        mergeUpdates.updated_at = now;
+        await supabase.from('handles').update(mergeUpdates).eq('id', handleId);
+      }
+    } else {
+      // ── Create new handle ─────────────────────────────────────────────
       const insert = {
         name,
         zone: zone || 'SIGNAL',
@@ -70,14 +72,15 @@ export async function POST(req) {
       const { data: created, error } = await supabase
         .from('handles')
         .insert(insert)
-        .select('id')
+        .select('*')
         .single();
 
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
       handleId = created.id;
+      existingHandle = created;
     }
 
-    // Insert interaction
+    // ── Insert interaction ──────────────────────────────────────────────
     const { data: inserted, error: intError } = await supabase.from('interactions').insert({
       handle_id: handleId,
       platform,
@@ -91,7 +94,13 @@ export async function POST(req) {
 
     if (intError) return NextResponse.json({ error: intError.message }, { status: 500 });
 
-    return NextResponse.json({ success: true, handle_id: handleId, interaction_id: inserted.id });
+    // Return full handle data so the UI can autofill
+    return NextResponse.json({
+      success: true,
+      handle_id: handleId,
+      interaction_id: inserted.id,
+      handle: existingHandle,
+    });
   } catch (err) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
