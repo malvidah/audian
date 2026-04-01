@@ -33,7 +33,7 @@ const PLAT_URL = {
 const sans = "-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif";
 const F = { xl: 28, lg: 20, md: 15, sm: 13, xs: 11 };
 
-// ─── Zone config ─────────────────────────────────────────────────────────────
+// ─── Label config ────────────────────────────────────────────────────────────
 const ZONE_CFG = {
   ELITE:       { label: "ELITE",       color: T.accent, bg: T.accentBg, border: T.accentBorder },
   INFLUENTIAL: { label: "INFLUENTIAL", color: T.green,  bg: T.greenBg,  border: T.greenBorder  },
@@ -138,18 +138,29 @@ function ZoneBadge({ zone }) {
 }
 
 function TypeBadge({ type }) {
-  const icons = {
-    liked: "♥", commented: "💬", reposted: "↻", followed: "👤", mentioned: "@",
+  const cfg = {
+    liked:    { label: "Like",          icon: "♥", bg: "#FEF2F2", color: "#DC2626", border: "#FECACA" },
+    like:     { label: "Like",          icon: "♥", bg: "#FEF2F2", color: "#DC2626", border: "#FECACA" },
+    followed: { label: "Follow",                   bg: "#EFF6FF", color: "#2563EB", border: "#BFDBFE" },
+    follow:   { label: "Follow",                   bg: "#EFF6FF", color: "#2563EB", border: "#BFDBFE" },
+    commented:{ label: "Comment",                   bg: "#FEFCE8", color: "#CA8A04", border: "#FEF08A" },
+    comment:  { label: "Comment",                   bg: "#FEFCE8", color: "#CA8A04", border: "#FEF08A" },
+    reposted: { label: "Repost",                    bg: "#F0FDF4", color: "#16A34A", border: "#BBF7D0" },
+    repost:   { label: "Repost",                    bg: "#F0FDF4", color: "#16A34A", border: "#BBF7D0" },
+    mentioned:{ label: "Mention",                   bg: "#FFF3EE", color: "#FF6B35", border: "#FFD4C2" },
+    mention:  { label: "Mention",                   bg: "#FFF3EE", color: "#FF6B35", border: "#FFD4C2" },
+    collaboration: { label: "Collaboration",        bg: "#F5F3FF", color: "#7C3AED", border: "#DDD6FE" },
   };
+  const c = cfg[type] || { label: type ? type.charAt(0).toUpperCase() + type.slice(1) : "Unknown", bg: T.well, color: T.sub, border: T.border };
   return (
     <span style={{
       display: "inline-flex", alignItems: "center", gap: 4,
-      background: T.well, color: T.sub, border: `1px solid ${T.border}`,
-      borderRadius: 6, padding: "2px 8px", fontSize: F.xs, fontWeight: 500,
+      background: c.bg, color: c.color, border: `1px solid ${c.border}`,
+      borderRadius: 12, padding: "3px 10px", fontSize: F.xs, fontWeight: 600,
       fontFamily: sans, whiteSpace: "nowrap",
     }}>
-      <span style={{ fontSize: 10 }}>{icons[type] || "·"}</span>
-      {type}
+      {c.icon && <span style={{ fontSize: 10 }}>{c.icon}</span>}
+      {c.label}
     </span>
   );
 }
@@ -378,7 +389,7 @@ export default function InteractionsTable({ platform, weekFilter }) {
                 Followers{arrow("followers")}
               </th>
               <th style={thStyle("zone")} onClick={() => toggleSort("zone")}>
-                Zone{arrow("zone")}
+                Label{arrow("zone")}
               </th>
               <th style={thStyle("date")} onClick={() => toggleSort("date")}>
                 Date{arrow("date")}
@@ -444,7 +455,7 @@ export default function InteractionsTable({ platform, weekFilter }) {
                 </td>
                 {/* Followers */}
                 <td style={{ ...tdStyle, fontWeight: 600, whiteSpace: "nowrap" }}>
-                  {fmt(row.followers)}
+                  {row.followers ? fmt(row.followers) : "—"}
                 </td>
                 {/* Zone */}
                 <td style={tdStyle}>
