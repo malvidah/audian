@@ -489,8 +489,8 @@ function ImportPanel({ posts, onImported }) {
   );
 }
 
-// ─── Platform stats row ───────────────────────────────────────────────────────
-function PlatformStats({ posts }) {
+// ─── Platform stats row (cards double as filter buttons) ─────────────────────
+function PlatformStats({ posts, activePlatform, onPlatformSelect }) {
   const order = ["instagram", "x", "linkedin", "youtube"];
   const stats = {};
   for (const plat of order) {
@@ -507,31 +507,54 @@ function PlatformStats({ posts }) {
   const entries = Object.entries(stats);
   if (!entries.length) return null;
 
+  // "All" synthetic entry
+  const allPosts = posts.filter(p => p.post_type !== "daily_aggregate");
+  const allStats = {
+    count:   allPosts.length,
+    likes:   allPosts.reduce((s, p) => s + parseInt(p.likes || 0), 0),
+    impr:    allPosts.reduce((s, p) => s + parseInt(p.impressions || 0), 0),
+    maxLikes:Math.max(...allPosts.map(p => parseInt(p.likes || 0))),
+  };
+
+  const cards = [["all", allStats], ...entries];
+
   return (
     <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 28 }}>
-      {entries.map(([plat, s]) => (
-        <div key={plat} style={{
-          background: T.card, border: `1px solid ${T.border}`, borderRadius: 12,
-          padding: "14px 18px", flex: "1 1 160px", boxShadow: T.shadowSm,
-        }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-            <PlatDot platform={plat} size={12} />
-            <span style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text }}>
-              {PLAT_LABEL[plat] || plat}
-            </span>
+      {cards.map(([plat, s]) => {
+        const isActive = activePlatform === plat;
+        const color    = PLAT_COLORS[plat] || T.accent;
+        return (
+          <div key={plat} onClick={() => onPlatformSelect(isActive ? "all" : plat)}
+            style={{
+              background: isActive ? color + "12" : T.card,
+              border:     `2px solid ${isActive ? color : T.border}`,
+              borderRadius: 12, padding: "14px 18px", flex: "1 1 150px",
+              boxShadow: isActive ? `0 0 0 3px ${color}22` : T.shadowSm,
+              cursor: "pointer", transition: "all 0.12s",
+            }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+              {plat === "all"
+                ? <span style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 700,
+                    color: isActive ? T.accent : T.text }}>All</span>
+                : <><PlatDot platform={plat} size={12} />
+                   <span style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600,
+                     color: isActive ? color : T.text }}>{PLAT_LABEL[plat] || plat}</span></>
+              }
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 16px" }}>
+              {[["Posts", s.count], ["Total likes", fmt(s.likes)],
+                ["Top post", fmt(s.maxLikes) + " likes"], ["Impressions", fmt(s.impr)]
+              ].map(([lbl, val]) => (
+                <div key={lbl}>
+                  <div style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>{lbl}</div>
+                  <div style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600,
+                    color: isActive && plat !== "all" ? color : T.text }}>{val}</div>
+                </div>
+              ))}
+            </div>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 16px" }}>
-            {[["Posts", s.count], ["Total likes", fmt(s.likes)],
-              ["Top post", fmt(s.maxLikes) + " likes"], ["Impressions", fmt(s.impr)]
-            ].map(([lbl, val]) => (
-              <div key={lbl}>
-                <div style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>{lbl}</div>
-                <div style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text }}>{val}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -877,18 +900,12 @@ export default function PostsPage() {
           </div>
         ) : (
           <>
-            {/* Platform filter */}
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 24 }}>
-              {platforms.map(p => (
-                <Pill key={p} active={activePlatform === p} color={PLAT_COLORS[p]}
-                  onClick={() => { setActivePlatform(p); setSelectedWeek(null); }}>
-                  {p === "all" ? "All platforms" : PLAT_LABEL[p] || p}
-                </Pill>
-              ))}
-            </div>
-
-            {/* Platform stats */}
-            <PlatformStats posts={posts} />
+            {/* Platform stats cards — click to filter */}
+            <PlatformStats
+              posts={posts}
+              activePlatform={activePlatform}
+              onPlatformSelect={(p) => { setActivePlatform(p); setSelectedWeek(null); }}
+            />
 
             {/* Outliers — updates with platform filter */}
             {!selectedWeek && (
