@@ -822,9 +822,9 @@ export default function PostsPage() {
 
   useEffect(() => { loadPosts(); }, [loadPosts]);
 
-  // Platform pills — derived from live posts so they update after imports
+  // Platform pills — derived from all posts (including aggregates so LinkedIn always shows)
   const platforms = ["all", ...Array.from(new Set(
-    posts.filter(p => p.post_type !== "daily_aggregate").map(p => p.platform)
+    posts.map(p => p.platform)
   )).sort()];
 
   return (
