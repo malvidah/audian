@@ -222,113 +222,188 @@ function DetailSelect({ label, value, options, onChange }) {
   );
 }
 
-function DetailPanel({ row, rawData, onClose, onSave, onRefresh }) {
-  // Get full handle data from the raw supabase response
-  const rawRow = rawData?.find(r => r.id === row?.id);
-  const handle = rawRow?.handles || {};
+const PLAT_HANDLES = [
+  { key: "handle_x", label: "X", plat: "x" },
+  { key: "handle_instagram", label: "Instagram", plat: "instagram" },
+  { key: "handle_youtube", label: "YouTube", plat: "youtube" },
+  { key: "handle_linkedin", label: "LinkedIn", plat: "linkedin" },
+];
+const FOLLOWER_FIELDS = [
+  { key: "followers_x", label: "X" },
+  { key: "followers_instagram", label: "Instagram" },
+  { key: "followers_youtube", label: "YouTube" },
+  { key: "followers_linkedin", label: "LinkedIn" },
+];
 
-  const save = useCallback((field, value) => {
-    onSave(row.id, field, value);
-  }, [row?.id, onSave]);
-
-  if (!row) return null;
-
-  const platHandles = [
-    { key: "handle_x", label: "X", plat: "x" },
-    { key: "handle_instagram", label: "Instagram", plat: "instagram" },
-    { key: "handle_youtube", label: "YouTube", plat: "youtube" },
-    { key: "handle_linkedin", label: "LinkedIn", plat: "linkedin" },
-  ];
-
+function DetailPanelBody({ draft, handle, onChange, isCreate }) {
+  const set = (field, value) => onChange(field, value);
   return (
-    <div style={{
-      position: "fixed", top: 0, right: 0, bottom: 0, width: 420, zIndex: 1000,
-      background: T.bg, borderLeft: `1px solid ${T.border}`, boxShadow: "-4px 0 24px rgba(0,0,0,0.08)",
-      overflowY: "auto", padding: "24px 28px",
-    }}>
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-        <div style={{ fontFamily: sans, fontSize: F.lg, fontWeight: 700, color: T.text }}>Detail</div>
-        <button onClick={onClose} style={{
-          fontFamily: sans, fontSize: F.md, background: "none", border: "none",
-          color: T.dim, cursor: "pointer", padding: "4px 8px", lineHeight: 1,
-        }}>✕</button>
-      </div>
-
-      {/* Interaction section */}
+    <>
       <div style={{ fontFamily: sans, fontSize: F.xs, fontWeight: 700, color: T.sub,
         textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12 }}>Interaction</div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
-        <DetailSelect label="Platform" value={row.platform}
+        <DetailSelect label="Platform" value={draft.platform || "x"}
           options={[{ value: "x", label: "X" }, { value: "instagram", label: "Instagram" },
             { value: "youtube", label: "YouTube" }, { value: "linkedin", label: "LinkedIn" }]}
-          onChange={v => save("platform", v)} />
-        <DetailSelect label="Type" value={normalizeType(row.type)} options={TYPE_OPTIONS}
-          onChange={v => save("interaction_type", v)} />
+          onChange={v => set("platform", v)} />
+        <DetailSelect label="Type" value={normalizeType(draft.type || draft.interaction_type)} options={TYPE_OPTIONS}
+          onChange={v => set("interaction_type", v)} />
       </div>
 
-      <DetailField label="Content" value={row.content} multiline placeholder="No content"
-        onChange={v => save("content", v)} />
+      <DetailField label="Content" value={draft.content} multiline placeholder="No content"
+        onChange={v => set("content", v)} />
+      <DetailField label="Mention URL" value={draft.mention_url} placeholder="https://..."
+        onChange={v => set("mention_url", v)} />
+      <DetailField label="Post URL" value={draft.post_url} placeholder="https://..."
+        onChange={v => set("post_url", v)} />
+      <DetailField label="Date" value={(draft.date || draft.interacted_at || "").slice(0, 10)} type="date"
+        onChange={v => set("interacted_at", v)} />
 
-      <DetailField label="Mention URL" value={row.mention_url} placeholder="https://..."
-        onChange={v => save("mention_url", v)} />
-
-      <DetailField label="Post URL" value={row.post_url} placeholder="https://..."
-        onChange={v => save("post_url", v)} />
-
-      <DetailField label="Date" value={row.date ? row.date.slice(0, 10) : ""} type="date"
-        onChange={v => save("interacted_at", v)} />
-
-      {/* Divider */}
       <div style={{ borderTop: `1px solid ${T.border}`, margin: "20px 0" }} />
 
-      {/* Person / Handle section */}
       <div style={{ fontFamily: sans, fontSize: F.xs, fontWeight: 700, color: T.sub,
         textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12 }}>Person</div>
 
-      <DetailField label="Name" value={row.name} placeholder="Name"
-        onChange={v => save("name", v)} />
+      <DetailField label="Name" value={draft.name} placeholder="Name"
+        onChange={v => set("name", v)} />
+      <DetailField label="Bio" value={handle.bio || draft.bio} multiline placeholder="No bio"
+        onChange={v => set("bio", v)} />
+      <DetailSelect label="Label" value={draft.zone || "SIGNAL"} options={ZONE_OPTIONS}
+        onChange={v => set("zone", v)} />
 
-      <DetailField label="Bio" value={handle.bio || row.bio} multiline placeholder="No bio"
-        onChange={v => save("bio", v)} />
-
-      <DetailSelect label="Label" value={row.zone || "SIGNAL"} options={ZONE_OPTIONS}
-        onChange={v => save("zone", v)} />
-
-      {/* Platform handles */}
       <div style={{ fontFamily: sans, fontSize: 10, fontWeight: 600, color: T.dim,
         textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8, marginTop: 4 }}>Handles</div>
-
-      {platHandles.map(({ key, label, plat }) => (
+      {PLAT_HANDLES.map(({ key, label, plat }) => (
         <div key={key} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-          <span style={{
-            display: "inline-flex", alignItems: "center", justifyContent: "center",
+          <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center",
             width: 24, height: 24, borderRadius: 6, flexShrink: 0,
             background: (PLAT_COLORS[plat] || T.dim) + "14",
-            color: PLAT_COLORS[plat] || T.dim, fontSize: 11, fontWeight: 700,
-          }}>
+            color: PLAT_COLORS[plat] || T.dim, fontSize: 11, fontWeight: 700 }}>
             {plat === "instagram" ? <IgIcon size={12} color="#E1306C" /> : (PLAT_ICON[plat] || "·")}
           </span>
-          <DetailField label="" value={handle[key] || ""} placeholder={`${label} handle`}
-            onChange={v => save(key, v)} />
+          <DetailField label="" value={isCreate ? (draft[key] || "") : (handle[key] || "")} placeholder={`${label} handle`}
+            onChange={v => set(key, v)} />
         </div>
       ))}
 
-      {/* Follower counts */}
       <div style={{ fontFamily: sans, fontSize: 10, fontWeight: 600, color: T.dim,
         textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8, marginTop: 12 }}>Followers</div>
-
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
-        {[
-          { key: "followers_x", label: "X" },
-          { key: "followers_instagram", label: "Instagram" },
-          { key: "followers_youtube", label: "YouTube" },
-          { key: "followers_linkedin", label: "LinkedIn" },
-        ].map(({ key, label }) => (
-          <DetailField key={key} label={label} value={handle[key] ? String(handle[key]) : ""}
-            placeholder="0" onChange={v => save(key, v)} />
+        {FOLLOWER_FIELDS.map(({ key, label }) => (
+          <DetailField key={key} label={label}
+            value={isCreate ? (draft[key] || "") : (handle[key] ? String(handle[key]) : "")}
+            placeholder="0" onChange={v => set(key, v)} />
         ))}
+      </div>
+    </>
+  );
+}
+
+// ─── Edit detail panel (existing interaction) ──────────────────────────────
+function DetailPanel({ row, rawData, onClose, onSave }) {
+  const rawRow = rawData?.find(r => r.id === row?.id);
+  const handle = rawRow?.handles || {};
+  const save = useCallback((field, value) => onSave(row.id, field, value), [row?.id, onSave]);
+  if (!row) return null;
+
+  return (
+    <div style={{ position: "fixed", top: 0, right: 0, bottom: 0, width: 420, zIndex: 1000,
+      background: T.bg, borderLeft: `1px solid ${T.border}`, boxShadow: "-4px 0 24px rgba(0,0,0,0.08)",
+      overflowY: "auto", padding: "24px 28px" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+        <div style={{ fontFamily: sans, fontSize: F.lg, fontWeight: 700, color: T.text }}>Detail</div>
+        <button onClick={onClose} style={{ fontFamily: sans, fontSize: F.md, background: "none",
+          border: "none", color: T.dim, cursor: "pointer", padding: "4px 8px", lineHeight: 1 }}>✕</button>
+      </div>
+      <DetailPanelBody draft={row} handle={handle} onChange={save} isCreate={false} />
+    </div>
+  );
+}
+
+// ─── Create detail panel (new interaction) ─────────────────────────────────
+function CreatePanel({ onClose, onCreated }) {
+  const [draft, setDraft] = useState({
+    name: "", platform: "x", interaction_type: "mention", content: "",
+    mention_url: "", post_url: "", zone: "SIGNAL", bio: "",
+    interacted_at: new Date().toISOString().slice(0, 10),
+    handle_x: "", handle_instagram: "", handle_youtube: "", handle_linkedin: "",
+    followers_x: "", followers_instagram: "", followers_youtube: "", followers_linkedin: "",
+  });
+  const [saving, setSaving] = useState(false);
+
+  function onChange(field, value) {
+    setDraft(prev => ({ ...prev, [field]: value }));
+  }
+
+  async function handleSave() {
+    if (!draft.name.trim()) return;
+    setSaving(true);
+    try {
+      // Determine handle from the selected platform
+      const handle = draft[`handle_${draft.platform}`] || "";
+      const followers = draft[`followers_${draft.platform}`];
+      const payload = {
+        name: draft.name.trim(),
+        platform: draft.platform,
+        handle: handle.trim(),
+        interaction_type: draft.interaction_type,
+        content: draft.content,
+        mention_url: draft.mention_url,
+        post_url: draft.post_url,
+        zone: draft.zone,
+        interacted_at: draft.interacted_at,
+        followers: followers ? parseInt(followers, 10) || null : null,
+      };
+      const res = await fetch("/api/interactions/add", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error);
+
+      // Save additional handle fields (other platform handles, bio, followers)
+      if (result.interaction_id) {
+        const extra = {};
+        if (draft.bio) extra.bio = draft.bio;
+        for (const { key } of PLAT_HANDLES) {
+          if (draft[key]) extra[key] = draft[key];
+        }
+        for (const { key } of FOLLOWER_FIELDS) {
+          if (draft[key]) extra[key] = parseInt(draft[key], 10) || null;
+        }
+        if (Object.keys(extra).length > 0) {
+          await fetch("/api/interactions/update", {
+            method: "PATCH", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: result.interaction_id, updates: extra }),
+          });
+        }
+      }
+
+      onCreated();
+    } catch (err) { console.error("Create failed:", err); }
+    finally { setSaving(false); }
+  }
+
+  return (
+    <div style={{ position: "fixed", top: 0, right: 0, bottom: 0, width: 420, zIndex: 1000,
+      background: T.bg, borderLeft: `1px solid ${T.border}`, boxShadow: "-4px 0 24px rgba(0,0,0,0.08)",
+      overflowY: "auto", padding: "24px 28px" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+        <div style={{ fontFamily: sans, fontSize: F.lg, fontWeight: 700, color: T.text }}>New Interaction</div>
+        <button onClick={onClose} style={{ fontFamily: sans, fontSize: F.md, background: "none",
+          border: "none", color: T.dim, cursor: "pointer", padding: "4px 8px", lineHeight: 1 }}>✕</button>
+      </div>
+      <DetailPanelBody draft={draft} handle={{}} onChange={onChange} isCreate={true} />
+      <div style={{ marginTop: 20, display: "flex", gap: 10, justifyContent: "flex-end" }}>
+        <button onClick={onClose} style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600,
+          padding: "8px 18px", borderRadius: 8, border: `1px solid ${T.border}`,
+          background: T.card, color: T.sub, cursor: "pointer" }}>Cancel</button>
+        <button onClick={handleSave} disabled={saving || !draft.name.trim()} style={{
+          fontFamily: sans, fontSize: F.sm, fontWeight: 600, padding: "8px 18px",
+          borderRadius: 8, border: "none", background: T.accent, color: "#fff",
+          cursor: saving ? "wait" : "pointer", opacity: (saving || !draft.name.trim()) ? 0.6 : 1 }}>
+          {saving ? "Saving..." : "Save"}</button>
       </div>
     </div>
   );
@@ -342,22 +417,11 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
   const [rawData, setRawData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedZones, setSelectedZones] = useState(new Set());
-  const [addingRow, setAddingRow] = useState(false);
-  const [newRow, setNewRow] = useState({ ...EMPTY_ROW });
-  const [saving, setSaving] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [fetchKey, setFetchKey] = useState(0);
   const [selected, setSelected] = useState(new Set());
   const [deleting, setDeleting] = useState(false);
   const [detailRow, setDetailRow] = useState(null);
-  const pendingDetailId = useRef(null);
-
-  // Open detail panel for a newly added interaction once data loads
-  useEffect(() => {
-    if (pendingDetailId.current && liveData.length) {
-      const row = liveData.find(r => r.id === pendingDetailId.current);
-      if (row) { setDetailRow(row); pendingDetailId.current = null; }
-    }
-  }, [liveData]);
 
   const saveField = useCallback((rowId, field, value) => {
     // Update local state immediately
@@ -498,24 +562,8 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
 
   function toggleSort(col) { if (sortBy === col) setSortDesc(d => !d); else { setSortBy(col); setSortDesc(true); } }
   function toggleZone(zone) { setSelectedZones(prev => { const n = new Set(prev); n.has(zone) ? n.delete(zone) : n.add(zone); return n; }); }
-  function cancelAdd() { setAddingRow(false); setNewRow({ ...EMPTY_ROW }); }
   function toggleSelect(id) { setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; }); }
   function toggleSelectAll() { selected.size === sorted.length ? setSelected(new Set()) : setSelected(new Set(sorted.map(r => r.id))); }
-
-  async function saveNewRow() {
-    if (!newRow.name.trim()) return;
-    setSaving(true);
-    try {
-      const p = { ...newRow, name: newRow.name.trim(), handle: newRow.handle.trim() };
-      p.followers = p.followers ? parseInt(p.followers, 10) || null : null;
-      const res = await fetch("/api/interactions/add", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(p) });
-      const result = await res.json();
-      if (!res.ok) throw new Error(result.error);
-      pendingDetailId.current = result.interaction_id;
-      cancelAdd(); setFetchKey(k => k + 1);
-    } catch (err) { console.error("Save failed:", err); }
-    finally { setSaving(false); }
-  }
 
   async function deleteSelected() {
     if (!selected.size) return;
@@ -535,7 +583,6 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
   });
   const tdStyle = { padding: "11px 12px", fontFamily: sans, fontSize: F.sm, color: T.text, borderBottom: `1px solid ${T.border}`, verticalAlign: "middle" };
   const arrow = (col) => sortBy === col ? (sortDesc ? " ↓" : " ↑") : "";
-  const addInputStyle = { fontFamily: sans, fontSize: F.xs, padding: "5px 7px", borderRadius: 6, border: "none", background: T.accentBg, color: T.text, width: "100%", outline: "none" };
 
   if (loading) {
     return <div style={{ fontFamily: sans, fontSize: F.md, color: T.sub, textAlign: "center", padding: "60px 20px" }}>
@@ -562,8 +609,8 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
           {sorted.length} {commentsOnly ? "comment" : "interaction"}{sorted.length !== 1 ? "s" : ""}
           {platform && platform !== "all" ? <span> on {PLAT_LABEL[platform] || platform}</span> : null}
         </div>
-        {!commentsOnly && !addingRow && (
-          <button onClick={() => setAddingRow(true)} style={{ fontFamily: sans, fontSize: F.xs, fontWeight: 600,
+        {!commentsOnly && (
+          <button onClick={() => { setCreating(true); setDetailRow(null); }} style={{ fontFamily: sans, fontSize: F.xs, fontWeight: 600,
             padding: "4px 12px", borderRadius: 8, border: `1px solid ${T.border}`, background: T.card,
             color: T.accent, cursor: "pointer" }}>+ Add</button>
         )}
@@ -627,58 +674,7 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
               </tr>
             </thead>
             <tbody>
-              {addingRow && (
-                <tr style={{ background: T.accentBg + "66" }}>
-                  <td style={{ ...tdStyle, textAlign: "center" }} />
-                  <td style={{ ...tdStyle, verticalAlign: "top" }}>
-                    <input value={newRow.name} onChange={e => setNewRow(r => ({ ...r, name: e.target.value }))}
-                      placeholder="Name" autoFocus onKeyDown={e => { if (e.key === "Enter") saveNewRow(); if (e.key === "Escape") cancelAdd(); }}
-                      style={addInputStyle} />
-                  </td>
-                  <td style={{ ...tdStyle, verticalAlign: "top" }}>
-                    <select value={newRow.platform} onChange={e => setNewRow(r => ({ ...r, platform: e.target.value }))}
-                      style={addInputStyle}>{PLAT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select>
-                  </td>
-                  <td style={{ ...tdStyle, verticalAlign: "top" }}>
-                    <select value={newRow.interaction_type} onChange={e => setNewRow(r => ({ ...r, interaction_type: e.target.value }))}
-                      style={addInputStyle}>{TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select>
-                  </td>
-                  <td style={{ ...tdStyle, verticalAlign: "top" }}>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                      <input value={newRow.content} onChange={e => setNewRow(r => ({ ...r, content: e.target.value }))}
-                        placeholder="Content" onKeyDown={e => { if (e.key === "Enter") saveNewRow(); if (e.key === "Escape") cancelAdd(); }}
-                        style={addInputStyle} />
-                      <input value={newRow.mention_url} onChange={e => setNewRow(r => ({ ...r, mention_url: e.target.value }))}
-                        placeholder="Mention URL" onKeyDown={e => { if (e.key === "Enter") saveNewRow(); if (e.key === "Escape") cancelAdd(); }}
-                        style={{ ...addInputStyle, fontSize: 10 }} />
-                    </div>
-                  </td>
-                  <td style={{ ...tdStyle, verticalAlign: "top" }}>
-                    <input value={newRow.followers} onChange={e => setNewRow(r => ({ ...r, followers: e.target.value }))}
-                      placeholder="0" onKeyDown={e => { if (e.key === "Enter") saveNewRow(); if (e.key === "Escape") cancelAdd(); }}
-                      style={{ ...addInputStyle, width: 70 }} />
-                  </td>
-                  <td style={{ ...tdStyle, verticalAlign: "top" }}>
-                    <select value={newRow.zone} onChange={e => setNewRow(r => ({ ...r, zone: e.target.value }))}
-                      style={addInputStyle}>{ZONE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select>
-                  </td>
-                  <td style={{ ...tdStyle, verticalAlign: "top", whiteSpace: "nowrap" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                      <input type="date" value={newRow.interacted_at}
-                        onChange={e => setNewRow(r => ({ ...r, interacted_at: e.target.value }))}
-                        onKeyDown={e => { if (e.key === "Enter") saveNewRow(); if (e.key === "Escape") cancelAdd(); }}
-                        style={{ ...addInputStyle, width: 110 }} />
-                      <button onClick={saveNewRow} disabled={saving} style={{ fontFamily: sans, fontSize: 10, fontWeight: 700,
-                        padding: "4px 8px", borderRadius: 6, border: "none", background: T.accent, color: "#fff",
-                        cursor: saving ? "wait" : "pointer", opacity: saving ? 0.6 : 1 }}>{saving ? "..." : "Save"}</button>
-                      <button onClick={cancelAdd} style={{ fontFamily: sans, fontSize: 10, fontWeight: 600,
-                        padding: "4px 6px", borderRadius: 6, border: `1px solid ${T.border}`, background: T.card,
-                        color: T.dim, cursor: "pointer" }}>Esc</button>
-                    </div>
-                  </td>
-                </tr>
-              )}
-              {sorted.length === 0 && !addingRow && (
+              {sorted.length === 0 && (
                 <tr><td colSpan={8} style={{ ...tdStyle, textAlign: "center", color: T.dim, padding: "40px 12px" }}>
                   No interactions found{platform && platform !== "all" ? ` on ${PLAT_LABEL[platform] || platform}` : ""}{weekFilter ? " for the selected week" : ""}.
                 </td></tr>
@@ -688,7 +684,7 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
                 const isDetail = detailRow?.id === row.id;
                 return (
                   <tr key={row.id}
-                    onClick={() => row.source === "interactions" && setDetailRow(row)}
+                    onClick={() => { if (row.source === "interactions") { setDetailRow(row); setCreating(false); } }}
                     style={{
                       background: isDetail ? T.accentBg : isSelected ? T.blueBg : i % 2 === 0 ? T.card : T.well + "88",
                       cursor: row.source === "interactions" ? "pointer" : "default",
@@ -737,13 +733,23 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
         </div>
       )}
 
-      {/* Detail slide-out panel */}
+      {/* Detail slide-out panel (edit existing) */}
       {detailRow && (
         <>
           <div onClick={() => setDetailRow(null)} style={{
             position: "fixed", inset: 0, zIndex: 999, background: "rgba(0,0,0,0.15)" }} />
           <DetailPanel row={detailRow} rawData={rawData} onClose={() => setDetailRow(null)}
-            onSave={saveField} onRefresh={() => setFetchKey(k => k + 1)} />
+            onSave={saveField} />
+        </>
+      )}
+
+      {/* Create panel (new interaction) */}
+      {creating && (
+        <>
+          <div onClick={() => setCreating(false)} style={{
+            position: "fixed", inset: 0, zIndex: 999, background: "rgba(0,0,0,0.15)" }} />
+          <CreatePanel onClose={() => setCreating(false)}
+            onCreated={() => { setCreating(false); setFetchKey(k => k + 1); }} />
         </>
       )}
     </div>
