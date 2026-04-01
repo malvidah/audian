@@ -173,7 +173,7 @@ function WeeklyOKR({ posts, activePlatform, selectedWeek, onWeekSelect }) {
     <div style={{ marginBottom: 28 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 12 }}>
         <div style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text }}>
-          Weekly OKR
+          Weekly
         </div>
         <div style={{ marginLeft: "auto", fontFamily: sans, fontSize: F.xs, fontWeight: 600,
           color: onTrack === complete ? T.green : T.yellow }}>
@@ -605,10 +605,11 @@ function TopPosts({ posts }) {
 }
 
 // ─── Outliers ─────────────────────────────────────────────────────────────────
-function Outliers({ posts, activePlatform }) {
+function Outliers({ posts, activePlatform, selectedWeek }) {
   const filtered = posts.filter(p => {
     if (p.post_type === "daily_aggregate") return false;
     if (activePlatform !== "all" && p.platform !== activePlatform) return false;
+    if (selectedWeek && weekKey(p.published_at) !== selectedWeek) return false;
     return true;
   });
 
@@ -670,11 +671,12 @@ function Outliers({ posts, activePlatform }) {
   );
 
   const platLabel = activePlatform === "all" ? "all platforms" : (PLAT_LABEL[activePlatform] || activePlatform);
+  const weekSuffix = selectedWeek ? ` · week of ${weekLabel(selectedWeek)}` : "";
 
   return (
     <div style={{ marginBottom: 28 }}>
       <div style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text, marginBottom: 12 }}>
-        Outliers · {platLabel}
+        Outliers · {platLabel}{weekSuffix}
         <span style={{ fontWeight: 400, color: T.dim, marginLeft: 8 }}>avg {fmt(Math.round(avg))} likes</span>
       </div>
       <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 12,
@@ -907,17 +909,19 @@ export default function PostsPage() {
               onPlatformSelect={(p) => { setActivePlatform(p); setSelectedWeek(null); }}
             />
 
-            {/* Outliers — updates with platform filter */}
-            {!selectedWeek && (
-              <Outliers posts={posts} activePlatform={activePlatform} />
-            )}
-
-            {/* Weekly OKR — doubles as filter */}
+            {/* Weekly — doubles as filter */}
             <WeeklyOKR
               posts={posts}
               activePlatform={activePlatform}
               selectedWeek={selectedWeek}
               onWeekSelect={setSelectedWeek}
+            />
+
+            {/* Outliers — filters with platform + selected week */}
+            <Outliers
+              posts={posts}
+              activePlatform={activePlatform}
+              selectedWeek={selectedWeek}
             />
 
             {/* Posts table */}
