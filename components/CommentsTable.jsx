@@ -1,5 +1,11 @@
 "use client";
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
+import { createClient } from "@supabase/supabase-js";
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
 
 // ─── Design tokens (shared with Dashboard & Posts) ───────────────────────────
 const T = {
@@ -242,9 +248,50 @@ function QualityBadge({ quality }) {
 export default function CommentsTable({ platform, weekFilter }) {
   const [qualityFilter, setQualityFilter] = useState("ALL_GOOD"); // ALL_GOOD excludes spam
   const [sortBy, setSortBy]               = useState("date");
+  const [comments, setComments]           = useState(SAMPLE_COMMENTS);
+  const [loading, setLoading]             = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchComments() {
+      setLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from("platform_comments")
+          .select("*")
+          .order("published_at", { ascending: false });
+
+        if (error) throw error;
+
+        if (!cancelled && data && data.length > 0) {
+          const mapped = data.map((row, idx) => ({
+            id:        row.id || idx,
+            platform:  row.platform,
+            author:    row.author_name,
+            handle:    row.author_handle,
+            followers: row.author_followers || 0,
+            quality:   (row.quality_tag || "").toUpperCase(),
+            text:      row.content,
+            onPost:    row.video_title || row.post_id || "",
+            likes:     row.likes || 0,
+            date:      row.published_at,
+          }));
+          setComments(mapped);
+        }
+        // If data is empty or null, keep SAMPLE_COMMENTS as fallback
+      } catch (err) {
+        console.error("Failed to fetch comments:", err);
+        // Keep SAMPLE_COMMENTS as fallback on error
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    fetchComments();
+    return () => { cancelled = true; };
+  }, []);
 
   const filtered = useMemo(() => {
-    let list = [...SAMPLE_COMMENTS];
+    let list = [...comments];
 
     // Platform filter from prop
     if (platform) {
@@ -278,7 +325,7 @@ export default function CommentsTable({ platform, weekFilter }) {
     });
 
     return list;
-  }, [platform, weekFilter, qualityFilter, sortBy]);
+  }, [comments, platform, weekFilter, qualityFilter, sortBy]);
 
   // Summary stats (from filtered, excluding spam)
   const nonSpam      = filtered.filter(c => c.quality !== "SPAM");
@@ -351,7 +398,16 @@ export default function CommentsTable({ platform, weekFilter }) {
       </div>
 
       {/* Comment cards */}
-      {filtered.length === 0 ? (
+      {loading ? (
+        <div style={{
+          background: T.card, border: `1px solid ${T.border}`, borderRadius: 12,
+          padding: "40px 24px", textAlign: "center", boxShadow: T.shadowSm,
+        }}>
+          <div style={{ fontFamily: sans, fontSize: F.sm, color: T.dim }}>
+            Loading comments...
+          </div>
+        </div>
+      ) : filtered.length === 0 ? (
         <div style={{
           background: T.card, border: `1px solid ${T.border}`, borderRadius: 12,
           padding: "40px 24px", textAlign: "center", boxShadow: T.shadowSm,

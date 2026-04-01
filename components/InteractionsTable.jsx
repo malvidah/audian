@@ -1,5 +1,11 @@
 "use client";
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
+import { createClient } from "@supabase/supabase-js";
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+);
 
 // ─── Design tokens ───────────────────────────────────────────────────────────
 const T = {
@@ -182,9 +188,70 @@ function SummaryStats({ data }) {
 export default function InteractionsTable({ platform, weekFilter }) {
   const [sortBy, setSortBy] = useState("date");
   const [sortDesc, setSortDesc] = useState(true);
+  const [liveData, setLiveData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchInteractions() {
+      setLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from("interactions")
+          .select("*, handles(*)");
+
+        if (error) {
+          console.error("Failed to fetch interactions:", error);
+          if (!cancelled) { setLiveData(null); setLoading(false); }
+          return;
+        }
+
+        if (!data || data.length === 0) {
+          if (!cancelled) { setLiveData(null); setLoading(false); }
+          return;
+        }
+
+        const mapped = data.map((row, i) => {
+          const h = row.handles || {};
+          const plat = row.platform || "x";
+          const handle = plat === "instagram"
+            ? (h.handle_instagram || h.handle_x || "unknown")
+            : plat === "x"
+            ? (h.handle_x || h.handle_instagram || "unknown")
+            : (h.handle_instagram || h.handle_x || "unknown");
+          const followers = plat === "instagram"
+            ? (h.followers_instagram || 0)
+            : plat === "x"
+            ? (h.followers_x || 0)
+            : (h.followers_instagram || h.followers_x || 0);
+
+          return {
+            id: row.id || i + 1,
+            name: h.name || "Unknown",
+            handle: handle,
+            platform: plat,
+            type: row.interaction_type || "liked",
+            content: row.content || null,
+            followers: followers,
+            zone: h.zone || "SIGNAL",
+            date: row.interacted_at || null,
+          };
+        });
+
+        if (!cancelled) { setLiveData(mapped); setLoading(false); }
+      } catch (err) {
+        console.error("Failed to fetch interactions:", err);
+        if (!cancelled) { setLiveData(null); setLoading(false); }
+      }
+    }
+    fetchInteractions();
+    return () => { cancelled = true; };
+  }, []);
+
+  const allData = liveData || SAMPLE_DATA;
 
   const filtered = useMemo(() => {
-    let data = SAMPLE_DATA;
+    let data = allData;
 
     // Filter by platform
     if (platform) {
@@ -203,7 +270,7 @@ export default function InteractionsTable({ platform, weekFilter }) {
     }
 
     return data;
-  }, [platform, weekFilter]);
+  }, [platform, weekFilter, allData]);
 
   const sorted = useMemo(() => {
     return [...filtered].sort((a, b) => {
@@ -247,6 +314,17 @@ export default function InteractionsTable({ platform, weekFilter }) {
   };
 
   const arrow = (col) => sortBy === col ? (sortDesc ? " ↓" : " ↑") : "";
+
+  if (loading) {
+    return (
+      <div style={{
+        fontFamily: sans, fontSize: F.md, color: T.sub,
+        textAlign: "center", padding: "60px 20px",
+      }}>
+        Loading interactions...
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -296,7 +374,7 @@ export default function InteractionsTable({ platform, weekFilter }) {
                 <td colSpan={7} style={{
                   ...tdStyle, textAlign: "center", color: T.dim, padding: "40px 12px",
                 }}>
-                  No interactions found for the selected filters.
+                  No interactions found{platform ? ` on ${PLAT_LABEL[platform] || platform}` : ""}{weekFilter ? " for the selected week" : ""}. Try adjusting your filters or check back later.
                 </td>
               </tr>
             )}
