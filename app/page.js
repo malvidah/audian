@@ -1099,6 +1099,13 @@ export default function PostsPage() {
   const [followerLatest,  setFollowerLatest] = useState({});
   const [activeTab,      setActiveTab]     = useState("posts");
   const [weekFilter,     setWeekFilter]    = useState(null);
+  const [accountName,    setAccountName]   = useState("");
+
+  useEffect(() => {
+    fetch("/api/settings").then(r => r.json()).then(d => {
+      if (d.settings?.account_name) setAccountName(d.settings.account_name);
+    }).catch(() => {});
+  }, []);
 
   const loadPosts = useCallback(async (from, to) => {
     setLoading(true);
@@ -1135,12 +1142,9 @@ export default function PostsPage() {
         {/* Header */}
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 28 }}>
           <div>
-            <h1 style={{ fontFamily: sans, fontSize: F.xl, fontWeight: 700, color: T.text, margin: "0 0 4px", letterSpacing: "-0.02em" }}>
-              Analytics
+            <h1 style={{ fontFamily: sans, fontSize: F.xl, fontWeight: 700, color: T.text, margin: 0, letterSpacing: "-0.02em" }}>
+              {accountName || "Analytics"}
             </h1>
-            <div style={{ fontFamily: sans, fontSize: F.sm, color: T.sub }}>
-              OKR: 3 posts/week · 1 post at 2K+ likes
-            </div>
           </div>
 
           {/* Date range picker */}
@@ -1169,9 +1173,6 @@ export default function PostsPage() {
             ))}
           </div>
         </div>
-
-        {/* Import */}
-        <ImportPanel posts={posts} onImported={() => loadPosts(dateFrom, dateTo)} />
 
         {error && (
           <div style={{ background: T.redBg, border: `1px solid ${T.redBorder}`, borderRadius: 10,
@@ -1205,17 +1206,20 @@ export default function PostsPage() {
               followerLatest={followerLatest}
             />
 
-            {/* Section tabs */}
-            <div style={{ display: "flex", gap: 8, marginBottom: 28 }}>
-              {[
-                { key: "posts",        label: "Engagement" },
-                { key: "interactions", label: "Interactions" },
-                { key: "comments",     label: "Comments" },
-              ].map(tab => (
-                <button key={tab.key} onClick={() => setActiveTab(tab.key)} style={TAB_STYLE(activeTab === tab.key)}>
-                  {tab.label}
-                </button>
-              ))}
+            {/* Section tabs + Import */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 28 }}>
+              <div style={{ display: "flex", gap: 8 }}>
+                {[
+                  { key: "posts",        label: "Engagement" },
+                  { key: "interactions", label: "Interactions" },
+                  { key: "comments",     label: "Comments" },
+                ].map(tab => (
+                  <button key={tab.key} onClick={() => setActiveTab(tab.key)} style={TAB_STYLE(activeTab === tab.key)}>
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+              <ImportPanel posts={posts} onImported={() => loadPosts(dateFrom, dateTo)} />
             </div>
 
             {/* Tab content */}
