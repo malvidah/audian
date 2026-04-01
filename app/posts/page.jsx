@@ -593,7 +593,7 @@ function Outliers({ posts, activePlatform }) {
 
   const withEng = filtered.map(p => ({
     ...p,
-    engagement: parseInt(p.likes || 0) + parseInt(p.comments || 0),
+    engagement: parseInt(p.likes || 0),
   }));
 
   const avg   = withEng.reduce((s, p) => s + p.engagement, 0) / withEng.length;
