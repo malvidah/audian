@@ -349,6 +349,15 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
   const [selected, setSelected] = useState(new Set());
   const [deleting, setDeleting] = useState(false);
   const [detailRow, setDetailRow] = useState(null);
+  const pendingDetailId = useRef(null);
+
+  // Open detail panel for a newly added interaction once data loads
+  useEffect(() => {
+    if (pendingDetailId.current && liveData.length) {
+      const row = liveData.find(r => r.id === pendingDetailId.current);
+      if (row) { setDetailRow(row); pendingDetailId.current = null; }
+    }
+  }, [liveData]);
 
   const saveField = useCallback((rowId, field, value) => {
     // Update local state immediately
@@ -500,7 +509,9 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
       const p = { ...newRow, name: newRow.name.trim(), handle: newRow.handle.trim() };
       p.followers = p.followers ? parseInt(p.followers, 10) || null : null;
       const res = await fetch("/api/interactions/add", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(p) });
-      if (!res.ok) throw new Error((await res.json()).error);
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error);
+      pendingDetailId.current = result.interaction_id;
       cancelAdd(); setFetchKey(k => k + 1);
     } catch (err) { console.error("Save failed:", err); }
     finally { setSaving(false); }

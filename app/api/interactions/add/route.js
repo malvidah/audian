@@ -78,7 +78,7 @@ export async function POST(req) {
     }
 
     // Insert interaction
-    const { error: intError } = await supabase.from('interactions').insert({
+    const { data: inserted, error: intError } = await supabase.from('interactions').insert({
       handle_id: handleId,
       platform,
       interaction_type,
@@ -87,11 +87,11 @@ export async function POST(req) {
       post_url: post_url || null,
       interacted_at: interacted_at || now,
       synced_at: now,
-    });
+    }).select('id').single();
 
     if (intError) return NextResponse.json({ error: intError.message }, { status: 500 });
 
-    return NextResponse.json({ success: true, handle_id: handleId });
+    return NextResponse.json({ success: true, handle_id: handleId, interaction_id: inserted.id });
   } catch (err) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
