@@ -23,6 +23,12 @@ const T = {
 const PLAT_COLORS = { youtube: "#FF0000", x: "#000000", instagram: "#E1306C", linkedin: "#0077B5" };
 const PLAT_LABEL = { youtube: "YouTube", x: "X", instagram: "Instagram", linkedin: "LinkedIn" };
 const PLAT_ICON = { youtube: "▶", x: "𝕏", instagram: "◉", linkedin: "in" };
+const PLAT_URL = {
+  instagram: h => `https://instagram.com/${h}`,
+  x: h => `https://x.com/${h}`,
+  youtube: h => `https://youtube.com/@${h}`,
+  linkedin: h => `https://linkedin.com/in/${h}`,
+};
 
 const sans = "-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif";
 const F = { xl: 28, lg: 20, md: 15, sm: 13, xs: 11 };
@@ -254,7 +260,7 @@ export default function InteractionsTable({ platform, weekFilter }) {
     let data = allData;
 
     // Filter by platform
-    if (platform) {
+    if (platform && platform !== "all") {
       data = data.filter(d => d.platform === platform);
     }
 
@@ -382,21 +388,32 @@ export default function InteractionsTable({ platform, weekFilter }) {
               <tr key={row.id} style={{ background: i % 2 === 0 ? T.card : T.well + "88" }}>
                 {/* Person */}
                 <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <PlatDot platform={row.platform} size={10} />
-                    <div>
-                      <div style={{ fontWeight: 600, fontSize: F.sm, color: T.text, lineHeight: 1.3 }}>
-                        {row.name}
-                      </div>
-                      <div style={{ fontSize: F.xs, color: T.dim }}>
-                        @{row.handle}
-                      </div>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: F.sm, color: T.text, lineHeight: 1.3 }}>
+                      {row.name}
+                    </div>
+                    <div style={{ fontSize: F.xs, color: T.dim }}>
+                      @{row.handle}
                     </div>
                   </div>
                 </td>
                 {/* Platform */}
-                <td style={tdStyle}>
-                  <PlatPill platform={row.platform} />
+                <td style={{ ...tdStyle, textAlign: "center" }}>
+                  <a href={PLAT_URL[row.platform]?.(row.handle) || "#"}
+                    target="_blank" rel="noreferrer"
+                    title={`View @${row.handle} on ${PLAT_LABEL[row.platform] || row.platform}`}
+                    style={{
+                      display: "inline-flex", alignItems: "center", justifyContent: "center",
+                      width: 30, height: 30, borderRadius: 8,
+                      background: (PLAT_COLORS[row.platform] || T.dim) + "14",
+                      color: PLAT_COLORS[row.platform] || T.dim,
+                      fontSize: 14, fontWeight: 700, textDecoration: "none",
+                      transition: "opacity 0.15s",
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.opacity = "0.7"}
+                    onMouseLeave={e => e.currentTarget.style.opacity = "1"}>
+                    {PLAT_ICON[row.platform] || "·"}
+                  </a>
                 </td>
                 {/* Type */}
                 <td style={tdStyle}>

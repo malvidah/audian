@@ -294,7 +294,7 @@ export default function CommentsTable({ platform, weekFilter }) {
     let list = [...comments];
 
     // Platform filter from prop
-    if (platform) {
+    if (platform && platform !== "all") {
       list = list.filter(c => c.platform === platform);
     }
 
