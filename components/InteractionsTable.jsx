@@ -208,14 +208,23 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
     async function fetchInteractions() {
       setLoading(true);
       try {
-        const { data, error } = await supabase
-          .from("interactions")
-          .select("*, handles(*)")
-          .order("interacted_at", { ascending: false });
+        const [{ data, error }, commentsResult] = await Promise.all([
+          supabase
+            .from("interactions")
+            .select("*, handles(*)")
+            .order("interacted_at", { ascending: false }),
+          commentsOnly
+            ? supabase
+                .from("platform_comments")
+                .select("*")
+                .order("published_at", { ascending: false })
+            : Promise.resolve({ data: [], error: null }),
+        ]);
 
         if (error) throw error;
+        if (commentsResult?.error) throw commentsResult.error;
 
-        const mapped = (data || []).map((row, i) => {
+        const mappedInteractions = (data || []).map((row, i) => {
           const h = row.handles || {};
           const plat = row.platform || "x";
           const handle = plat === "instagram"
@@ -235,6 +244,7 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
 
           return {
             id: row.id || i + 1,
+            source: "interactions",
             name: h.name || "Unknown",
             handle,
             bio: h.bio || null,
@@ -247,7 +257,49 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
           };
         });
 
-        if (!cancelled) setLiveData(mapped);
+        const mappedPlatformComments = commentsOnly
+          ? (commentsResult?.data || []).map((row, i) => ({
+              id: row.id || `platform_comment_${i + 1}`,
+              source: "platform_comments",
+              name: row.author_name || "Unknown",
+              handle: row.author_handle || "unknown",
+              bio: null,
+              platform: row.platform || "instagram",
+              type: "comment",
+              content: row.content || null,
+              followers: row.author_followers || 0,
+              zone: "SIGNAL",
+              date: row.published_at || null,
+            }))
+          : [];
+
+        const existingKeys = new Set(
+          mappedInteractions
+            .filter((row) => isCommentType(row.type))
+            .map((row) => [
+              row.platform || "",
+              (row.handle || "").toLowerCase(),
+              (row.content || "").trim().toLowerCase(),
+              row.date || "",
+            ].join("|"))
+        );
+
+        const merged = commentsOnly
+          ? [
+              ...mappedInteractions,
+              ...mappedPlatformComments.filter((row) => {
+                const key = [
+                  row.platform || "",
+                  (row.handle || "").toLowerCase(),
+                  (row.content || "").trim().toLowerCase(),
+                  row.date || "",
+                ].join("|");
+                return !existingKeys.has(key);
+              }),
+            ]
+          : mappedInteractions;
+
+        if (!cancelled) setLiveData(merged);
       } catch (err) {
         console.error("Failed to fetch interactions:", err);
         if (!cancelled) setLiveData([]);
