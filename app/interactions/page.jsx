@@ -172,12 +172,8 @@ function NotableInteractions({ activePlatform, dateFrom, dateTo }) {
           deduped.push(m);
         }
 
-        // Only keep ELITE, INFLUENTIAL, or high-signal entries
-        const notable = deduped.filter(m =>
-          m.zone === "ELITE" || m.zone === "INFLUENTIAL" ||
-          (m.followers && m.followers >= 1000) ||
-          m.bio || m.content
-        );
+        // Only keep ELITE interactions
+        const notable = deduped.filter(m => m.zone === "ELITE");
 
         if (!cancelled) setMentions(notable.slice(0, 10));
       } catch (err) {
