@@ -1097,8 +1097,38 @@ function SignIn() {
 }
 
 // ─── Profile Menu ────────────────────────────────────────────────────────────
-function ProfileMenu({ session, avatarUrl }) {
+const PLAT_META = [
+  { id: "youtube",   label: "YouTube",    icon: "▶",  color: "#FF0000", authUrl: "/api/auth/youtube" },
+  { id: "instagram", label: "Instagram",  icon: "◉",  color: "#E1306C", authUrl: "/api/auth/instagram" },
+  { id: "x",         label: "X / Twitter", icon: "𝕏", color: "#000000", authUrl: "/api/auth/x" },
+  { id: "linkedin",  label: "LinkedIn",   icon: "in", color: "#0077B5", authUrl: "/api/auth/linkedin" },
+];
+
+function Toggle({ on, onClick }) {
+  const [hov, setHov] = useState(false);
+  return (
+    <button onClick={onClick}
+      onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
+      style={{
+        width: 40, height: 22, borderRadius: 11, border: "none", cursor: "pointer",
+        background: on ? T.accent : (hov ? T.border2 : T.border),
+        position: "relative", transition: "background 0.2s", flexShrink: 0,
+        boxShadow: on ? `0 0 0 3px ${T.accent}25` : "none",
+      }}>
+      <span style={{
+        position: "absolute", top: 3, left: on ? 21 : 3,
+        width: 16, height: 16, borderRadius: "50%", background: "#fff",
+        transition: "left 0.18s", boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+        display: "block",
+      }} />
+    </button>
+  );
+}
+
+function ProfileMenu({ session, avatarUrl, connections = [], onDisconnect, posts, onImported }) {
   const [open, setOpen] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(null);
   const menuRef = useRef(null);
   const email = session?.user?.email || "";
   const initial = email[0]?.toUpperCase() || "?";
@@ -1111,6 +1141,12 @@ function ProfileMenu({ session, avatarUrl }) {
     document.addEventListener("mousedown", handle);
     return () => document.removeEventListener("mousedown", handle);
   }, [open]);
+
+  async function disconnect(platformId) {
+    setDisconnecting(platformId);
+    try { await onDisconnect?.(platformId); } catch(e) { console.error(e); }
+    setDisconnecting(null);
+  }
 
   return (
     <div ref={menuRef} style={{ position: "relative" }}>
@@ -1131,7 +1167,7 @@ function ProfileMenu({ session, avatarUrl }) {
       {open && (
         <div style={{
           position: "absolute", top: "calc(100% + 10px)", left: 0,
-          width: 240, background: T.card,
+          width: 300, background: T.card,
           border: `1px solid ${T.border}`, borderRadius: 14,
           boxShadow: "0 8px 40px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06)",
           zIndex: 500, overflow: "hidden",
@@ -1160,17 +1196,73 @@ function ProfileMenu({ session, avatarUrl }) {
             </div>
           </div>
 
-          {/* Menu items */}
-          <div style={{ padding: "6px 0" }}>
-            <a href="/backup" style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 18px", textDecoration: "none", fontFamily: sans, fontSize: F.sm, color: T.text }}
+          {/* Platform connections */}
+          <div style={{ padding: "10px 0" }}>
+            <div style={{ padding: "4px 18px 8px", fontFamily: sans, fontSize: 10, fontWeight: 600, color: T.dim, letterSpacing: "0.06em", textTransform: "uppercase" }}>Connections</div>
+            {PLAT_META.map(p => {
+              const conn = connections.find(c => c.platform === p.id);
+              const isConnected = !!conn;
+              const isLoading = disconnecting === p.id;
+              return (
+                <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 18px" }}>
+                  <div style={{
+                    width: 28, height: 28, borderRadius: 7, flexShrink: 0,
+                    background: p.color + "14",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 12, color: p.color, fontWeight: 700,
+                  }}>{p.icon}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 500, color: T.text }}>{p.label}</div>
+                    {conn?.channel_name && (
+                      <div style={{ fontFamily: sans, fontSize: F.xs, color: T.dim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{conn.channel_name}</div>
+                    )}
+                  </div>
+                  {isLoading ? (
+                    <span style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>...</span>
+                  ) : isConnected ? (
+                    <Toggle on={true} onClick={() => disconnect(p.id)} />
+                  ) : (
+                    <Toggle on={false} onClick={() => { window.location.href = p.authUrl; }} />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Manage handles */}
+          <div style={{ borderTop: `1px solid ${T.border}` }}>
+            <a href="/handles"
+              style={{ display: "flex", alignItems: "center", gap: 8, padding: "11px 18px", textDecoration: "none" }}
               onMouseEnter={e => e.currentTarget.style.background = T.well}
               onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-              Settings
+              <span style={{ fontFamily: sans, fontSize: F.sm, color: T.text, fontWeight: 500 }}>Manage handles</span>
+              <span style={{ color: T.dim, fontSize: F.xs, marginLeft: "auto" }}>&#8599;</span>
             </a>
           </div>
 
+          {/* Import data */}
+          <div style={{ borderTop: `1px solid ${T.border}` }}>
+            <button onClick={() => setShowImport(s => !s)}
+              style={{ display: "flex", alignItems: "center", gap: 8, padding: "11px 18px", width: "100%",
+                background: "none", border: "none", cursor: "pointer", textAlign: "left" }}
+              onMouseEnter={e => e.currentTarget.style.background = T.well}
+              onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+              <span style={{ fontFamily: sans, fontSize: F.sm, color: T.text, fontWeight: 500 }}>Import data</span>
+              <span style={{ color: T.dim, fontSize: F.xs, marginLeft: "auto" }}>{showImport ? "▾" : "▸"}</span>
+            </button>
+            {showImport && (
+              <div style={{ padding: "0 18px 14px" }}>
+                <ImportPanel posts={posts} onImported={onImported} />
+              </div>
+            )}
+          </div>
+
           {/* Sign out */}
-          <div style={{ borderTop: `1px solid ${T.border}`, padding: "10px 18px", display: "flex", justifyContent: "flex-end" }}>
+          <div style={{ borderTop: `1px solid ${T.border}`, padding: "10px 18px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <a href="https://audian.app" target="_blank" rel="noreferrer"
+              style={{ fontFamily: sans, fontSize: F.xs, color: T.sub, textDecoration: "none", fontWeight: 500 }}>
+              audian.app &#8599;
+            </a>
             <button onClick={() => supabase.auth.signOut()}
               style={{ background: "none", border: "none", cursor: "pointer", fontFamily: sans, fontSize: F.xs, color: T.sub, fontWeight: 500 }}>
               Sign out
@@ -1199,6 +1291,7 @@ export default function PostsPage() {
   const [weekFilter,     setWeekFilter]    = useState(null);
   const [accountName,    setAccountName]   = useState("");
   const [avatarUrl,      setAvatarUrl]     = useState("");
+  const [connections,    setConnections]   = useState([]);
 
   // Auth
   useEffect(() => {
@@ -1207,13 +1300,16 @@ export default function PostsPage() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Settings
+  // Settings + connections
   useEffect(() => {
     if (!session) return;
     fetch("/api/settings").then(r => r.json()).then(d => {
       if (d.settings?.account_name) setAccountName(d.settings.account_name);
       if (d.settings?.avatar_url) setAvatarUrl(d.settings.avatar_url);
     }).catch(() => {});
+    supabase.from("platform_connections").select("*").then(({ data }) => {
+      if (data) setConnections(data);
+    });
   }, [session]);
 
   const loadPosts = useCallback(async (from, to) => {
@@ -1256,21 +1352,30 @@ export default function PostsPage() {
 
   return (
     <div style={{ background: T.bg, minHeight: "100vh", fontFamily: sans }}>
-      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "32px 24px" }}>
 
-        {/* Header */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 28 }}>
+      {/* Sticky header */}
+      <div style={{
+        position: "sticky", top: 0, zIndex: 100, background: T.bg,
+        borderBottom: `1px solid ${T.border}`,
+      }}>
+        <div style={{ maxWidth: 1100, margin: "0 auto", padding: "18px 24px",
+          display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-            <ProfileMenu session={session} avatarUrl={avatarUrl} />
+            <ProfileMenu session={session} avatarUrl={avatarUrl} connections={connections}
+              onDisconnect={async (id) => {
+                await fetch("/api/disconnect", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ platform: id }) });
+                setConnections(c => c.filter(x => x.platform !== id));
+              }}
+              posts={posts} onImported={() => loadPosts(dateFrom, dateTo)} />
             <h1 style={{ fontFamily: sans, fontSize: F.xl, fontWeight: 700, color: T.text, margin: 0, letterSpacing: "-0.02em" }}>
               {accountName || "Analytics"}
             </h1>
           </div>
 
           {/* Date range picker */}
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             {loading && (
-              <span style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>Loading…</span>
+              <span style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>Loading...</span>
             )}
             {[
               { label: "From", value: dateFrom, set: setDateFrom },
@@ -1293,6 +1398,9 @@ export default function PostsPage() {
             ))}
           </div>
         </div>
+      </div>
+
+      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "24px 24px" }}>
 
         {error && (
           <div style={{ background: T.redBg, border: `1px solid ${T.redBorder}`, borderRadius: 10,
@@ -1326,20 +1434,17 @@ export default function PostsPage() {
               followerLatest={followerLatest}
             />
 
-            {/* Section tabs + Import */}
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 28 }}>
-              <div style={{ display: "flex", gap: 8 }}>
-                {[
-                  { key: "posts",        label: "Engagement" },
-                  { key: "interactions", label: "Interactions" },
-                  { key: "comments",     label: "Comments" },
-                ].map(tab => (
-                  <button key={tab.key} onClick={() => setActiveTab(tab.key)} style={TAB_STYLE(activeTab === tab.key)}>
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
-              <ImportPanel posts={posts} onImported={() => loadPosts(dateFrom, dateTo)} />
+            {/* Section tabs */}
+            <div style={{ display: "flex", gap: 8, marginBottom: 28 }}>
+              {[
+                { key: "posts",        label: "Engagement" },
+                { key: "interactions", label: "Interactions" },
+                { key: "comments",     label: "Comments" },
+              ].map(tab => (
+                <button key={tab.key} onClick={() => setActiveTab(tab.key)} style={TAB_STYLE(activeTab === tab.key)}>
+                  {tab.label}
+                </button>
+              ))}
             </div>
 
             {/* Tab content */}
