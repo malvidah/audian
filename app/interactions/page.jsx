@@ -236,7 +236,7 @@ function NotableInteractions({ activePlatform, dateFrom, dateTo }) {
           const typeCfg = TYPE_BADGE_CFG[m.type] || { label: m.type || "Unknown", bg: T.well, color: T.sub, border: T.border };
           const avatarLetter = (m.name && m.name !== "Unknown") ? m.name.charAt(0).toUpperCase() : null;
           const gradientIdx = Math.abs((m.name || "").split("").reduce((acc, c) => acc + c.charCodeAt(0), 0)) % AVATAR_GRADIENTS.length;
-          const isCommentLike = (m.type === "comment" || m.type === "mention") && m.content;
+          const hasContent = m.content;
 
           return (
             <div
@@ -342,14 +342,14 @@ function NotableInteractions({ activePlatform, dateFrom, dateTo }) {
               {m.bio && (
                 <div style={{
                   fontFamily: sans, fontSize: F.xs, color: T.sub, lineHeight: 1.45,
-                  marginBottom: isCommentLike ? 8 : 0,
+                  marginBottom: hasContent ? 8 : 0,
                 }}>
                   {m.bio.length > 120 ? m.bio.slice(0, 120) + "\u2026" : m.bio}
                 </div>
               )}
 
               {/* Comment / mention content */}
-              {isCommentLike && (
+              {hasContent && (
                 <div style={{
                   marginTop: m.bio ? 0 : 0,
                   background: T.well,
