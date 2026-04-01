@@ -717,7 +717,7 @@ export default function PageShell({ activeTab, children }) {
     try {
       const [postsRes, followersRes] = await Promise.all([
         fetch(`/api/posts?from=${from}&to=${to}&limit=2000`),
-        fetch(`/api/followers?from=${from}&to=${to}`),
+        fetch(`/api/followers`),
       ]);
       const postsData     = await postsRes.json();
       const followersData = await followersRes.json();

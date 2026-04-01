@@ -85,6 +85,17 @@ const SAMPLE_DATA = [
   { id: 22, name: "Hannah Lee",        handle: "hannahlee",        platform: "linkedin",  type: "reposted",   content: "Hiring for culture add, not culture fit — lessons from building a 50-person eng org",                                          followers: 33000,  zone: "INFLUENTIAL", date: "2026-01-15T14:00:00Z" },
 ];
 
+// ─── IgIcon (outline SVG) ────────────────────────────────────────────────────
+function IgIcon({ size = 16, color = "#E1306C" }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/>
+      <circle cx="12" cy="12" r="4.5"/>
+      <circle cx="17.5" cy="6.5" r="1" fill={color} stroke="none"/>
+    </svg>
+  );
+}
+
 // ─── Small components ────────────────────────────────────────────────────────
 function PlatDot({ platform, size = 8 }) {
   return (
@@ -412,7 +423,9 @@ export default function InteractionsTable({ platform, weekFilter }) {
                     }}
                     onMouseEnter={e => e.currentTarget.style.opacity = "0.7"}
                     onMouseLeave={e => e.currentTarget.style.opacity = "1"}>
-                    {PLAT_ICON[row.platform] || "·"}
+                    {row.platform === "instagram"
+                      ? <IgIcon size={16} color="#E1306C" />
+                      : (PLAT_ICON[row.platform] || "·")}
                   </a>
                 </td>
                 {/* Type */}

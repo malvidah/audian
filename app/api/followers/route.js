@@ -9,17 +9,18 @@ export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
     const platform = searchParams.get('platform');
-    const from     = searchParams.get('from') || '2026-01-01';
-    const to       = searchParams.get('to')   || new Date().toISOString().slice(0, 10);
+    const from     = searchParams.get('from');
+    const to       = searchParams.get('to');
 
     let query = supabaseAdmin
       .from('platform_metrics')
       .select('platform, snapshot_at, followers, subscriber_count:followers')
       .not('followers', 'is', null)
-      .gte('snapshot_at', from)
-      .lte('snapshot_at', to + 'T23:59:59Z')
       .order('snapshot_at', { ascending: true })
       .limit(2000);
+
+    if (from) query = query.gte('snapshot_at', from);
+    if (to)   query = query.lte('snapshot_at', to + 'T23:59:59Z');
 
     if (platform && platform !== 'all') {
       query = query.eq('platform', platform);
