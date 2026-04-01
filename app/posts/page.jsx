@@ -175,9 +175,6 @@ function WeeklyOKR({ posts, activePlatform, selectedWeek, onWeekSelect }) {
         <div style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text }}>
           Weekly OKR
         </div>
-        <div style={{ fontFamily: sans, fontSize: F.xs, color: T.sub }}>
-          3 posts · 1 post at 2K+ likes · click a week to filter
-        </div>
         <div style={{ marginLeft: "auto", fontFamily: sans, fontSize: F.xs, fontWeight: 600,
           color: onTrack === complete ? T.green : T.yellow }}>
           {onTrack}/{complete} weeks on track
@@ -193,7 +190,7 @@ function WeeklyOKR({ posts, activePlatform, selectedWeek, onWeekSelect }) {
         )}
       </div>
 
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 8 }}>
         {enriched.map(w => {
           const s       = statusStyle[w.status];
           const isSelected = selectedWeek === w.key;
@@ -655,7 +652,7 @@ function Outliers({ posts, activePlatform }) {
     <div style={{ marginBottom: 28 }}>
       <div style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text, marginBottom: 12 }}>
         Outliers · {platLabel}
-        <span style={{ fontWeight: 400, color: T.dim, marginLeft: 8 }}>vs {fmt(Math.round(avg))} avg engagement</span>
+        <span style={{ fontWeight: 400, color: T.dim, marginLeft: 8 }}>avg {fmt(Math.round(avg))} likes</span>
       </div>
       <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 12,
         boxShadow: T.shadowSm, display: "grid", gridTemplateColumns: "1fr 1fr", overflow: "hidden" }}>
