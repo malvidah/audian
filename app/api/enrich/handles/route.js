@@ -47,6 +47,8 @@ export async function POST(req) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
     let enriched = 0;
+    let bioUpdates = 0;
+    let followerUpdates = 0;
     for (const h of handles) {
       const updates = {};
 
@@ -54,7 +56,10 @@ export async function POST(req) {
       if (h.name && !h.bio?.trim()) {
         try {
           const wiki = await wikiSearch(h.name);
-          if (wiki) updates.bio = wiki.bio;
+          if (wiki) {
+            updates.bio = wiki.bio;
+            bioUpdates++;
+          }
         } catch {}
         await new Promise(r => setTimeout(r, 120));
       }
@@ -64,7 +69,10 @@ export async function POST(req) {
         const jobs = PLATFORMS.filter(p => h[`handle_${p}`] && !h[`followers_${p}`]);
         await Promise.all(jobs.map(async p => {
           const count = await lookupFollowers(h.name || h[`handle_${p}`], h[`handle_${p}`], p, apiKey);
-          if (count) updates[`followers_${p}`] = count;
+          if (count) {
+            updates[`followers_${p}`] = count;
+            followerUpdates++;
+          }
         }));
       }
 
@@ -75,7 +83,7 @@ export async function POST(req) {
       }
     }
 
-    return NextResponse.json({ enriched, total: handles.length });
+    return NextResponse.json({ enriched, total: handles.length, bioUpdates, followerUpdates });
   } catch (err) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }

@@ -782,8 +782,18 @@ export default function PageShell({ activeTab, children }) {
 
       let enriched = 0;
       let checked = 0;
-      for (let i = 0; i < handleIds.length; i += 50) {
-        const batch = handleIds.slice(i, i + 50);
+      let bioUpdates = 0;
+      let followerUpdates = 0;
+      const batchSize = 10;
+      const totalBatches = Math.ceil(handleIds.length / batchSize);
+
+      for (let i = 0; i < handleIds.length; i += batchSize) {
+        const batch = handleIds.slice(i, i + batchSize);
+        const batchNum = Math.floor(i / batchSize) + 1;
+        setActionMessage({
+          tone: "muted",
+          text: `Batch ${batchNum} of ${totalBatches} · pulling bios and follower counts for ${checked + 1}-${Math.min(checked + batch.length, handleIds.length)} of ${handleIds.length} handles…`,
+        });
         const enrichRes = await fetch("/api/enrich/handles", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -795,13 +805,15 @@ export default function PageShell({ activeTab, children }) {
         }
         enriched += enrichData.enriched || 0;
         checked += enrichData.total || batch.length;
+        bioUpdates += enrichData.bioUpdates || 0;
+        followerUpdates += enrichData.followerUpdates || 0;
+        setRefreshKey(v => v + 1);
       }
 
-      setRefreshKey(v => v + 1);
       setActionMessage({
         tone: enriched > 0 ? "success" : "muted",
         text: enriched > 0
-          ? `Enriched ${enriched} handle${enriched === 1 ? "" : "s"} across ${checked} checked profile${checked === 1 ? "" : "s"}.`
+          ? `Updated ${enriched} handle${enriched === 1 ? "" : "s"} · ${bioUpdates} bio${bioUpdates === 1 ? "" : "s"} and ${followerUpdates} follower count${followerUpdates === 1 ? "" : "s"} filled in.`
           : `Checked ${checked} profile${checked === 1 ? "" : "s"} and everything already looked filled in.`,
       });
     } catch (e) {
@@ -925,7 +937,7 @@ export default function PageShell({ activeTab, children }) {
                   onMouseLeave={e => { e.currentTarget.style.background = T.card; }}>
                   <span style={{ fontSize: 12 }}>{"\u2191"}</span> Import
                 </a>
-                {activeTab === "interactions" && (
+                {(activeTab === "interactions" || activeTab === "handles") && (
                   <button onClick={runInteractionEnrichment} disabled={enriching} style={{
                     display: "inline-flex", alignItems: "center", gap: 5,
                     background: T.accent, color: "#fff", border: "none",

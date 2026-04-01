@@ -10,8 +10,8 @@ const HandlesTable = dynamic(() => import("../../components/HandlesTable"), {
 export default function HandlesPage() {
   return (
     <PageShell activeTab="handles">
-      {({ activePlatform }) => (
-        <HandlesTable platform={activePlatform} />
+      {({ activePlatform, refreshKey }) => (
+        <HandlesTable platform={activePlatform} refreshKey={refreshKey} />
       )}
     </PageShell>
   );

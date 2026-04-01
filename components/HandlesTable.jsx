@@ -126,7 +126,7 @@ function SummaryStats({ handles }) {
 }
 
 // ─── Main component ─────────────────────────────────────────────────────────
-export default function HandlesTable({ platform }) {
+export default function HandlesTable({ platform, refreshKey }) {
   const [handles, setHandles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("ALL");
@@ -144,7 +144,7 @@ export default function HandlesTable({ platform }) {
     setLoading(false);
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load, refreshKey]);
 
   const saveField = async (id, updates) => {
     try {
