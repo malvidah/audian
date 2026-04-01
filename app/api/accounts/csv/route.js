@@ -81,23 +81,63 @@ function mapZone(label, sourceList, fallback) {
   return fallback;
 }
 
-// Bulk upsert a bucket of rows that all share the same primary handle column.
-// Constraint names must match what exists in Supabase (handles_handle_*_key).
-async function bulkUpsert(rows, conflictCol) {
+// Bulk sync a bucket of rows that all share the same primary handle column.
+// This avoids depending on unique constraints existing on handle_* columns.
+async function bulkSync(rows, conflictCol) {
   const CHUNK = 500;
   let imported = 0;
   const errors = [];
+
   for (let i = 0; i < rows.length; i += CHUNK) {
-    const { error, count } = await supabase
+    const batch = rows.slice(i, i + CHUNK);
+    const handles = batch.map(row => row[conflictCol]).filter(Boolean);
+
+    const { data: existingRows, error: fetchError } = await supabase
       .from('handles')
-      .upsert(rows.slice(i, i + CHUNK), {
-        onConflict: conflictCol,
-        ignoreDuplicates: false,
-        count: 'exact',
-      });
-    if (error) errors.push(error.message);
-    else imported += rows.slice(i, i + CHUNK).length; // count inserts+updates
+      .select(`id, ${conflictCol}`)
+      .in(conflictCol, handles);
+
+    if (fetchError) {
+      errors.push(fetchError.message);
+      continue;
+    }
+
+    const existingByHandle = new Map(
+      (existingRows || [])
+        .filter(row => row[conflictCol])
+        .map(row => [row[conflictCol], row.id])
+    );
+
+    const updates = [];
+    const inserts = [];
+
+    for (const row of batch) {
+      const existingId = existingByHandle.get(row[conflictCol]);
+      if (existingId) updates.push({ id: existingId, ...row });
+      else inserts.push(row);
+    }
+
+    if (updates.length) {
+      const { error } = await supabase
+        .from('handles')
+        .upsert(updates, {
+          onConflict: 'id',
+          ignoreDuplicates: false,
+          count: 'exact',
+        });
+      if (error) errors.push(error.message);
+      else imported += updates.length;
+    }
+
+    if (inserts.length) {
+      const { error } = await supabase
+        .from('handles')
+        .insert(inserts, { count: 'exact' });
+      if (error) errors.push(error.message);
+      else imported += inserts.length;
+    }
   }
+
   return { imported, errors };
 }
 
@@ -192,10 +232,10 @@ export async function POST(req) {
     const liRows = deduped.filter(r => !r.handle_x && !r.handle_instagram && !r.handle_youtube && r.handle_linkedin);
 
     const results = await Promise.all([
-      xRows.length  ? bulkUpsert(xRows,  'handle_x')         : { imported: 0, errors: [] },
-      igRows.length ? bulkUpsert(igRows, 'handle_instagram')  : { imported: 0, errors: [] },
-      ytRows.length ? bulkUpsert(ytRows, 'handle_youtube')    : { imported: 0, errors: [] },
-      liRows.length ? bulkUpsert(liRows, 'handle_linkedin')   : { imported: 0, errors: [] },
+      xRows.length  ? bulkSync(xRows,  'handle_x')          : { imported: 0, errors: [] },
+      igRows.length ? bulkSync(igRows, 'handle_instagram')  : { imported: 0, errors: [] },
+      ytRows.length ? bulkSync(ytRows, 'handle_youtube')    : { imported: 0, errors: [] },
+      liRows.length ? bulkSync(liRows, 'handle_linkedin')   : { imported: 0, errors: [] },
     ]);
 
     const imported = results.reduce((s, r) => s + r.imported, 0);
