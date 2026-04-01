@@ -44,18 +44,32 @@ export async function GET(request) {
     const dedupedSnapshots = [...dedupedByDay.values()]
       .sort((a, b) => new Date(a.snapshot_at) - new Date(b.snapshot_at));
 
-    // Also fetch latest count per platform from platform_connections
+    // Fetch the absolute-latest follower count per platform from platform_metrics.
+    // This is a separate query with no date/limit filter so it always returns
+    // the newest row regardless of the snapshot window above.
+    const platforms = ['instagram', 'x', 'linkedin', 'youtube'];
+    const latestByPlatform = {};
+
+    await Promise.all(platforms.map(async (plat) => {
+      const { data } = await supabaseAdmin
+        .from('platform_metrics')
+        .select('followers')
+        .eq('platform', plat)
+        .not('followers', 'is', null)
+        .order('snapshot_at', { ascending: false })
+        .limit(1);
+      if (data?.[0]?.followers) latestByPlatform[plat] = data[0].followers;
+    }));
+
+    // Fall back to platform_connections.subscriber_count for any platform
+    // that has no platform_metrics rows at all.
     const { data: connections } = await supabaseAdmin
       .from('platform_connections')
       .select('platform, subscriber_count');
-
-    const latestByPlatform = {};
     for (const c of (connections || [])) {
-      if (c.subscriber_count) latestByPlatform[c.platform] = c.subscriber_count;
-    }
-    // Also check latest snapshot per platform (overrides connection if more recent)
-    for (const s of dedupedSnapshots) {
-      if (s.followers) latestByPlatform[s.platform] = s.followers;
+      if (c.subscriber_count && !latestByPlatform[c.platform]) {
+        latestByPlatform[c.platform] = c.subscriber_count;
+      }
     }
 
     return NextResponse.json({
