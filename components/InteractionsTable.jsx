@@ -424,25 +424,46 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
   const [detailRow, setDetailRow] = useState(null);
 
   const saveField = useCallback((rowId, field, value) => {
-    // Update local state immediately
+    const isHandleField = ["name", "bio", "zone"].includes(field) ||
+      field.startsWith("handle_") || field.startsWith("followers_");
+
+    // Find the handle_id for this row so we can update all rows sharing it
+    const sourceRow = rawData.find(r => r.id === rowId);
+    const handleId = sourceRow?.handle_id;
+
+    // Update local state — for handle fields, update ALL rows with same handle_id
     setLiveData(prev => prev.map(r => {
-      if (r.id !== rowId) return r;
+      const isTarget = r.id === rowId;
+      const isSameHandle = isHandleField && handleId && rawData.find(raw => raw.id === r.id)?.handle_id === handleId;
+      if (!isTarget && !isSameHandle) return r;
       const u = { ...r };
-      if (field === "name" || field === "bio" || field === "zone") u[field] = value;
-      else if (field === "content") u.content = value;
-      else if (field === "mention_url") u.mention_url = value;
-      else if (field === "post_url") u.post_url = value;
-      else if (field === "interaction_type") u.type = value;
-      else if (field === "platform") u.platform = value;
-      else if (field === "interacted_at") u.date = value;
+      if (isSameHandle || isTarget) {
+        if (field === "name") u.name = value;
+        if (field === "bio") u.bio = value;
+        if (field === "zone") u.zone = value;
+      }
+      if (isTarget) {
+        if (field === "content") u.content = value;
+        if (field === "mention_url") u.mention_url = value;
+        if (field === "post_url") u.post_url = value;
+        if (field === "interaction_type") u.type = value;
+        if (field === "platform") u.platform = value;
+        if (field === "interacted_at") u.date = value;
+      }
       return u;
     }));
-    // Also update rawData for handles fields
+    // Also update rawData for handles fields — update all rows with same handle_id
     setRawData(prev => prev.map(r => {
-      if (r.id !== rowId) return r;
+      const isTarget = r.id === rowId;
+      const isSameHandle = isHandleField && handleId && r.handle_id === handleId;
+      if (!isTarget && !isSameHandle) return r;
+      if (!isSameHandle && !isHandleField && !isTarget) return r;
       const u = { ...r, handles: { ...r.handles } };
-      if (["name", "bio", "zone"].includes(field)) u.handles[field] = value;
-      if (field.startsWith("handle_") || field.startsWith("followers_")) u.handles[field] = field.startsWith("followers_") ? (parseInt(value, 10) || null) : value;
+      if (isSameHandle) {
+        if (["name", "bio", "zone"].includes(field)) u.handles[field] = value;
+        if (field.startsWith("handle_") || field.startsWith("followers_"))
+          u.handles[field] = field.startsWith("followers_") ? (parseInt(value, 10) || null) : value;
+      }
       return u;
     }));
     // Update detailRow if it's the one being edited
@@ -464,7 +485,7 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: rowId, updates: { [field]: value } }),
     }).catch(err => console.error("Save failed:", err));
-  }, []);
+  }, [rawData]);
 
   useEffect(() => {
     let cancelled = false;
