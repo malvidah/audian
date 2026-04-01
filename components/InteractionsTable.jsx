@@ -53,7 +53,7 @@ function fmt(n) {
 
 function fmtDate(iso) {
   if (!iso) return "";
-  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
 function truncate(str, max) {
@@ -251,6 +251,8 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
             platform: plat,
             type: row.interaction_type || "like",
             content: row.content || null,
+            mention_url: row.mention_url || null,
+            post_url: row.post_url || null,
             followers,
             zone: h.zone || "SIGNAL",
             date: row.interacted_at || null,
@@ -569,13 +571,23 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
                   </td>
                   <td style={tdStyle}><TypeBadge type={row.type} /></td>
                   <td style={{ ...tdStyle, maxWidth: 0 }}>
-                    <div style={{
-                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                      fontSize: F.xs, color: row.content ? T.sub : T.dim,
-                      fontStyle: row.content ? "normal" : "italic",
-                    }}>
-                      {row.content ? truncate(row.content, 100) : "—"}
-                    </div>
+                    {(() => {
+                      const href = row.mention_url || row.post_url;
+                      const text = row.content ? truncate(row.content, 100) : "—";
+                      const style = {
+                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                        fontSize: F.xs, color: row.content ? T.sub : T.dim,
+                        fontStyle: row.content ? "normal" : "italic",
+                        display: "block",
+                      };
+                      return href && row.content ? (
+                        <a href={href} target="_blank" rel="noreferrer" style={{ ...style, textDecoration: "none" }} title={href}>
+                          {text}
+                        </a>
+                      ) : (
+                        <div style={style}>{text}</div>
+                      );
+                    })()}
                   </td>
                   <td style={{ ...tdStyle, fontWeight: 600, whiteSpace: "nowrap" }}>
                     {row.followers ? fmt(row.followers) : "—"}

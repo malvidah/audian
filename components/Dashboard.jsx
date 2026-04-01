@@ -56,7 +56,7 @@ function fmt(n) {
 }
 function fmtDate(iso) {
   if (!iso) return "";
-  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 function timeAgo(iso) {
   if (!iso) return "";
@@ -975,7 +975,7 @@ function AccountsSection({ open, onToggle }) {
                       </div>
                       {/* Added date */}
                       <div style={{ fontFamily: sans, fontSize: F.xs, color: T.dim, paddingTop: 4 }}>
-                        {acc.added_at ? new Date(acc.added_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" }) : "—"}
+                        {acc.added_at ? new Date(acc.added_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"}
                       </div>
                     </div>
                   );

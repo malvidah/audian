@@ -107,6 +107,8 @@ create table if not exists interactions (
   platform         text,
   interaction_type text,
   content          text,
+  mention_url      text,
+  post_url         text,
   screenshot_id    uuid,
   interacted_at    timestamptz,
   synced_at        timestamptz default now()

@@ -27,7 +27,7 @@ function fmt(n) {
 
 function fmtDate(iso) {
   if (!iso) return "";
-  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
 function IgIcon({ size = 16, color = "#E1306C" }) {
@@ -134,6 +134,8 @@ function EliteMentions({ activePlatform, dateFrom, dateTo }) {
             platform: plat,
             type: normalizeInteractionType(row.interaction_type),
             content: row.content || null,
+            mention_url: row.mention_url || null,
+            post_url: row.post_url || null,
             followers,
             zone: h.zone || "SIGNAL",
             date: row.interacted_at || null,
@@ -355,12 +357,20 @@ function EliteMentions({ activePlatform, dateFrom, dateTo }) {
                   padding: "10px 12px",
                   borderLeft: `3px solid ${PLAT_COLORS[m.platform] || T.accent}`,
                 }}>
-                  <div style={{
-                    fontFamily: sans, fontSize: F.xs, color: T.text, lineHeight: 1.5,
-                    whiteSpace: "pre-wrap",
-                  }}>
-                    {m.content}
-                  </div>
+                  {(() => {
+                    const href = m.mention_url || m.post_url;
+                    const contentStyle = {
+                      fontFamily: sans, fontSize: F.xs, color: T.text, lineHeight: 1.5,
+                      whiteSpace: "pre-wrap",
+                    };
+                    return href ? (
+                      <a href={href} target="_blank" rel="noreferrer" style={{ ...contentStyle, textDecoration: "none", display: "block" }}>
+                        {m.content}
+                      </a>
+                    ) : (
+                      <div style={contentStyle}>{m.content}</div>
+                    );
+                  })()}
                 </div>
               )}
             </div>

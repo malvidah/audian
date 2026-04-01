@@ -10,7 +10,7 @@ export async function GET(req) {
   let query = supabase
     .from('interactions')
     .select(`
-      id, platform, interaction_type, content, screenshot_id, interacted_at, synced_at,
+      id, platform, interaction_type, content, mention_url, post_url, screenshot_id, interacted_at, synced_at,
       handle_id,
       handles (
         id, name, bio, zone, followed_by, avatar_url,

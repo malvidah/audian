@@ -25,7 +25,7 @@ export async function POST(request) {
       platformSummaries[m.platform].push(m);
     });
 
-    const dateLabel = (iso) => new Date(iso).toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+    const dateLabel = (iso) => new Date(iso).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
     let dataContext = `Date range: ${dateLabel(from)} – ${new Date(to).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}\n\n`;
 
     dataContext += `CONNECTED PLATFORMS:\n`;

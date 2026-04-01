@@ -19,7 +19,7 @@ function fmt(n) {
 
 function fmtDate(iso) {
   if (!iso) return "";
-  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
 function weekKey(iso) {
@@ -31,7 +31,7 @@ function weekKey(iso) {
 
 function weekLabel(key) {
   const d = new Date(key + "T12:00:00Z");
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
 function weekEnd(key) {
@@ -317,7 +317,7 @@ function FollowersChart({ snapshots, activePlatform }) {
             {xTicks.map((d, i) => (
               <text key={i} x={xPos(d)} y={chartH + 24} textAnchor="middle"
                 style={{ fontFamily: sans, fontSize: 10, fill: T.dim }}>
-                {d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}
+                {d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })}
               </text>
             ))}
 
@@ -403,7 +403,7 @@ function Outliers({ posts, activePlatform, selectedWeek }) {
         <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
           <PlatDot platform={p.platform} size={9} />
           <span style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>
-            {p.published_at ? new Date(p.published_at).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : ""}
+            {p.published_at ? new Date(p.published_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : ""}
           </span>
         </div>
         <div style={{ fontFamily: sans, fontSize: F.xs, color: T.text, lineHeight: 1.4,
