@@ -255,11 +255,12 @@ function WeeklyOKR({ posts, activePlatform, selectedWeek, onWeekSelect, dateFrom
                 {w.posts.length} <span style={{ fontWeight: 400,
                   color: isSelected ? "rgba(255,255,255,0.7)" : T.sub }}>posts</span>
               </div>
-              <div style={{ fontFamily: sans, fontSize: F.xs,
-                color: isSelected ? "rgba(255,255,255,0.9)"
-                  : w.maxLikes >= LIKES_GOAL ? T.green : T.sub }}>
-                {w.maxLikes >= LIKES_GOAL ? "✓ " : ""}{fmt(w.maxLikes)} top
-              </div>
+              {w.maxLikes >= LIKES_GOAL && (
+                <div style={{ fontFamily: sans, fontSize: F.xs,
+                  color: isSelected ? "rgba(255,255,255,0.9)" : T.green }}>
+                  ✓ {fmt(w.maxLikes)} top
+                </div>
+              )}
             </div>
           );
         })}
