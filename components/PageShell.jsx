@@ -194,36 +194,11 @@ function ImportPanel({ posts, onImported }) {
           });
         }
       } else if (platform === "linkedin") {
-        const headerLine = lines[1] || lines[0];
-        const headers    = parseCSVLine(headerLine).map(h => h.toLowerCase());
-        const dataStart  = headers[0].includes("date") ? 2 : 1;
-        const idx        = (name) => headers.findIndex(h => h.includes(name));
-        const iDate = 0, iReact = idx("reactions (organic)") !== -1 ? idx("reactions (organic)") : idx("reaction");
-        const iImpr = idx("impressions (organic)") !== -1 ? idx("impressions (organic)") : idx("impression");
-        const iComm = idx("comments (organic)") !== -1 ? idx("comments (organic)") : idx("comment");
-        const iRep  = idx("reposts (organic)") !== -1 ? idx("reposts (organic)") : idx("repost");
-
-        for (let i = dataStart; i < lines.length; i++) {
-          const v = parseCSVLine(lines[i]);
-          const dateStr = v[0]?.trim();
-          if (!dateStr || !dateStr.match(/\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}/)) continue;
-          const parts = dateStr.split(/[\/\-]/);
-          let publishedAt;
-          try {
-            const [mm, dd, yyyy] = parts.length === 3 ? parts : [parts[1], parts[2], parts[0]];
-            publishedAt = new Date(`${yyyy}-${mm.padStart(2,"0")}-${dd.padStart(2,"0")}T12:00:00Z`).toISOString();
-          } catch { continue; }
-          const post_id = `li_daily_${publishedAt.slice(0,10).replace(/-/g,"")}`;
-          const content = `LinkedIn daily — ${fmtDate(publishedAt)}`;
-          posts.push({
-            platform: "linkedin", post_id, published_at: publishedAt, content, permalink: null,
-            likes:       Math.round(parseFloat(v[iReact] || 0)),
-            impressions: Math.round(parseFloat(v[iImpr]  || 0)),
-            comments:    Math.round(parseFloat(v[iComm]  || 0)),
-            shares:      Math.round(parseFloat(v[iRep]   || 0)),
-            post_type: "daily_aggregate", source: "csv_import",
-          });
-        }
+        // LinkedIn CSV daily-aggregate import disabled — correct data comes from
+        // Buffer export seed files (supabase/seed_linkedin_posts.sql).
+        // Old li_daily_* rows cleaned up via supabase/fix_delete_li_daily_final.sql.
+        setMessage("LinkedIn CSV import is disabled. Use Buffer export instead.");
+        return;
       } else if (platform === "buffer") {
         const headers  = parseCSVLine(lines[0]).map(h => h.toLowerCase());
         const idx      = (name) => headers.findIndex(h => h.includes(name));
@@ -336,7 +311,7 @@ function ImportPanel({ posts, onImported }) {
                 <input type="file" accept=".csv,.xls,.xlsx" style={{ display: "none" }}
                   onChange={e => importFile("linkedin", e.target.files[0])} />
               </label>,
-              hint: "Export from LinkedIn analytics",
+              hint: "Disabled — use Buffer export instead",
             },
             {
               id: "buffer", label: "Buffer", color: "#168EEA",
