@@ -129,12 +129,13 @@ function Pill({ children, active, onClick, color }) {
 }
 
 // ─── Weekly OKR tracker (also acts as week filter) ────────────────────────────
-function WeeklyOKR({ posts, activePlatform, selectedWeek, onWeekSelect }) {
+function WeeklyOKR({ posts, activePlatform, selectedWeek, onWeekSelect, dateFrom, dateTo }) {
   const filtered = posts.filter(p =>
     p.post_type !== "daily_aggregate" &&
     (activePlatform === "all" || p.platform === activePlatform)
   );
 
+  // Build posts-by-week lookup
   const weekMap = {};
   for (const p of filtered) {
     if (!p.published_at) continue;
@@ -145,7 +146,24 @@ function WeeklyOKR({ posts, activePlatform, selectedWeek, onWeekSelect }) {
     if (lk > weekMap[k].maxLikes) weekMap[k].maxLikes = lk;
   }
 
-  const weeks = Object.entries(weekMap).sort((a, b) => a[0].localeCompare(b[0]));
+  // Generate ALL calendar weeks covered by the date range
+  const allWeekKeys = [];
+  if (dateFrom && dateTo) {
+    const start = new Date(dateFrom + "T00:00:00Z");
+    const end   = new Date(dateTo   + "T23:59:59Z");
+    // Rewind start to Monday of its week
+    const cur = new Date(start);
+    cur.setUTCDate(cur.getUTCDate() - ((cur.getUTCDay() + 6) % 7));
+    while (cur <= end) {
+      allWeekKeys.push(cur.toISOString().slice(0, 10));
+      cur.setUTCDate(cur.getUTCDate() + 7);
+    }
+  }
+
+  const weeks = allWeekKeys.length > 0
+    ? allWeekKeys.map(k => [k, weekMap[k] || { posts: [], maxLikes: 0 }])
+    : Object.entries(weekMap).sort((a, b) => a[0].localeCompare(b[0]));
+
   if (weeks.length === 0) return null;
 
   const enriched = weeks.map(([k, w]) => {
@@ -936,6 +954,8 @@ export default function PostsPage() {
               activePlatform={activePlatform}
               selectedWeek={selectedWeek}
               onWeekSelect={setSelectedWeek}
+              dateFrom={dateFrom}
+              dateTo={dateTo}
             />
 
             {/* Outliers — filters with platform + selected week */}
