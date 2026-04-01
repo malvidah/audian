@@ -172,10 +172,11 @@ function NotableInteractions({ activePlatform, dateFrom, dateTo }) {
           deduped.push(m);
         }
 
-        // Only keep ELITE interactions
+        // Only keep ELITE interactions, sorted most recent first
         const notable = deduped.filter(m => m.zone === "ELITE");
+        notable.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
 
-        if (!cancelled) setMentions(notable.slice(0, 10));
+        if (!cancelled) setMentions(notable);
       } catch (err) {
         console.error("Failed to fetch elite mentions:", err);
         if (!cancelled) setMentions([]);
