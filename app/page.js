@@ -533,7 +533,7 @@ function ImportPanel({ posts, onImported }) {
 
 // ─── Followers area chart ─────────────────────────────────────────────────────
 function FollowersChart({ snapshots, activePlatform }) {
-  const [hover, setHover] = useState(null); // { x, y, platform, followers, date }
+  const [hover, setHover] = useState(null); // { x, y, followers, date }
 
   const empty = !snapshots || snapshots.length === 0 ||
     snapshots.every(s => !s.followers || s.followers === 0);
@@ -543,7 +543,7 @@ function FollowersChart({ snapshots, activePlatform }) {
       <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 12,
         padding: "32px 24px", textAlign: "center", marginBottom: 28, boxShadow: T.shadowSm }}>
         <div style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text, marginBottom: 6 }}>
-          Followers over time
+          Followers
         </div>
         <div style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>
           No follower data yet — export from Buffer (Analytics → Export CSV) and share the file
@@ -552,33 +552,32 @@ function FollowersChart({ snapshots, activePlatform }) {
     );
   }
 
+  // Filter by platform if one is selected, otherwise aggregate total per date
+  const filtered = activePlatform && activePlatform !== "all"
+    ? snapshots.filter(s => s.platform === activePlatform)
+    : snapshots;
+
+  const byDate = {};
+  for (const s of filtered) {
+    const key = s.snapshot_at.slice(0, 10); // YYYY-MM-DD
+    if (!byDate[key]) byDate[key] = { date: new Date(s.snapshot_at), total: 0 };
+    byDate[key].total += (s.followers || 0);
+  }
+  const pts = Object.values(byDate).sort((a, b) => a.date - b.date);
+  if (pts.length === 0) return null;
+
   const W = 900, H = 200, PAD = { top: 20, right: 20, bottom: 36, left: 58 };
   const chartW = W - PAD.left - PAD.right;
   const chartH = H - PAD.top - PAD.bottom;
 
-  const visible = activePlatform === "all"
-    ? snapshots
-    : snapshots.filter(s => s.platform === activePlatform);
-  if (visible.length === 0) return null;
-
-  const byPlat = {};
-  for (const s of visible) {
-    if (!byPlat[s.platform]) byPlat[s.platform] = [];
-    byPlat[s.platform].push({ date: new Date(s.snapshot_at), f: s.followers || 0 });
-  }
-  for (const k of Object.keys(byPlat)) byPlat[k].sort((a, b) => a.date - b.date);
-
-  const allDates = visible.map(s => new Date(s.snapshot_at));
-  const minDate  = new Date(Math.min(...allDates));
-  const maxDate  = new Date(Math.max(...allDates));
-  const allF     = visible.map(s => s.followers || 0);
-  // pad min slightly so the area fill has breathing room at the bottom
-  const rawMin   = Math.min(...allF);
-  const rawMax   = Math.max(...allF);
-  const pad5     = (rawMax - rawMin) * 0.08;
-  const minF     = Math.max(0, rawMin - pad5);
-  const maxF     = rawMax + pad5;
-  const rangeF   = maxF - minF || 1;
+  const minDate = pts[0].date;
+  const maxDate = pts[pts.length - 1].date;
+  const rawMin  = Math.min(...pts.map(p => p.total));
+  const rawMax  = Math.max(...pts.map(p => p.total));
+  const pad5    = (rawMax - rawMin) * 0.08;
+  const minF    = Math.max(0, rawMin - pad5);
+  const maxF    = rawMax + pad5;
+  const rangeF  = maxF - minF || 1;
 
   const xPos = d  => ((d - minDate) / ((maxDate - minDate) || 1)) * chartW;
   const yPos = f  => chartH - ((f - minF) / rangeF) * chartH;
@@ -586,22 +585,19 @@ function FollowersChart({ snapshots, activePlatform }) {
                    : n >= 1000       ? (n/1000).toFixed(n >= 10000 ? 0 : 1)+'K'
                    : String(n);
 
-  const platKeys = Object.keys(byPlat);
-
   // Smooth cubic bezier path
-  const smoothPath = pts => pts.map(({ date, f }, i) => {
-    const x = xPos(date), y = yPos(f);
+  const smoothPath = pts.map(({ date, total }, i) => {
+    const x = xPos(date), y = yPos(total);
     if (i === 0) return `M${x.toFixed(1)},${y.toFixed(1)}`;
     const prev = pts[i - 1];
-    const px = xPos(prev.date), py = yPos(prev.f);
+    const px = xPos(prev.date), py = yPos(prev.total);
     const cpx = (px + x) / 2;
     return `C${cpx.toFixed(1)},${py.toFixed(1)} ${cpx.toFixed(1)},${y.toFixed(1)} ${x.toFixed(1)},${y.toFixed(1)}`;
   }).join(" ");
 
-  const areaPath = (pts, linePath) =>
-    `${linePath} L${xPos(pts[pts.length-1].date).toFixed(1)},${chartH} L${xPos(pts[0].date).toFixed(1)},${chartH} Z`;
+  const areaPath = `${smoothPath} L${xPos(pts[pts.length-1].date).toFixed(1)},${chartH} L${xPos(pts[0].date).toFixed(1)},${chartH} Z`;
 
-  // Y ticks — 4 clean round numbers
+  // Y ticks
   const step = (rawMax - rawMin) / 3;
   const yTicks = [0,1,2,3].map(i => Math.round((rawMin + i * step) / 1000) * 1000);
 
@@ -610,78 +606,56 @@ function FollowersChart({ snapshots, activePlatform }) {
   const tc = new Date(minDate); tc.setUTCDate(1);
   while (tc <= maxDate) { xTicks.push(new Date(tc)); tc.setUTCMonth(tc.getUTCMonth() + 1); }
 
-  // Hover detection: find closest point across all platforms
   const handleMouseMove = e => {
     const rect = e.currentTarget.getBoundingClientRect();
     const mx   = (e.clientX - rect.left) / rect.width * W - PAD.left;
     if (mx < 0 || mx > chartW) { setHover(null); return; }
     const tAtX = minDate.getTime() + (mx / chartW) * (maxDate - minDate);
     let best = null, bestDist = Infinity;
-    for (const [plat, pts] of Object.entries(byPlat)) {
-      for (const pt of pts) {
-        const dist = Math.abs(pt.date.getTime() - tAtX);
-        if (dist < bestDist) { bestDist = dist; best = { plat, pt }; }
-      }
+    for (const pt of pts) {
+      const dist = Math.abs(pt.date.getTime() - tAtX);
+      if (dist < bestDist) { bestDist = dist; best = pt; }
     }
     if (best) {
-      const cx = PAD.left + xPos(best.pt.date);
-      const cy = PAD.top  + yPos(best.pt.f);
-      setHover({ x: cx, y: cy, platform: best.plat, followers: best.pt.f, date: best.pt.date });
+      const cx = PAD.left + xPos(best.date);
+      const cy = PAD.top  + yPos(best.total);
+      setHover({ x: cx, y: cy, followers: best.total, date: best.date });
     }
   };
+
+  const color = (activePlatform && activePlatform !== "all" && PLAT_COLORS[activePlatform]) || T.accent;
+  const label = activePlatform && activePlatform !== "all"
+    ? `${PLAT_LABEL[activePlatform] || activePlatform} Followers`
+    : "Followers";
 
   return (
     <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 12,
       padding: "18px 20px 14px", marginBottom: 28, boxShadow: T.shadowSm }}>
 
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-        <div style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text }}>
-          Followers over time
-        </div>
-        {platKeys.length > 1 && (
-          <div style={{ display: "flex", gap: 16 }}>
-            {platKeys.map(p => (
-              <div key={p} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <div style={{ width: 12, height: 3, borderRadius: 2,
-                  background: PLAT_COLORS[p] || T.dim }} />
-                <span style={{ fontFamily: sans, fontSize: F.xs, color: T.sub }}>
-                  {PLAT_LABEL[p] || p}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
+      <div style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text, marginBottom: 16 }}>
+        {label}
       </div>
 
-      {/* Chart */}
       <div style={{ position: "relative" }}>
         <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", display: "block", overflow: "visible" }}
           onMouseMove={handleMouseMove} onMouseLeave={() => setHover(null)}>
           <defs>
-            {platKeys.map(p => {
-              const color = PLAT_COLORS[p] || T.accent;
-              return (
-                <linearGradient key={p} id={`grad-${p}`} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%"   stopColor={color} stopOpacity="0.18" />
-                  <stop offset="100%" stopColor={color} stopOpacity="0.01" />
-                </linearGradient>
-              );
-            })}
+            <linearGradient id="grad-total" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%"   stopColor={color} stopOpacity="0.18" />
+              <stop offset="100%" stopColor={color} stopOpacity="0.01" />
+            </linearGradient>
           </defs>
 
           <g transform={`translate(${PAD.left},${PAD.top})`}>
-            {/* Subtle horizontal grid */}
             {yTicks.map((v, i) => (
               <g key={i}>
                 <line x1={0} y1={yPos(v)} x2={chartW} y2={yPos(v)}
-                  stroke={T.border} strokeWidth={0.75} strokeDasharray="0" />
+                  stroke={T.border} strokeWidth={0.75} />
                 <text x={-10} y={yPos(v) + 4} textAnchor="end"
                   style={{ fontFamily: sans, fontSize: 10, fill: T.dim }}>{fmtK(v)}</text>
               </g>
             ))}
 
-            {/* X axis labels */}
             {xTicks.map((d, i) => (
               <text key={i} x={xPos(d)} y={chartH + 24} textAnchor="middle"
                 style={{ fontFamily: sans, fontSize: 10, fill: T.dim }}>
@@ -689,26 +663,13 @@ function FollowersChart({ snapshots, activePlatform }) {
               </text>
             ))}
 
-            {/* Area + line per platform */}
-            {platKeys.map(p => {
-              const pts   = byPlat[p];
-              const color = PLAT_COLORS[p] || T.accent;
-              const line  = smoothPath(pts);
-              const area  = areaPath(pts, line);
-              return (
-                <g key={p}>
-                  <path d={area} fill={`url(#grad-${p})`} />
-                  <path d={line} fill="none" stroke={color} strokeWidth={2}
-                    strokeLinecap="round" strokeLinejoin="round" />
-                </g>
-              );
-            })}
+            <path d={areaPath} fill="url(#grad-total)" />
+            <path d={smoothPath} fill="none" stroke={color} strokeWidth={2}
+              strokeLinecap="round" strokeLinejoin="round" />
 
-            {/* Hover crosshair + dot */}
             {hover && (() => {
               const hx = hover.x - PAD.left;
               const hy = hover.y - PAD.top;
-              const color = PLAT_COLORS[hover.platform] || T.accent;
               return (
                 <g>
                   <line x1={hx} y1={0} x2={hx} y2={chartH}
@@ -720,10 +681,8 @@ function FollowersChart({ snapshots, activePlatform }) {
           </g>
         </svg>
 
-        {/* Tooltip */}
         {hover && (() => {
-          const svgRect = { w: 900 };
-          const tipW = 140, tipH = 52;
+          const tipW = 140;
           const pct  = (hover.x - PAD.left) / chartW;
           const left = pct > 0.75 ? hover.x - tipW - 12 : hover.x + 12;
           return (
@@ -735,7 +694,6 @@ function FollowersChart({ snapshots, activePlatform }) {
             }}>
               <div style={{ fontFamily: sans, fontSize: F.xs, opacity: 0.7, marginBottom: 2 }}>
                 {hover.date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })}
-                {platKeys.length > 1 && ` · ${PLAT_LABEL[hover.platform]}`}
               </div>
               <div style={{ fontFamily: sans, fontSize: F.md, fontWeight: 700 }}>
                 {fmtK(hover.followers)} followers
