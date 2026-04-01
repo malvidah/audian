@@ -14,6 +14,10 @@ const InteractionsTable = dynamic(() => import("../../components/InteractionsTab
   loading: () => <div style={{padding:"2rem",textAlign:"center",color:"#6B6560"}}>Loading interactions...</div>
 });
 
+const CreatePanelDynamic = dynamic(() => import("../../components/InteractionsTable").then(m => ({ default: m.CreatePanel })), {
+  ssr: false,
+});
+
 // ─── Helpers (shared with EliteMentions) ─────────────────────────────────────
 const PLAT_COLORS = { youtube: "#FF0000", x: "#000000", instagram: "#E1306C", linkedin: "#0077B5" };
 
@@ -383,6 +387,9 @@ function NotableInteractions({ activePlatform, dateFrom, dateTo }) {
 }
 
 export default function InteractionsPage() {
+  const [creating, setCreating] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+
   return (
     <PageShell activeTab="interactions">
       {({ activePlatform, weekFilter, dateFrom, dateTo }) => (
@@ -392,7 +399,27 @@ export default function InteractionsPage() {
             dateFrom={dateFrom}
             dateTo={dateTo}
           />
-          <InteractionsTable platform={activePlatform} weekFilter={weekFilter} />
+
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+            <button onClick={() => setCreating(true)} style={{
+              fontFamily: sans, fontSize: F.xs, fontWeight: 600, padding: "4px 12px",
+              borderRadius: 8, border: `1px solid ${T.border}`, background: T.card,
+              color: T.accent, cursor: "pointer",
+            }}>+ Add</button>
+          </div>
+
+          <InteractionsTable platform={activePlatform} weekFilter={weekFilter} refreshKey={refreshKey} />
+
+          {creating && (
+            <>
+              <div onClick={() => setCreating(false)} style={{
+                position: "fixed", inset: 0, zIndex: 999, background: "rgba(0,0,0,0.15)" }} />
+              <CreatePanelDynamic
+                onClose={() => setCreating(false)}
+                onCreated={() => { setCreating(false); setRefreshKey(k => k + 1); }}
+              />
+            </>
+          )}
         </>
       )}
     </PageShell>

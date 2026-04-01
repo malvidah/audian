@@ -322,7 +322,7 @@ function DetailPanel({ row, rawData, onClose, onSave }) {
 }
 
 // ─── Create detail panel (new interaction) ─────────────────────────────────
-function CreatePanel({ onClose, onCreated }) {
+export function CreatePanel({ onClose, onCreated }) {
   const [draft, setDraft] = useState({
     name: "", platform: "x", interaction_type: "mention", content: "",
     mention_url: "", post_url: "", zone: "SIGNAL", bio: "",
@@ -418,7 +418,6 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
   const [rawData, setRawData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedZones, setSelectedZones] = useState(new Set());
-  const [creating, setCreating] = useState(false);
   const [fetchKey, setFetchKey] = useState(0);
   const [selected, setSelected] = useState(new Set());
   const [deleting, setDeleting] = useState(false);
@@ -631,11 +630,6 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
           {sorted.length} {commentsOnly ? "comment" : "interaction"}{sorted.length !== 1 ? "s" : ""}
           {platform && platform !== "all" ? <span> on {PLAT_LABEL[platform] || platform}</span> : null}
         </div>
-        {!commentsOnly && (
-          <button onClick={() => { setCreating(true); setDetailRow(null); }} style={{ fontFamily: sans, fontSize: F.xs, fontWeight: 600,
-            padding: "4px 12px", borderRadius: 8, border: `1px solid ${T.border}`, background: T.card,
-            color: T.accent, cursor: "pointer" }}>+ Add</button>
-        )}
         {selected.size > 0 && (
           <button onClick={deleteSelected} disabled={deleting} style={{
             display: "inline-flex", alignItems: "center", gap: 5, fontFamily: sans, fontSize: F.xs,
@@ -706,7 +700,7 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
                 const isDetail = detailRow?.id === row.id;
                 return (
                   <tr key={row.id}
-                    onClick={() => { if (row.source === "interactions") { setDetailRow(row); setCreating(false); } }}
+                    onClick={() => { if (row.source === "interactions") { setDetailRow(row); } }}
                     style={{
                       background: isDetail ? T.accentBg : isSelected ? T.blueBg : i % 2 === 0 ? T.card : T.well + "88",
                       cursor: row.source === "interactions" ? "pointer" : "default",
@@ -765,15 +759,6 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
         </>
       )}
 
-      {/* Create panel (new interaction) */}
-      {creating && (
-        <>
-          <div onClick={() => setCreating(false)} style={{
-            position: "fixed", inset: 0, zIndex: 999, background: "rgba(0,0,0,0.15)" }} />
-          <CreatePanel onClose={() => setCreating(false)}
-            onCreated={() => { setCreating(false); setFetchKey(k => k + 1); }} />
-        </>
-      )}
     </div>
   );
 }
