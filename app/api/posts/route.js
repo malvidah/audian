@@ -10,7 +10,7 @@ export async function GET(request) {
     const platform = searchParams.get('platform');
     const from     = searchParams.get('from') || '2026-01-01';
     const to       = searchParams.get('to')   || new Date().toISOString();
-    const limit    = parseInt(searchParams.get('limit') || '500');
+    const limit    = parseInt(searchParams.get('limit') || '2000');
 
     let query = supabaseAdmin
       .from('posts')

@@ -809,7 +809,7 @@ export default function PostsPage() {
     setLoading(true);
     setError(null);
     try {
-      const res  = await fetch(`/api/posts?from=${H1_FROM}&to=${H1_TO}&limit=1000`);
+      const res  = await fetch(`/api/posts?from=${H1_FROM}&to=${H1_TO}&limit=2000`);
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       setPosts(data.posts || []);
