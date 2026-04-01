@@ -507,8 +507,132 @@ function ImportPanel({ posts, onImported }) {
   );
 }
 
+// ─── Followers line chart ─────────────────────────────────────────────────────
+function FollowersChart({ snapshots, activePlatform }) {
+  if (!snapshots || snapshots.length === 0) {
+    return (
+      <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 12,
+        padding: "32px 24px", textAlign: "center", marginBottom: 28, boxShadow: T.shadowSm }}>
+        <div style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text, marginBottom: 6 }}>
+          Followers over time
+        </div>
+        <div style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>
+          No follower data yet — run <code>seed_followers.sql</code> in Supabase with your counts
+        </div>
+      </div>
+    );
+  }
+
+  const W = 900, H = 180, PAD = { top: 16, right: 16, bottom: 32, left: 52 };
+  const chartW = W - PAD.left - PAD.right;
+  const chartH = H - PAD.top - PAD.bottom;
+
+  // Filter by platform
+  const visible = activePlatform === "all"
+    ? snapshots
+    : snapshots.filter(s => s.platform === activePlatform);
+
+  if (visible.length === 0) return null;
+
+  // Group by platform → sorted array of {date, followers}
+  const byPlat = {};
+  for (const s of visible) {
+    if (!byPlat[s.platform]) byPlat[s.platform] = [];
+    byPlat[s.platform].push({ date: new Date(s.snapshot_at), followers: s.followers || 0 });
+  }
+  for (const k of Object.keys(byPlat)) {
+    byPlat[k].sort((a, b) => a.date - b.date);
+  }
+
+  const allDates   = visible.map(s => new Date(s.snapshot_at));
+  const minDate    = new Date(Math.min(...allDates));
+  const maxDate    = new Date(Math.max(...allDates));
+  const allFollowers = visible.map(s => s.followers || 0);
+  const minF = Math.min(...allFollowers);
+  const maxF = Math.max(...allFollowers);
+  const rangeF = maxF - minF || 1;
+
+  const xPos = d => ((d - minDate) / ((maxDate - minDate) || 1)) * chartW;
+  const yPos = f => chartH - ((f - minF) / rangeF) * chartH;
+
+  const platKeys = Object.keys(byPlat);
+  const fmtK = n => n >= 1000 ? (n/1000).toFixed(1) + 'K' : n;
+
+  // Y axis ticks
+  const yTicks = [minF, minF + rangeF * 0.5, maxF].map(v => Math.round(v));
+
+  // X axis ticks — monthly
+  const xTicks = [];
+  const cur = new Date(minDate); cur.setUTCDate(1);
+  while (cur <= maxDate) {
+    xTicks.push(new Date(cur));
+    cur.setUTCMonth(cur.getUTCMonth() + 1);
+  }
+
+  return (
+    <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 12,
+      padding: "16px 20px 12px", marginBottom: 28, boxShadow: T.shadowSm }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+        <div style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text }}>
+          Followers over time
+        </div>
+        {platKeys.length > 1 && (
+          <div style={{ display: "flex", gap: 12 }}>
+            {platKeys.map(p => (
+              <div key={p} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                <div style={{ width: 10, height: 2, borderRadius: 2,
+                  background: PLAT_COLORS[p] || T.dim }} />
+                <span style={{ fontFamily: sans, fontSize: F.xs, color: T.sub }}>
+                  {PLAT_LABEL[p] || p}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", display: "block" }}>
+        <g transform={`translate(${PAD.left},${PAD.top})`}>
+          {/* Grid lines + Y labels */}
+          {yTicks.map((v, i) => (
+            <g key={i}>
+              <line x1={0} y1={yPos(v)} x2={chartW} y2={yPos(v)}
+                stroke={T.border} strokeWidth={1} />
+              <text x={-6} y={yPos(v) + 4} textAnchor="end"
+                style={{ fontFamily: sans, fontSize: 10, fill: T.dim }}>{fmtK(v)}</text>
+            </g>
+          ))}
+          {/* X labels */}
+          {xTicks.map((d, i) => (
+            <text key={i} x={xPos(d)} y={chartH + 20} textAnchor="middle"
+              style={{ fontFamily: sans, fontSize: 10, fill: T.dim }}>
+              {d.toLocaleDateString("en-US", { month: "short", timeZone: "UTC" })}
+            </text>
+          ))}
+          {/* Lines per platform */}
+          {platKeys.map(p => {
+            const pts = byPlat[p];
+            const color = PLAT_COLORS[p] || T.accent;
+            const d = pts.map((pt, i) =>
+              `${i === 0 ? "M" : "L"}${xPos(pt.date).toFixed(1)},${yPos(pt.followers).toFixed(1)}`
+            ).join(" ");
+            return (
+              <g key={p}>
+                <path d={d} fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                {pts.map((pt, i) => (
+                  <circle key={i} cx={xPos(pt.date)} cy={yPos(pt.followers)} r={3}
+                    fill={color} stroke={T.card} strokeWidth={1.5} />
+                ))}
+              </g>
+            );
+          })}
+        </g>
+      </svg>
+    </div>
+  );
+}
+
 // ─── Platform stats row (cards double as filter buttons) ─────────────────────
-function PlatformStats({ posts, activePlatform, onPlatformSelect }) {
+function PlatformStats({ posts, activePlatform, onPlatformSelect, followerLatest }) {
   const order = ["instagram", "x", "linkedin", "youtube"];
   const stats = {};
   for (const plat of order) {
@@ -560,8 +684,16 @@ function PlatformStats({ posts, activePlatform, onPlatformSelect }) {
               }
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 16px" }}>
-              {[["Posts", s.count], ["Total likes", fmt(s.likes)],
-                ["Top post", fmt(s.maxLikes) + " likes"], ["Impressions", fmt(s.impr)]
+              {[
+                ["Posts",      s.count],
+                ["Total likes", fmt(s.likes)],
+                ["Top post",   fmt(s.maxLikes) + " likes"],
+                ["Impressions", fmt(s.impr)],
+                ...(plat !== "all" && followerLatest?.[plat]
+                  ? [["Followers", fmt(followerLatest[plat])]]
+                  : plat === "all" && followerLatest && Object.keys(followerLatest).length
+                  ? [["Followers", fmt(Object.values(followerLatest).reduce((a, b) => a + b, 0))]]
+                  : []),
               ].map(([lbl, val]) => (
                 <div key={lbl}>
                   <div style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>{lbl}</div>
@@ -844,17 +976,25 @@ export default function PostsPage() {
   const [error,          setError]         = useState(null);
   const [activePlatform, setActivePlatform] = useState("all");
   const [selectedWeek,   setSelectedWeek]  = useState(null);
-  const [dateFrom,       setDateFrom]      = useState(H1_FROM);
-  const [dateTo,         setDateTo]        = useState("2026-03-31");
+  const [dateFrom,        setDateFrom]       = useState(H1_FROM);
+  const [dateTo,          setDateTo]         = useState("2026-03-31");
+  const [followerSnaps,   setFollowerSnaps]  = useState([]);
+  const [followerLatest,  setFollowerLatest] = useState({});
 
   const loadPosts = useCallback(async (from, to) => {
     setLoading(true);
     setError(null);
     try {
-      const res  = await fetch(`/api/posts?from=${from}&to=${to}&limit=2000`);
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
-      setPosts(data.posts || []);
+      const [postsRes, followersRes] = await Promise.all([
+        fetch(`/api/posts?from=${from}&to=${to}&limit=2000`),
+        fetch(`/api/followers?from=${from}&to=${to}`),
+      ]);
+      const postsData     = await postsRes.json();
+      const followersData = await followersRes.json();
+      if (postsData.error) throw new Error(postsData.error);
+      setPosts(postsData.posts || []);
+      setFollowerSnaps(followersData.snapshots  || []);
+      setFollowerLatest(followersData.latest    || {});
     } catch (e) {
       setError(e.message);
     } finally {
@@ -946,7 +1086,11 @@ export default function PostsPage() {
               posts={posts}
               activePlatform={activePlatform}
               onPlatformSelect={(p) => { setActivePlatform(p); setSelectedWeek(null); }}
+              followerLatest={followerLatest}
             />
+
+            {/* Followers over time */}
+            <FollowersChart snapshots={followerSnaps} activePlatform={activePlatform} />
 
             {/* Weekly — doubles as filter */}
             <WeeklyOKR
