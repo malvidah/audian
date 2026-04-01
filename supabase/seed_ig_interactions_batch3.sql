@@ -1,12 +1,12 @@
 -- Seed file: Instagram interactions batch 3
 -- Extracted from notification screenshots taken 2026-03-31
--- Covers Jan 13-17, 2026 (relative timestamps) and Mar 20-21, 2026 (explicit dates)
+-- Covers Mar 24-28, 2026 (relative timestamps) and Mar 20-21, 2026 (explicit dates)
 -- All verified (blue checkmark) accounts on @bigthinkers
 
 BEGIN;
 
 -- ============================================================================
--- JANUARY 17, 2026 (3d relative)
+-- MARCH 28, 2026 (3d relative)
 -- ============================================================================
 
 -- 1. drleovalentin — follow from reel
@@ -17,7 +17,7 @@ ON CONFLICT (name) DO UPDATE SET
   verified_instagram = EXCLUDED.verified_instagram;
 
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'follow', 'started following you from your reel', '2026-01-17', now()
+SELECT id, 'instagram', 'follow', 'started following you from your reel', '2026-03-28', now()
 FROM handles WHERE name = 'drleovalentin'
 ON CONFLICT DO NOTHING;
 
@@ -29,7 +29,7 @@ ON CONFLICT (name) DO UPDATE SET
   verified_instagram = EXCLUDED.verified_instagram;
 
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'follow', 'started following you from your reel', '2026-01-17', now()
+SELECT id, 'instagram', 'follow', 'started following you from your reel', '2026-03-28', now()
 FROM handles WHERE name = 'timwasher'
 ON CONFLICT DO NOTHING;
 
@@ -41,7 +41,7 @@ ON CONFLICT (name) DO UPDATE SET
   verified_instagram = EXCLUDED.verified_instagram;
 
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'follow', 'started following you from your reel', '2026-01-17', now()
+SELECT id, 'instagram', 'follow', 'started following you from your reel', '2026-03-28', now()
 FROM handles WHERE name = 'stefandiez'
 ON CONFLICT DO NOTHING;
 
@@ -53,7 +53,7 @@ ON CONFLICT (name) DO UPDATE SET
   verified_instagram = EXCLUDED.verified_instagram;
 
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'like', 'liked your post', '2026-01-17', now()
+SELECT id, 'instagram', 'like', 'liked your post', '2026-03-28', now()
 FROM handles WHERE name = 'lilyetcie'
 ON CONFLICT DO NOTHING;
 
@@ -65,7 +65,7 @@ ON CONFLICT (name) DO UPDATE SET
   verified_instagram = EXCLUDED.verified_instagram;
 
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'like', 'liked your reel', '2026-01-17', now()
+SELECT id, 'instagram', 'like', 'liked your reel', '2026-03-28', now()
 FROM handles WHERE name = 'michemoffatt'
 ON CONFLICT DO NOTHING;
 
@@ -77,7 +77,7 @@ ON CONFLICT (name) DO UPDATE SET
   verified_instagram = EXCLUDED.verified_instagram;
 
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'comment', 'sent! / messaged you! (repeated promotional comments across multiple posts)', '2026-01-17', now()
+SELECT id, 'instagram', 'comment', 'sent! / messaged you! (repeated promotional comments across multiple posts)', '2026-03-28', now()
 FROM handles WHERE name = 'francescapsychology'
 ON CONFLICT DO NOTHING;
 
@@ -89,7 +89,7 @@ ON CONFLICT (name) DO UPDATE SET
   verified_instagram = EXCLUDED.verified_instagram;
 
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'follow', 'started following you', '2026-01-17', now()
+SELECT id, 'instagram', 'follow', 'started following you', '2026-03-28', now()
 FROM handles WHERE name = 'drdeepikachopra'
 ON CONFLICT DO NOTHING;
 
@@ -101,7 +101,7 @@ ON CONFLICT (name) DO UPDATE SET
   verified_instagram = EXCLUDED.verified_instagram;
 
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'follow', 'started following you from your reel', '2026-01-17', now()
+SELECT id, 'instagram', 'follow', 'started following you from your reel', '2026-03-28', now()
 FROM handles WHERE name = 'feladurotoye'
 ON CONFLICT DO NOTHING;
 
@@ -113,7 +113,7 @@ ON CONFLICT (name) DO UPDATE SET
   verified_instagram = EXCLUDED.verified_instagram;
 
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'follow', 'started following you from your reel', '2026-01-17', now()
+SELECT id, 'instagram', 'follow', 'started following you from your reel', '2026-03-28', now()
 FROM handles WHERE name = 'jenniferfogel'
 ON CONFLICT DO NOTHING;
 
@@ -125,7 +125,7 @@ ON CONFLICT (name) DO UPDATE SET
   verified_instagram = EXCLUDED.verified_instagram;
 
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'follow', 'started following you from your reel', '2026-01-17', now()
+SELECT id, 'instagram', 'follow', 'started following you from your reel', '2026-03-28', now()
 FROM handles WHERE name = 'rainyharp'
 ON CONFLICT DO NOTHING;
 
@@ -137,7 +137,7 @@ ON CONFLICT (name) DO UPDATE SET
   verified_instagram = EXCLUDED.verified_instagram;
 
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'follow', 'started following you from your ad', '2026-01-17', now()
+SELECT id, 'instagram', 'follow', 'started following you from your ad', '2026-03-28', now()
 FROM handles WHERE name = 'jabette_wishfuldoings'
 ON CONFLICT DO NOTHING;
 
@@ -149,12 +149,12 @@ ON CONFLICT (name) DO UPDATE SET
   verified_instagram = EXCLUDED.verified_instagram;
 
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'comment', 'I feel like I''m "meditating" when I read a book I enjoy and you can feel the change in the brain state versus a book I don''t like and I don''t enter that true focused state', '2026-01-17', now()
+SELECT id, 'instagram', 'comment', 'I feel like I''m "meditating" when I read a book I enjoy and you can feel the change in the brain state versus a book I don''t like and I don''t enter that true focused state', '2026-03-28', now()
 FROM handles WHERE name = 'alignedhorizonstherapy'
 ON CONFLICT DO NOTHING;
 
 -- ============================================================================
--- JANUARY 16, 2026 (4d relative)
+-- MARCH 27, 2026 (4d relative)
 -- ============================================================================
 
 -- 13. neuroscienceof — follow
@@ -165,13 +165,13 @@ ON CONFLICT (name) DO UPDATE SET
   verified_instagram = EXCLUDED.verified_instagram;
 
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'follow', 'started following you', '2026-01-16', now()
+SELECT id, 'instagram', 'follow', 'started following you', '2026-03-27', now()
 FROM handles WHERE name = 'neuroscienceof'
 ON CONFLICT DO NOTHING;
 
 -- 14. neuroscienceof — liked post (same person, different action)
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'like', 'liked your post', '2026-01-16', now()
+SELECT id, 'instagram', 'like', 'liked your post', '2026-03-27', now()
 FROM handles WHERE name = 'neuroscienceof'
 ON CONFLICT DO NOTHING;
 
@@ -183,7 +183,7 @@ ON CONFLICT (name) DO UPDATE SET
   verified_instagram = EXCLUDED.verified_instagram;
 
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'follow', 'started following you', '2026-01-16', now()
+SELECT id, 'instagram', 'follow', 'started following you', '2026-03-27', now()
 FROM handles WHERE name = 'fitneuroblog'
 ON CONFLICT DO NOTHING;
 
@@ -195,7 +195,7 @@ ON CONFLICT (name) DO UPDATE SET
   verified_instagram = EXCLUDED.verified_instagram;
 
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'follow', 'started following you from your reel', '2026-01-16', now()
+SELECT id, 'instagram', 'follow', 'started following you from your reel', '2026-03-27', now()
 FROM handles WHERE name = 'fairyonthewall'
 ON CONFLICT DO NOTHING;
 
@@ -207,7 +207,7 @@ ON CONFLICT (name) DO UPDATE SET
   verified_instagram = EXCLUDED.verified_instagram;
 
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'comment', 'Boy Scouts was a very rewarding experience for me, though every troop is "run..." (more)', '2026-01-16', now()
+SELECT id, 'instagram', 'comment', 'Boy Scouts was a very rewarding experience for me, though every troop is "run..." (more)', '2026-03-27', now()
 FROM handles WHERE name = 'ivandorschner'
 ON CONFLICT DO NOTHING;
 
@@ -219,7 +219,7 @@ ON CONFLICT (name) DO UPDATE SET
   verified_instagram = EXCLUDED.verified_instagram;
 
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'follow', 'started following you from your reel', '2026-01-16', now()
+SELECT id, 'instagram', 'follow', 'started following you from your reel', '2026-03-27', now()
 FROM handles WHERE name = 'alecamposimagen'
 ON CONFLICT DO NOTHING;
 
@@ -231,7 +231,7 @@ ON CONFLICT (name) DO UPDATE SET
   verified_instagram = EXCLUDED.verified_instagram;
 
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'follow', 'started following you', '2026-01-16', now()
+SELECT id, 'instagram', 'follow', 'started following you', '2026-03-27', now()
 FROM handles WHERE name = 'alexandrakirsch'
 ON CONFLICT DO NOTHING;
 
@@ -243,7 +243,7 @@ ON CONFLICT (name) DO UPDATE SET
   verified_instagram = EXCLUDED.verified_instagram;
 
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'like', 'liked your reel', '2026-01-16', now()
+SELECT id, 'instagram', 'like', 'liked your reel', '2026-03-27', now()
 FROM handles WHERE name = 'tiagogarcia77'
 ON CONFLICT DO NOTHING;
 
@@ -255,13 +255,13 @@ ON CONFLICT (name) DO UPDATE SET
   verified_instagram = EXCLUDED.verified_instagram;
 
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'repost', 'reposted your reel (with jaime.franco.587606 and priyadarshi.b)', '2026-01-16', now()
+SELECT id, 'instagram', 'repost', 'reposted your reel (with jaime.franco.587606 and priyadarshi.b)', '2026-03-27', now()
 FROM handles WHERE name = 'seeyouonmars_'
 ON CONFLICT DO NOTHING;
 
 -- 22. seeyouonmars_ — also followed
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'follow', 'started following you', '2026-01-16', now()
+SELECT id, 'instagram', 'follow', 'started following you', '2026-03-27', now()
 FROM handles WHERE name = 'seeyouonmars_'
 ON CONFLICT DO NOTHING;
 
@@ -273,7 +273,7 @@ ON CONFLICT (name) DO UPDATE SET
   verified_instagram = EXCLUDED.verified_instagram;
 
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'follow', 'started following you from your reel', '2026-01-16', now()
+SELECT id, 'instagram', 'follow', 'started following you from your reel', '2026-03-27', now()
 FROM handles WHERE name = 'futureofskincare'
 ON CONFLICT DO NOTHING;
 
@@ -285,12 +285,12 @@ ON CONFLICT (name) DO UPDATE SET
   verified_instagram = EXCLUDED.verified_instagram;
 
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'follow', 'started following you from your reel', '2026-01-16', now()
+SELECT id, 'instagram', 'follow', 'started following you from your reel', '2026-03-27', now()
 FROM handles WHERE name = 'pneumatic_movement'
 ON CONFLICT DO NOTHING;
 
 -- ============================================================================
--- JANUARY 15, 2026 (5d relative)
+-- MARCH 26, 2026 (5d relative)
 -- ============================================================================
 
 -- 25. jakejudy93 — comment
@@ -301,7 +301,7 @@ ON CONFLICT (name) DO UPDATE SET
   verified_instagram = EXCLUDED.verified_instagram;
 
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'comment', 'Not enough money', '2026-01-15', now()
+SELECT id, 'instagram', 'comment', 'Not enough money', '2026-03-26', now()
 FROM handles WHERE name = 'jakejudy93'
 ON CONFLICT DO NOTHING;
 
@@ -313,7 +313,7 @@ ON CONFLICT (name) DO UPDATE SET
   verified_instagram = EXCLUDED.verified_instagram;
 
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'like', 'liked your reel', '2026-01-15', now()
+SELECT id, 'instagram', 'like', 'liked your reel', '2026-03-26', now()
 FROM handles WHERE name = 'loztradez'
 ON CONFLICT DO NOTHING;
 
@@ -325,7 +325,7 @@ ON CONFLICT (name) DO UPDATE SET
   verified_instagram = EXCLUDED.verified_instagram;
 
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'comment', 'Yes Alex in BigThink!', '2026-01-15', now()
+SELECT id, 'instagram', 'comment', 'Yes Alex in BigThink!', '2026-03-26', now()
 FROM handles WHERE name = 'davidepstein'
 ON CONFLICT DO NOTHING;
 
@@ -337,7 +337,7 @@ ON CONFLICT (name) DO UPDATE SET
   verified_instagram = EXCLUDED.verified_instagram;
 
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'follow', 'started following you from your reel', '2026-01-15', now()
+SELECT id, 'instagram', 'follow', 'started following you from your reel', '2026-03-26', now()
 FROM handles WHERE name = 'teonkelley'
 ON CONFLICT DO NOTHING;
 
@@ -349,7 +349,7 @@ ON CONFLICT (name) DO UPDATE SET
   verified_instagram = EXCLUDED.verified_instagram;
 
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'follow', 'started following you', '2026-01-15', now()
+SELECT id, 'instagram', 'follow', 'started following you', '2026-03-26', now()
 FROM handles WHERE name = 'romeoahujap'
 ON CONFLICT DO NOTHING;
 
@@ -361,7 +361,7 @@ ON CONFLICT (name) DO UPDATE SET
   verified_instagram = EXCLUDED.verified_instagram;
 
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'follow', 'started following you from your ad', '2026-01-15', now()
+SELECT id, 'instagram', 'follow', 'started following you from your ad', '2026-03-26', now()
 FROM handles WHERE name = 'tammahwatts'
 ON CONFLICT DO NOTHING;
 
@@ -373,7 +373,7 @@ ON CONFLICT (name) DO UPDATE SET
   verified_instagram = EXCLUDED.verified_instagram;
 
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'follow', 'started following you', '2026-01-15', now()
+SELECT id, 'instagram', 'follow', 'started following you', '2026-03-26', now()
 FROM handles WHERE name = 'ipno38'
 ON CONFLICT DO NOTHING;
 
@@ -385,7 +385,7 @@ ON CONFLICT (name) DO UPDATE SET
   verified_instagram = EXCLUDED.verified_instagram;
 
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'like', 'liked your post', '2026-01-15', now()
+SELECT id, 'instagram', 'like', 'liked your post', '2026-03-26', now()
 FROM handles WHERE name = 'maythesciencebewithyou'
 ON CONFLICT DO NOTHING;
 
@@ -397,12 +397,12 @@ ON CONFLICT (name) DO UPDATE SET
   verified_instagram = EXCLUDED.verified_instagram;
 
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'comment', 'I need one of these', '2026-01-15', now()
+SELECT id, 'instagram', 'comment', 'I need one of these', '2026-03-26', now()
 FROM handles WHERE name = 'shakasenghor'
 ON CONFLICT DO NOTHING;
 
 -- ============================================================================
--- JANUARY 14, 2026 (6d relative)
+-- MARCH 25, 2026 (6d relative)
 -- ============================================================================
 
 -- 34. thisandthat — collaboration invite
@@ -413,7 +413,7 @@ ON CONFLICT (name) DO UPDATE SET
   verified_instagram = EXCLUDED.verified_instagram;
 
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'collaboration', 'invited you to collaborate on a post', '2026-01-14', now()
+SELECT id, 'instagram', 'collaboration', 'invited you to collaborate on a post', '2026-03-25', now()
 FROM handles WHERE name = 'thisandthat'
 ON CONFLICT DO NOTHING;
 
@@ -424,7 +424,7 @@ ON CONFLICT (name) DO UPDATE SET
   handle_instagram = EXCLUDED.handle_instagram;
 
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'repost', 'reposted your reel (with keepthefunkk)', '2026-01-14', now()
+SELECT id, 'instagram', 'repost', 'reposted your reel (with keepthefunkk)', '2026-03-25', now()
 FROM handles WHERE name = 'thewellnestescape'
 ON CONFLICT DO NOTHING;
 
@@ -436,7 +436,7 @@ ON CONFLICT (name) DO UPDATE SET
   verified_instagram = EXCLUDED.verified_instagram;
 
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'collaboration', 'accepted your invitation to be a collaborator on your post', '2026-01-14', now()
+SELECT id, 'instagram', 'collaboration', 'accepted your invitation to be a collaborator on your post', '2026-03-25', now()
 FROM handles WHERE name = 'neuranne'
 ON CONFLICT DO NOTHING;
 
@@ -448,7 +448,7 @@ ON CONFLICT (name) DO UPDATE SET
   verified_instagram = EXCLUDED.verified_instagram;
 
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'follow', 'started following you', '2026-01-14', now()
+SELECT id, 'instagram', 'follow', 'started following you', '2026-03-25', now()
 FROM handles WHERE name = 'emilia.montiglio'
 ON CONFLICT DO NOTHING;
 
@@ -460,7 +460,7 @@ ON CONFLICT (name) DO UPDATE SET
   verified_instagram = EXCLUDED.verified_instagram;
 
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'like', 'liked your reel', '2026-01-14', now()
+SELECT id, 'instagram', 'like', 'liked your reel', '2026-03-25', now()
 FROM handles WHERE name = 'kalisa_augustine'
 ON CONFLICT DO NOTHING;
 
@@ -472,7 +472,7 @@ ON CONFLICT (name) DO UPDATE SET
   verified_instagram = EXCLUDED.verified_instagram;
 
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'comment', 'Rated: 10/10 Incredibly nifty', '2026-01-14', now()
+SELECT id, 'instagram', 'comment', 'Rated: 10/10 Incredibly nifty', '2026-03-25', now()
 FROM handles WHERE name = 'montereybayaquarium'
 ON CONFLICT DO NOTHING;
 
@@ -484,7 +484,7 @@ ON CONFLICT (name) DO UPDATE SET
   verified_instagram = EXCLUDED.verified_instagram;
 
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'follow', 'started following you', '2026-01-14', now()
+SELECT id, 'instagram', 'follow', 'started following you', '2026-03-25', now()
 FROM handles WHERE name = 'miraaas'
 ON CONFLICT DO NOTHING;
 
@@ -496,12 +496,12 @@ ON CONFLICT (name) DO UPDATE SET
   verified_instagram = EXCLUDED.verified_instagram;
 
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'comment', 'commented with heart emoji', '2026-01-14', now()
+SELECT id, 'instagram', 'comment', 'commented with heart emoji', '2026-03-25', now()
 FROM handles WHERE name = 'jesitaai'
 ON CONFLICT DO NOTHING;
 
 -- ============================================================================
--- JANUARY 13, 2026 (1w relative)
+-- MARCH 24, 2026 (1w relative)
 -- ============================================================================
 
 -- 42. resonacoaching — follow from reel
@@ -512,7 +512,7 @@ ON CONFLICT (name) DO UPDATE SET
   verified_instagram = EXCLUDED.verified_instagram;
 
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'follow', 'started following you from your reel', '2026-01-13', now()
+SELECT id, 'instagram', 'follow', 'started following you from your reel', '2026-03-24', now()
 FROM handles WHERE name = 'resonacoaching'
 ON CONFLICT DO NOTHING;
 
@@ -524,7 +524,7 @@ ON CONFLICT (name) DO UPDATE SET
   verified_instagram = EXCLUDED.verified_instagram;
 
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'follow', 'started following you', '2026-01-13', now()
+SELECT id, 'instagram', 'follow', 'started following you', '2026-03-24', now()
 FROM handles WHERE name = 'sindhu.biswal'
 ON CONFLICT DO NOTHING;
 
@@ -535,7 +535,7 @@ ON CONFLICT (name) DO UPDATE SET
   handle_instagram = EXCLUDED.handle_instagram;
 
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'repost', 'reposted your reel (with drrachelbarr)', '2026-01-13', now()
+SELECT id, 'instagram', 'repost', 'reposted your reel (with drrachelbarr)', '2026-03-24', now()
 FROM handles WHERE name = 'albert_tsimal'
 ON CONFLICT DO NOTHING;
 
@@ -547,13 +547,13 @@ ON CONFLICT (name) DO UPDATE SET
   verified_instagram = EXCLUDED.verified_instagram;
 
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'repost', 'reposted your reel', '2026-01-13', now()
+SELECT id, 'instagram', 'repost', 'reposted your reel', '2026-03-24', now()
 FROM handles WHERE name = 'drrachelbarr'
 ON CONFLICT DO NOTHING;
 
 -- 46. drrachelbarr — liked story (same person, different action)
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'like', 'liked your story', '2026-01-13', now()
+SELECT id, 'instagram', 'like', 'liked your story', '2026-03-24', now()
 FROM handles WHERE name = 'drrachelbarr'
 ON CONFLICT DO NOTHING;
 
@@ -565,7 +565,7 @@ ON CONFLICT (name) DO UPDATE SET
   verified_instagram = EXCLUDED.verified_instagram;
 
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'follow', 'started following you', '2026-01-13', now()
+SELECT id, 'instagram', 'follow', 'started following you', '2026-03-24', now()
 FROM handles WHERE name = 'soberfitrach'
 ON CONFLICT DO NOTHING;
 
@@ -577,7 +577,7 @@ ON CONFLICT (name) DO UPDATE SET
   verified_instagram = EXCLUDED.verified_instagram;
 
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'repost', 'reposted your reel (with haydihaydee)', '2026-01-13', now()
+SELECT id, 'instagram', 'repost', 'reposted your reel (with haydihaydee)', '2026-03-24', now()
 FROM handles WHERE name = 'mijangos'
 ON CONFLICT DO NOTHING;
 
@@ -589,7 +589,7 @@ ON CONFLICT (name) DO UPDATE SET
   verified_instagram = EXCLUDED.verified_instagram;
 
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'follow', 'started following you', '2026-01-13', now()
+SELECT id, 'instagram', 'follow', 'started following you', '2026-03-24', now()
 FROM handles WHERE name = 'aeterion.ltd'
 ON CONFLICT DO NOTHING;
 
@@ -601,7 +601,7 @@ ON CONFLICT (name) DO UPDATE SET
   verified_instagram = EXCLUDED.verified_instagram;
 
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'follow', 'started following you from your reel', '2026-01-13', now()
+SELECT id, 'instagram', 'follow', 'started following you from your reel', '2026-03-24', now()
 FROM handles WHERE name = 'nicwestaway'
 ON CONFLICT DO NOTHING;
 
@@ -613,7 +613,7 @@ ON CONFLICT (name) DO UPDATE SET
   verified_instagram = EXCLUDED.verified_instagram;
 
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'follow', 'started following you', '2026-01-13', now()
+SELECT id, 'instagram', 'follow', 'started following you', '2026-03-24', now()
 FROM handles WHERE name = 'doctorluisfeliperivera'
 ON CONFLICT DO NOTHING;
 
@@ -625,7 +625,7 @@ ON CONFLICT (name) DO UPDATE SET
   verified_instagram = EXCLUDED.verified_instagram;
 
 INSERT INTO interactions (handle_id, platform, interaction_type, content, interacted_at, synced_at)
-SELECT id, 'instagram', 'comment', 'It''s a false dichotomy fallacy in how this is presented here... (more)', '2026-01-13', now()
+SELECT id, 'instagram', 'comment', 'It''s a false dichotomy fallacy in how this is presented here... (more)', '2026-03-24', now()
 FROM handles WHERE name = 'derflowcoach'
 ON CONFLICT DO NOTHING;
 
