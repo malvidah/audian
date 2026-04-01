@@ -166,13 +166,14 @@ function NotableInteractions({ activePlatform, dateFrom, dateTo }) {
         // Sort by score descending
         filtered.sort((a, b) => interactionScore(b) - interactionScore(a));
 
-        // Deduplicate: 1 interaction per handle (best one first)
-        const seenHandles = new Set();
+        // Deduplicate: 1 interaction per person (best one first)
+        // Match by name (case-insensitive) — covers cross-platform dupes
+        const seenNames = new Set();
         const deduped = [];
         for (const m of filtered) {
-          const key = m.name?.toLowerCase() || m.handle?.toLowerCase();
-          if (seenHandles.has(key)) continue;
-          seenHandles.add(key);
+          const nameKey = (m.name || "").trim().toLowerCase();
+          if (nameKey && seenNames.has(nameKey)) continue;
+          if (nameKey) seenNames.add(nameKey);
           deduped.push(m);
         }
 
