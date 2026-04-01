@@ -384,27 +384,25 @@ function PlatformStats({ posts, activePlatform, onPlatformSelect, followerLatest
   const stats = {};
   for (const plat of order) {
     const pp = posts.filter(p => p.platform === plat && p.post_type !== "daily_aggregate");
-    if (!pp.length) continue;
     stats[plat] = {
       count:   pp.length,
       likes:   pp.reduce((s, p) => s + parseInt(p.likes || 0), 0),
       impr:    pp.reduce((s, p) => s + parseInt(p.impressions || 0), 0),
-      maxLikes:Math.max(...pp.map(p => parseInt(p.likes || 0))),
+      maxLikes: pp.length ? Math.max(...pp.map(p => parseInt(p.likes || 0))) : 0,
     };
   }
 
-  const entries = Object.entries(stats);
-  if (!entries.length) return null;
-
   const allPosts = posts.filter(p => p.post_type !== "daily_aggregate");
+  if (!allPosts.length && (!followerLatest || !Object.keys(followerLatest).length)) return null;
+
   const allStats = {
     count:   allPosts.length,
     likes:   allPosts.reduce((s, p) => s + parseInt(p.likes || 0), 0),
     impr:    allPosts.reduce((s, p) => s + parseInt(p.impressions || 0), 0),
-    maxLikes:Math.max(...allPosts.map(p => parseInt(p.likes || 0))),
+    maxLikes: allPosts.length ? Math.max(...allPosts.map(p => parseInt(p.likes || 0))) : 0,
   };
 
-  const cards = [["all", allStats], ...entries];
+  const cards = [["all", allStats], ...order.map(p => [p, stats[p]])];
 
   return (
     <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 24 }}>
@@ -435,11 +433,11 @@ function PlatformStats({ posts, activePlatform, onPlatformSelect, followerLatest
                 ["Total likes", fmt(s.likes)],
                 ["Top post",   fmt(s.maxLikes) + " likes"],
                 ["Impressions", fmt(s.impr)],
-                ...(plat !== "all" && followerLatest?.[plat]
-                  ? [["Followers", fmt(followerLatest[plat])]]
-                  : plat === "all" && followerLatest && Object.keys(followerLatest).length
-                  ? [["Followers", fmt(Object.values(followerLatest).reduce((a, b) => a + b, 0))]]
-                  : []),
+                ["Followers", plat === "all"
+                  ? (followerLatest && Object.keys(followerLatest).length
+                      ? fmt(Object.values(followerLatest).reduce((a, b) => a + b, 0))
+                      : "—")
+                  : (followerLatest?.[plat] ? fmt(followerLatest[plat]) : "—")],
               ].map(([lbl, val]) => (
                 <div key={lbl}>
                   <div style={{ fontFamily: sans, fontSize: 10, color: T.dim, marginBottom: 1 }}>{lbl}</div>
