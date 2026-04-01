@@ -862,7 +862,7 @@ export default function PostsPage() {
               ← Dashboard
             </a>
             <h1 style={{ fontFamily: sans, fontSize: F.xl, fontWeight: 700, color: T.text, margin: "6px 0 4px", letterSpacing: "-0.02em" }}>
-              Content Calendar
+              Analytics
             </h1>
             <div style={{ fontFamily: sans, fontSize: F.sm, color: T.sub }}>
               OKR: 3 posts/week · 1 post at 2K+ likes

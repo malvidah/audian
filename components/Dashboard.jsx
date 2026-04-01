@@ -309,8 +309,8 @@ function ProfileMenu({ session, supabase, connections, onDisconnect, eliteList =
               style={{ display: "flex", alignItems: "center", gap: 8, padding: "11px 18px", textDecoration: "none" }}
               onMouseEnter={e => e.currentTarget.style.background = T.well}
               onMouseLeave={e => e.currentTarget.style.background = "none"}>
-              <span style={{ fontFamily: sans, fontSize: F.sm, color: T.text, fontWeight: 500 }}>📅 Content Calendar</span>
-              <span style={{ marginLeft: "auto", fontFamily: sans, fontSize: F.xs, color: T.dim }}>H1 OKR tracker</span>
+              <span style={{ fontFamily: sans, fontSize: F.sm, color: T.text, fontWeight: 500 }}>📊 Analytics</span>
+              <span style={{ marginLeft: "auto", fontFamily: sans, fontSize: F.xs, color: T.dim }}>Posts & OKR tracker</span>
               <span style={{ color: T.dim, fontSize: F.xs }}>↗</span>
             </a>
           </div>
