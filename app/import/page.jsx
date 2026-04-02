@@ -40,6 +40,66 @@ const INTERACTION_ICONS = {
   tag: "🏷", view: "👁", unknown: "?",
 };
 
+// Zone config matching InteractionsTable (used in review table + detail panel)
+const ZONE_CFG_REVIEW = {
+  ELITE:       { label: "ELITE",       color: T.accent,  bg: T.accentBg, border: T.accentBorder },
+  INFLUENTIAL: { label: "INFLUENTIAL", color: T.green,   bg: "#F0FDF4",  border: "#BBF7D0" },
+  SIGNAL:      { label: "SIGNAL",      color: "#2563EB", bg: "#EFF6FF",  border: "#BFDBFE" },
+  IGNORE:      { label: "IGNORE",      color: T.dim,     bg: T.well,     border: T.border },
+};
+
+const TYPE_BADGE_CFG = {
+  like:    { label: "Like",    icon: "♥", bg: "#FEF2F2", color: "#DC2626", border: "#FECACA" },
+  follow:  { label: "Follow",            bg: "#EFF6FF", color: "#2563EB", border: "#BFDBFE" },
+  comment: { label: "Comment",           bg: "#FEFCE8", color: "#CA8A04", border: "#FEF08A" },
+  repost:  { label: "Repost",            bg: "#F0FDF4", color: "#16A34A", border: "#BBF7D0" },
+  mention: { label: "Mention",           bg: "#FFF3EE", color: "#FF6B35", border: "#FFD4C2" },
+  tag:     { label: "Tag",               bg: "#F5F3FF", color: "#7C3AED", border: "#DDD6FE" },
+  reply:   { label: "Reply",             bg: "#FEFCE8", color: "#CA8A04", border: "#FEF08A" },
+  view:    { label: "View",              bg: T.well,    color: T.sub,     border: T.border  },
+};
+
+function TypeBadge({ type }) {
+  const types = (type || "unknown").split(",").map(t => t.trim()).filter(Boolean);
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
+      {types.map((t, i) => {
+        const c = TYPE_BADGE_CFG[t] || { label: t || "?", bg: T.well, color: T.dim, border: T.border };
+        return (
+          <span key={i} style={{
+            display: "inline-flex", alignItems: "center", gap: 3,
+            background: c.bg, color: c.color, border: `1px solid ${c.border}`,
+            borderRadius: 12, padding: "2px 8px", fontSize: F.xs, fontWeight: 600,
+            fontFamily: sans, whiteSpace: "nowrap",
+          }}>
+            {c.icon && <span style={{ fontSize: 10 }}>{c.icon}</span>}{c.label}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+function fmtFollowers(n) {
+  if (!n && n !== 0) return "—";
+  n = parseInt(n, 10);
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
+  if (n >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, "") + "K";
+  return n.toLocaleString();
+}
+
+function fmtDate(iso) {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  } catch { return "—"; }
+}
+
+function truncate(str, max = 60) {
+  if (!str) return null;
+  return str.length > max ? str.slice(0, max) + "…" : str;
+}
+
 // Zone rules:
 // wiki + 100k+  → INFLUENTIAL
 // 100k+, no wiki → SIGNAL
@@ -820,6 +880,317 @@ function CsvInteractionsImport({ onImport, platform, postUrl }) {
   );
 }
 
+// ── Review detail panel helpers ───────────────────────────────────────────────
+function ReviewDetailField({ label, value, onChange, placeholder = "—", multiline = false, type = "text" }) {
+  const [focused, setFocused] = useState(false);
+  const [draft, setDraft] = useState(value || "");
+  useEffect(() => { setDraft(value || ""); }, [value]);
+
+  function commit() {
+    setFocused(false);
+    if (draft !== (value || "")) onChange(draft);
+  }
+
+  const inputStyle = {
+    fontFamily: sans, fontSize: F.sm, background: "transparent", border: "none",
+    borderBottom: `1px solid ${focused ? T.accent : T.border2}`, outline: "none",
+    padding: "4px 0", width: "100%", color: T.text, transition: "border-color 0.15s",
+  };
+
+  return (
+    <div style={{ marginBottom: 14 }}>
+      {label && (
+        <div style={{ fontFamily: sans, fontSize: 10, fontWeight: 600, color: T.dim,
+          textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 3 }}>{label}</div>
+      )}
+      {multiline ? (
+        <textarea value={draft} onChange={e => setDraft(e.target.value)}
+          onFocus={() => setFocused(true)} onBlur={commit}
+          placeholder={placeholder}
+          style={{ ...inputStyle, minHeight: 60, resize: "vertical", lineHeight: 1.5 }} />
+      ) : (
+        <input type={type} value={draft} onChange={e => setDraft(e.target.value)}
+          onFocus={() => setFocused(true)} onBlur={commit}
+          placeholder={placeholder}
+          style={inputStyle} />
+      )}
+    </div>
+  );
+}
+
+function ReviewDetailSelect({ label, value, options, onChange }) {
+  return (
+    <div style={{ marginBottom: 14 }}>
+      {label && (
+        <div style={{ fontFamily: sans, fontSize: 10, fontWeight: 600, color: T.dim,
+          textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 3 }}>{label}</div>
+      )}
+      <select value={value || ""} onChange={e => onChange(e.target.value)}
+        style={{ fontFamily: sans, fontSize: F.sm, background: "transparent", border: "none",
+          borderBottom: `1px solid ${T.border2}`, outline: "none", padding: "4px 0",
+          width: "100%", color: T.text, cursor: "pointer" }}>
+        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </div>
+  );
+}
+
+const PLAT_PROFILE_URL = {
+  instagram: h => `https://instagram.com/${h}`,
+  x:         h => `https://x.com/${h}`,
+  youtube:   h => `https://youtube.com/@${h}`,
+  linkedin:  h => `https://linkedin.com/in/${h}`,
+};
+
+function ReviewDetailPanel({ item, onClose, onChange }) {
+  if (!item) return null;
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div onClick={onClose} style={{
+        position: "fixed", inset: 0, zIndex: 999,
+        background: "rgba(0,0,0,0.18)",
+      }} />
+
+      {/* Slide-in panel */}
+      <div style={{
+        position: "fixed", top: 0, right: 0, bottom: 0, width: 420, zIndex: 1000,
+        background: T.bg, borderLeft: `1px solid ${T.border}`,
+        boxShadow: "-4px 0 24px rgba(0,0,0,0.08)",
+        overflowY: "auto", padding: "24px 28px",
+      }}>
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+          <div style={{ fontFamily: sans, fontSize: F.lg, fontWeight: 700, color: T.text }}>Detail</div>
+          <button onClick={onClose} style={{ fontFamily: sans, fontSize: F.md, background: "none",
+            border: "none", color: T.dim, cursor: "pointer", padding: "4px 8px", lineHeight: 1 }}>✕</button>
+        </div>
+
+        {/* Screenshot thumbnail */}
+        {item._thumbnailUrl && (
+          <div style={{ marginBottom: 18 }}>
+            <img src={item._thumbnailUrl} alt="source screenshot"
+              style={{ width: "100%", borderRadius: 8, border: `1px solid ${T.border}`, display: "block" }} />
+            <div style={{ fontFamily: sans, fontSize: F.xs, color: T.dim, marginTop: 4 }}>
+              Source: {item._source}
+            </div>
+          </div>
+        )}
+
+        {/* Interaction section */}
+        <div style={{ fontFamily: sans, fontSize: F.xs, fontWeight: 700, color: T.sub,
+          textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12 }}>Interaction</div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
+          <ReviewDetailSelect label="Platform" value={item.platform || "instagram"}
+            options={[
+              { value: "instagram", label: "Instagram" },
+              { value: "x", label: "X / Twitter" },
+              { value: "youtube", label: "YouTube" },
+              { value: "linkedin", label: "LinkedIn" },
+            ]}
+            onChange={v => onChange("platform", v)} />
+          <ReviewDetailSelect label="Type"
+            value={(item.interaction_type || "comment").split(",")[0].trim()}
+            options={[
+              { value: "comment", label: "Comment" }, { value: "like", label: "Like" },
+              { value: "follow", label: "Follow" },   { value: "mention", label: "Mention" },
+              { value: "tag", label: "Tag" },         { value: "view", label: "View" },
+              { value: "reply", label: "Reply" },     { value: "repost", label: "Repost" },
+            ]}
+            onChange={v => onChange("interaction_type", v)} />
+        </div>
+
+        <ReviewDetailField label="Content" value={item.content} multiline placeholder="No content"
+          onChange={v => onChange("content", v)} />
+        <ReviewDetailField label="Post URL" value={item.post_url} placeholder="https://..."
+          onChange={v => onChange("post_url", v)} />
+        <ReviewDetailField label="Date" value={(item.interacted_at || "").slice(0, 10)} type="date"
+          onChange={v => onChange("interacted_at", v)} />
+
+        {/* Profile link */}
+        {item.handle && (
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontFamily: sans, fontSize: 10, fontWeight: 600, color: T.dim,
+              textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 3 }}>Profile</div>
+            <a href={PLAT_PROFILE_URL[item.platform]?.(item.handle) || "#"}
+              target="_blank" rel="noopener noreferrer"
+              style={{ fontFamily: sans, fontSize: F.sm, color: T.accent, textDecoration: "none" }}
+              onMouseEnter={e => e.target.style.textDecoration = "underline"}
+              onMouseLeave={e => e.target.style.textDecoration = "none"}>
+              @{item.handle}
+              {item.verified && <span style={{ color: "#1D9BF0", marginLeft: 4 }}>✓</span>}
+            </a>
+          </div>
+        )}
+
+        <div style={{ borderTop: `1px solid ${T.border}`, margin: "20px 0" }} />
+
+        {/* Person section */}
+        <div style={{ fontFamily: sans, fontSize: F.xs, fontWeight: 700, color: T.sub,
+          textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12 }}>Person</div>
+
+        <ReviewDetailField label="Name" value={item.name} placeholder="Display name"
+          onChange={v => onChange("name", v)} />
+        <ReviewDetailField label="Bio" value={item.bio} multiline placeholder="No bio"
+          onChange={v => onChange("bio", v)} />
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
+          <ReviewDetailSelect label="Zone" value={item.zone || "IGNORE"}
+            options={[
+              { value: "ELITE", label: "Elite" },
+              { value: "INFLUENTIAL", label: "Influential" },
+              { value: "SIGNAL", label: "Signal" },
+              { value: "IGNORE", label: "Ignore" },
+            ]}
+            onChange={v => onChange("zone", v)} />
+          <ReviewDetailField label="Followers"
+            value={item.followers != null ? String(item.followers) : ""}
+            placeholder="0" type="number"
+            onChange={v => onChange("followers", v ? parseInt(v) || null : null)} />
+        </div>
+
+        {/* Notes */}
+        {item.notes && (
+          <ReviewDetailField label="Notes" value={item.notes} multiline
+            onChange={v => onChange("notes", v)} />
+        )}
+
+        {/* Source info */}
+        <div style={{ borderTop: `1px solid ${T.border}`, marginTop: 16, paddingTop: 12 }}>
+          <div style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>
+            Source: {item._source || "manual"}
+            {item._autofilled && <span style={{ color: T.accent, marginLeft: 6 }}>★ autofilled</span>}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ── Review table row (matches InteractionsTable row style) ────────────────────
+const PLAT_ICON_COLORS = { instagram: "#E1306C", x: "#000000", youtube: "#FF0000", linkedin: "#0077B5" };
+
+function ReviewTableRow({ item, index, onClickRow, onRemove }) {
+  const zoneCfg = ZONE_CFG_REVIEW[item.zone] || ZONE_CFG_REVIEW.IGNORE;
+  const isIgnored = item.zone === "IGNORE";
+
+  return (
+    <tr
+      onClick={() => onClickRow(item._id)}
+      style={{
+        borderBottom: `1px solid ${T.border}`,
+        cursor: "pointer",
+        transition: "background 0.1s",
+        opacity: isIgnored ? 0.65 : 1,
+      }}
+      onMouseEnter={e => e.currentTarget.style.background = T.well}
+      onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+    >
+      {/* Zone color stripe */}
+      <td style={{ width: 4, padding: 0, background: zoneCfg.color, flexShrink: 0 }} />
+
+      {/* Person */}
+      <td style={{ padding: "10px 12px", maxWidth: 230 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 6, minWidth: 0 }}>
+          {item._autofilled && (
+            <span title="Autofilled from known handle" style={{ color: T.accent, fontSize: 11, flexShrink: 0, marginTop: 2 }}>★</span>
+          )}
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <span style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text,
+                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                @{item.handle}
+              </span>
+              {item.verified && <span style={{ color: "#1D9BF0", fontSize: 11, flexShrink: 0 }}>✓</span>}
+              {item._thumbnailUrl && (
+                <span title="Has screenshot" style={{
+                  flexShrink: 0, width: 5, height: 5, borderRadius: "50%",
+                  background: T.accent, display: "inline-block",
+                }} />
+              )}
+            </div>
+            {item.name && (
+              <div style={{ fontFamily: sans, fontSize: F.xs, color: T.sub,
+                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {item.name}
+              </div>
+            )}
+            {item.bio && (
+              <div style={{ fontFamily: sans, fontSize: F.xs, color: T.dim,
+                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 200 }}>
+                {truncate(item.bio, 50)}
+              </div>
+            )}
+          </div>
+        </div>
+      </td>
+
+      {/* Platform */}
+      <td style={{ padding: "10px 8px", width: 50, textAlign: "center" }}>
+        <span style={{
+          display: "inline-flex", alignItems: "center", justifyContent: "center",
+          width: 28, height: 28, borderRadius: 8, fontSize: 13, fontWeight: 700,
+          background: (PLAT_ICON_COLORS[item.platform] || T.dim) + "18",
+          color: PLAT_ICON_COLORS[item.platform] || T.dim,
+        }}>
+          {PLATFORM_ICONS[item.platform] || item.platform?.slice(0, 2) || "?"}
+        </span>
+      </td>
+
+      {/* Type */}
+      <td style={{ padding: "10px 8px" }}>
+        <TypeBadge type={item.interaction_type} />
+      </td>
+
+      {/* Content */}
+      <td style={{ padding: "10px 12px", maxWidth: 180 }}>
+        {item.content ? (
+          <span style={{ fontFamily: sans, fontSize: F.xs, color: T.sub,
+            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block" }}>
+            {truncate(item.content, 60)}
+          </span>
+        ) : (
+          <span style={{ color: T.border2, fontSize: F.xs }}>—</span>
+        )}
+      </td>
+
+      {/* Followers */}
+      <td style={{ padding: "10px 10px", fontFamily: sans, fontSize: F.sm,
+        color: T.sub, whiteSpace: "nowrap", textAlign: "right" }}>
+        {fmtFollowers(item.followers)}
+      </td>
+
+      {/* Zone */}
+      <td style={{ padding: "10px 8px" }}>
+        <span style={{
+          display: "inline-block", background: zoneCfg.bg, color: zoneCfg.color,
+          border: `1px solid ${zoneCfg.border}`, borderRadius: 6,
+          padding: "2px 8px", fontSize: F.xs, fontWeight: 700, fontFamily: sans,
+        }}>{zoneCfg.label}</span>
+      </td>
+
+      {/* Date */}
+      <td style={{ padding: "10px 10px", fontFamily: sans, fontSize: F.xs,
+        color: T.dim, whiteSpace: "nowrap" }}>
+        {fmtDate(item.interacted_at)}
+      </td>
+
+      {/* Remove */}
+      <td style={{ padding: "10px 6px", width: 32, textAlign: "center" }} onClick={e => e.stopPropagation()}>
+        <button
+          onClick={e => { e.stopPropagation(); onRemove(index); }}
+          onMouseEnter={e => e.currentTarget.style.color = T.red}
+          onMouseLeave={e => e.currentTarget.style.color = T.dim}
+          style={{ background: "transparent", border: "none", color: T.dim,
+            cursor: "pointer", fontSize: 18, padding: "0 4px", lineHeight: 1,
+            transition: "color 0.1s" }}>×</button>
+      </td>
+    </tr>
+  );
+}
+
 // ── Single interaction row (editable) ────────────────────────────────────────
 // ── Inline editable cell ─────────────────────────────────────────────────────
 function EditableCell({ value, onChange, type = "text", placeholder = "—", width, options }) {
@@ -1120,6 +1491,8 @@ export default function ImportPage() {
   const [sessionPlatform, setSessionPlatform] = useState("instagram");
   const [sessionPostUrl, setSessionPostUrl] = useState("");
   const [sessionDefaultZone, setSessionDefaultZone] = useState("IGNORE");
+  // Detail panel: tracks _id of selected item (null = closed)
+  const [detailItemId, setDetailItemId] = useState(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -1407,6 +1780,20 @@ export default function ImportPage() {
       }
       return updated;
     });
+  };
+
+  // Update by _id (used by detail panel)
+  const updateInteractionById = (id, field, value) => {
+    setAllInteractions(prev => prev.map(item => {
+      if (item._id !== id) return item;
+      const updated = { ...item, [field]: value };
+      if (field === "zone") {
+        updated.on_watchlist = value === "ELITE";
+      } else if (["name", "bio", "followers", "verified"].includes(field)) {
+        if (updated.zone !== "ELITE") updated.zone = computeZone(updated);
+      }
+      return updated;
+    }));
   };
 
   const removeInteraction = (index) => {
@@ -1834,7 +2221,7 @@ export default function ImportPage() {
                 <thead>
                   <tr style={{ background: T.well }}>
                     <th style={{ width: 4, padding: 0 }} />
-                    {["Handle","List","Followers","Type",""].map(h => (
+                    {["Person","Platform","Type","Content","Followers","Zone","Date",""].map(h => (
                       <th key={h} style={{ padding: "8px 12px", textAlign: "left",
                         fontFamily: sans, fontSize: F.xs, fontWeight: 600,
                         color: T.dim, textTransform: "uppercase", letterSpacing: "0.05em",
@@ -1847,11 +2234,11 @@ export default function ImportPage() {
                     <ManualAddRow onAdd={addManual} />
                   )}
                   {filtered.map((item, i) => (
-                    <InteractionRow
+                    <ReviewTableRow
                       key={item._id || i}
                       item={item}
                       index={allInteractions.indexOf(item)}
-                      onChange={updateInteraction}
+                      onClickRow={id => setDetailItemId(id)}
                       onRemove={removeInteraction}
                     />
                   ))}
@@ -1892,6 +2279,18 @@ export default function ImportPage() {
       <style>{`
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       `}</style>
+
+      {/* Detail panel overlay */}
+      {detailItemId && (() => {
+        const detailItem = allInteractions.find(i => i._id === detailItemId);
+        return detailItem ? (
+          <ReviewDetailPanel
+            item={detailItem}
+            onClose={() => setDetailItemId(null)}
+            onChange={(field, value) => updateInteractionById(detailItemId, field, value)}
+          />
+        ) : null;
+      })()}
     </div>
   );
 }
