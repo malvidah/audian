@@ -534,11 +534,14 @@ function ProfileMenu({ session, avatarUrl, connections = [], onDisconnect, posts
   const [disconnecting, setDisconnecting] = useState(null);
   const [syncing, setSyncing] = useState(null);           // platform id currently syncing
   const [syncResult, setSyncResult] = useState({});       // { [platformId]: { ok, msg } }
+  const [csvUploading, setCsvUploading] = useState(null); // platform id currently uploading CSV
   const [editingChannel, setEditingChannel] = useState(false);  // youtube channel edit mode
   const [channelInput, setChannelInput]     = useState("");
   const [channelSaving, setChannelSaving]   = useState(false);
   const [channelResult, setChannelResult]   = useState(null);
-  const menuRef = useRef(null);
+  const menuRef    = useRef(null);
+  const csvFileRef = useRef(null);
+  const csvPlatRef = useRef(null); // which platform the pending file input is for
   const email = session?.user?.email || "";
   const initial = email[0]?.toUpperCase() || "?";
 
@@ -572,6 +575,32 @@ function ProfileMenu({ session, avatarUrl, connections = [], onDisconnect, posts
     } finally {
       setSyncing(null);
       setTimeout(() => setSyncResult(r => ({ ...r, [platformId]: null })), 4000);
+    }
+  }
+
+  async function uploadFollowersCsv(platformId, file) {
+    if (!file || csvUploading) return;
+    setCsvUploading(platformId);
+    setSyncResult(r => ({ ...r, [platformId]: null }));
+    try {
+      const csv  = await file.text();
+      const res  = await fetch("/api/followers/import", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ platform: platformId, csv }),
+      });
+      const data = await res.json();
+      const ok   = !data.error;
+      setSyncResult(r => ({ ...r, [platformId]: {
+        ok,
+        msg: ok ? `Imported ${data.inserted} data points` : data.error,
+      }}));
+      if (ok) onImported?.();
+    } catch (e) {
+      setSyncResult(r => ({ ...r, [platformId]: { ok: false, msg: e.message } }));
+    } finally {
+      setCsvUploading(null);
+      setTimeout(() => setSyncResult(r => ({ ...r, [platformId]: null })), 5000);
     }
   }
 
@@ -652,11 +681,22 @@ function ProfileMenu({ session, avatarUrl, connections = [], onDisconnect, posts
           {/* Platform connections */}
           <div style={{ padding: "10px 0" }}>
             <div style={{ padding: "4px 18px 8px", fontFamily: sans, fontSize: 10, fontWeight: 600, color: T.dim, letterSpacing: "0.06em", textTransform: "uppercase" }}>Connections</div>
+            {/* Hidden file input for CSV follower uploads — shared across all platforms */}
+            <input
+              ref={csvFileRef} type="file" accept=".csv,text/csv" style={{ display: "none" }}
+              onChange={e => {
+                const file = e.target.files?.[0];
+                if (file && csvPlatRef.current) uploadFollowersCsv(csvPlatRef.current, file);
+                e.target.value = ""; // reset so same file can be re-uploaded
+              }}
+            />
+
             {PLAT_META.map(p => {
               const conn        = connections.find(c => c.platform === p.id);
               const isConnected = !!conn;
               const isDisc      = disconnecting === p.id;
               const isSyncing   = syncing === p.id;
+              const isCsvUp     = csvUploading === p.id;
               const result      = syncResult[p.id];
               return (
                 <div key={p.id}>
@@ -697,6 +737,22 @@ function ProfileMenu({ session, avatarUrl, connections = [], onDisconnect, posts
                           fontSize: 13, flexShrink: 0, transition: "background 0.15s, color 0.15s",
                         }}>
                         {isSyncing ? "…" : "↻"}
+                      </button>
+                    )}
+                    {/* Upload CSV button — available for all connected platforms */}
+                    {isConnected && (
+                      <button
+                        title={`Upload ${p.label} followers CSV`}
+                        disabled={!!csvUploading}
+                        onClick={() => { csvPlatRef.current = p.id; csvFileRef.current?.click(); }}
+                        style={{
+                          width: 28, height: 28, borderRadius: 7, border: "none", cursor: csvUploading ? "default" : "pointer",
+                          background: isCsvUp ? p.color + "20" : T.well,
+                          color: isCsvUp ? p.color : T.dim,
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          fontSize: 12, flexShrink: 0, transition: "background 0.15s, color 0.15s",
+                        }}>
+                        {isCsvUp ? "…" : "↑"}
                       </button>
                     )}
                     {isDisc ? (

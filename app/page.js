@@ -355,7 +355,7 @@ function FollowersChart({ snapshots, activePlatform }) {
             {xTicks.map((d, i) => (
               <text key={i} x={xPos(d)} y={chartH + 24} textAnchor="middle"
                 style={{ fontFamily: sans, fontSize: 10, fill: T.dim }}>
-                {d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })}
+                {d.toLocaleDateString("en-US", { month: "short", timeZone: "UTC" })}
               </text>
             ))}
 
