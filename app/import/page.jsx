@@ -353,6 +353,53 @@ function parseBufferPaste(text, platform = "instagram") {
     }));
 }
 
+// ── Buffer unnumbered: "handle15 days ago comment text" all on one line ──────
+// Scan each line for an inline "N unit ago" marker; split handle, time, content.
+// Same digit-boundary disambiguation as splitHandleTime, but allows trailing content.
+function splitHandleTimeContent(line) {
+  const globalRe = /(\d+)\s+(hours?|days?|weeks?|months?|minutes?|seconds?)\s+ago\s*/gi;
+  const maxByUnit = { second: 59, minute: 59, hour: 23, day: 30, week: 8, month: 12 };
+  const candidates = [];
+  let m;
+  while ((m = globalRe.exec(line)) !== null) {
+    const timeNum = parseInt(m[1]);
+    const unit = m[2].toLowerCase().replace(/s$/, "");
+    if (timeNum < 1 || timeNum > (maxByUnit[unit] || 999)) continue;
+    const handle = line.slice(0, m.index).trim();
+    if (!handle) continue;
+    const content = line.slice(m.index + m[0].length).trim() || null;
+    candidates.push({ handle, timeAgo: `${m[1]} ${m[2]} ago`, content, timeNum, endsDigit: /\d$/.test(handle) });
+  }
+  if (!candidates.length) return null;
+  const clean = candidates.filter(c => !c.endsDigit);
+  if (clean.length) { clean.sort((a, b) => a.timeNum - b.timeNum); return clean[0]; }
+  candidates.sort((a, b) => a.timeNum !== b.timeNum ? a.timeNum - b.timeNum : b.handle.length - a.handle.length);
+  return candidates[0];
+}
+
+function parseBufferUnnumbered(text, platform = "instagram") {
+  const entries = [];
+  for (const line of text.split("\n")) {
+    if (!line.trim()) continue;
+    const result = splitHandleTimeContent(line);
+    if (result) entries.push(result);
+  }
+  return entries.map((e, idx) => ({
+    handle: e.handle.replace(/^@/, "").trim(),
+    platform,
+    interaction_type: "comment",
+    content: e.content,
+    interacted_at: parseRelativeTime(e.timeAgo),
+    zone: "IGNORE",
+    verified: false,
+    followers: null,
+    name: null,
+    bio: null,
+    _source: "paste",
+    _id: `paste_un_${idx}_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+  }));
+}
+
 // ── YouTube / generic @handle format parser ───────────────────────────────────
 // Format: "@handle\nN unit ago\ncomment text\nlikeCount\nReply\nN replies"
 function parseYouTubePaste(text, platform = "youtube") {
@@ -416,32 +463,43 @@ function parseYouTubePaste(text, platform = "youtube") {
   }));
 }
 
-// Auto-detect whether pasted text looks like Buffer (numbered) or @handle format
+// Auto-detect paste format
 function detectPasteFormat(text) {
   const lines = text.split("\n");
-  const bufferCount  = lines.filter(l => /^\d+\.\s+\S/.test(l)).length;
-  const handleCount  = lines.filter(l => /^@\S/.test(l.trim())).length;
-  if (handleCount > bufferCount) return "handle";
-  if (bufferCount > 0) return "buffer";
-  return "unknown";
+  const inlineTimeRe = /\d+\s+(?:hours?|days?|weeks?|months?|minutes?|seconds?)\s+ago/i;
+  const numberedCount   = lines.filter(l => /^\d+\.\s+\S/.test(l)).length;
+  const handleCount     = lines.filter(l => /^@\S/.test(l.trim())).length;
+  // Unnumbered: line has inline time but isn't a numbered or @handle line
+  const unnumberedCount = lines.filter(l => {
+    const t = l.trim();
+    return t && !(/^\d+\.\s+/.test(t)) && !(/^@\S/.test(t)) && inlineTimeRe.test(t);
+  }).length;
+  const best = Math.max(numberedCount, handleCount, unnumberedCount);
+  if (best === 0) return "unknown";
+  if (handleCount === best)     return "handle";
+  if (numberedCount === best)   return "buffer";
+  return "unnumbered";
 }
 
 function parsePaste(text, platform) {
   const fmt = detectPasteFormat(text);
-  if (fmt === "handle") return { items: parseYouTubePaste(text, platform), fmt };
-  if (fmt === "buffer") return { items: parseBufferPaste(text, platform), fmt };
-  // Try both and return whichever yields more results
-  const buf = parseBufferPaste(text, platform);
-  const yt  = parseYouTubePaste(text, platform);
-  return yt.length >= buf.length
-    ? { items: yt, fmt: "handle" }
-    : { items: buf, fmt: "buffer" };
+  if (fmt === "handle")     return { items: parseYouTubePaste(text, platform), fmt };
+  if (fmt === "buffer")     return { items: parseBufferPaste(text, platform), fmt };
+  if (fmt === "unnumbered") return { items: parseBufferUnnumbered(text, platform), fmt };
+  // Unknown — try all three, return whichever yields most results
+  const results = [
+    { items: parseBufferPaste(text, platform),      fmt: "buffer" },
+    { items: parseYouTubePaste(text, platform),     fmt: "handle" },
+    { items: parseBufferUnnumbered(text, platform), fmt: "unnumbered" },
+  ];
+  return results.reduce((best, r) => r.items.length > best.items.length ? r : best, results[0]);
 }
 
 const FORMAT_LABELS = {
-  buffer: "Buffer / Instagram numbered",
-  handle: "@handle (YouTube / generic)",
-  unknown: "auto-detected",
+  buffer:     "Buffer / Instagram numbered",
+  handle:     "@handle (YouTube / generic)",
+  unnumbered: "Buffer unnumbered (inline timestamp)",
+  unknown:    "auto-detected",
 };
 
 function PasteTextImport({ onImport, platform, postUrl }) {
@@ -513,7 +571,7 @@ function PasteTextImport({ onImport, platform, postUrl }) {
         <textarea
           value={text}
           onChange={e => { setText(e.target.value); setParsed(null); setError(null); }}
-          placeholder={"Buffer format:\n1. username16 hours ago\nComment text...\n\nYouTube format:\n@handle\n13 hours ago\nComment text\n4\nReply"}
+          placeholder={"Buffer numbered:  1. username16 hours ago  Comment text...\nBuffer plain:     username15 days ago  Comment text...\nYouTube:          @handle\n                  13 hours ago\n                  Comment text"}
           style={{
             width: "100%", minHeight: 220, resize: "vertical", boxSizing: "border-box",
             borderRadius: 12, border: `1px solid ${error ? T.red : T.border}`,
