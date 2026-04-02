@@ -1303,7 +1303,11 @@ export default function ImportPage() {
       const buildMergedList = (prev) => {
         const map = new Map(prev.map(i => [`${i.platform||"instagram"}:${i.handle?.toLowerCase()}`, i]));
         for (const rawItem of newInteractions) {
-          const withPlat = { ...rawItem, platform: rawItem.platform || detectedPlatform };
+          const withPlat = {
+            ...rawItem,
+            platform: rawItem.platform || detectedPlatform,
+            post_url: rawItem.post_url || sessionPostUrl?.trim() || null,
+          };
           const item = autofillKnown(withPlat);
           const key = `${item.platform||"instagram"}:${item.handle?.toLowerCase()}`;
           if (!key) continue;
@@ -1511,7 +1515,14 @@ export default function ImportPage() {
             ...(existing.interaction_type ? existing.interaction_type.split(",") : []),
             ...(item.interaction_type ? item.interaction_type.split(",") : []),
           ])].join(",");
-          const merged = { ...existing, interaction_type: allTypes };
+          const merged = {
+            ...existing,
+            interaction_type: allTypes,
+            // Prefer whichever has a value — incoming import may add post_url/content
+            // that the earlier entry was missing
+            post_url: item.post_url || existing.post_url || null,
+            content:  item.content  || existing.content  || null,
+          };
           merged.zone = computeZone({ ...merged, on_watchlist: item.on_watchlist || existing.on_watchlist });
           map.set(key, merged);
         }
