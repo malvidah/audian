@@ -41,7 +41,10 @@ const PLAT_LABEL  = { youtube: "YouTube", x: "X", instagram: "Instagram", linked
 export const sans = "-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif";
 export const F    = { xl: 28, lg: 20, md: 15, sm: 13, xs: 11 };
 
-const H1_FROM = "2020-01-01";
+function daysAgo(n) {
+  const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10);
+}
+const TODAY = new Date().toISOString().slice(0, 10);
 
 const TAB_STYLE = (active) => ({
   display: "inline-flex",
@@ -817,8 +820,10 @@ export default function PageShell({ activeTab, children }) {
   const [error,          setError]         = useState(null);
   const [activePlatform, setActivePlatform] = useState("all");
   const [selectedWeek,   setSelectedWeek]  = useState(null);
-  const [dateFrom,       setDateFrom]      = useState(H1_FROM);
-  const [dateTo,         setDateTo]        = useState(new Date().toISOString().slice(0, 10));
+  const [dateRange,      setDateRange]      = useState("30d");   // "30d" | "6m" | "1y" | "custom"
+  const [dateFrom,       setDateFrom]      = useState(daysAgo(30));
+  const [dateTo,         setDateTo]        = useState(TODAY);
+  const [showCustom,     setShowCustom]    = useState(false);
   const [followerSnaps,  setFollowerSnaps] = useState([]);
   const [followerLatest, setFollowerLatest] = useState({});
   const [weekFilter,     setWeekFilter]    = useState(null);
@@ -1027,29 +1032,59 @@ export default function PageShell({ activeTab, children }) {
           </div>
 
           {/* Date range picker */}
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            {loading && (
-              <span style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>Loading...</span>
-            )}
-            {[
-              { label: "From", value: dateFrom, set: setDateFrom },
-              { label: "To",   value: dateTo,   set: setDateTo   },
-            ].map(({ label, value, set }) => (
-              <div key={label} style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                <span style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>{label}</span>
-                <input
-                  type="date"
-                  value={value}
-                  onChange={e => { set(e.target.value); setSelectedWeek(null); }}
-                  style={{
-                    fontFamily: sans, fontSize: F.xs, color: T.text,
-                    background: T.card, border: `1px solid ${T.border}`,
-                    borderRadius: 7, padding: "5px 8px", cursor: "pointer",
-                    outline: "none",
-                  }}
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            {loading && <span style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>Loading…</span>}
+
+            {/* Preset pills */}
+            <div style={{ display: "flex", background: T.well, border: `1px solid ${T.border}`, borderRadius: 8, padding: 2, gap: 1 }}>
+              {[
+                { key: "30d", label: "30d",    from: () => daysAgo(30),  to: () => TODAY },
+                { key: "6m",  label: "6m",     from: () => daysAgo(183), to: () => TODAY },
+                { key: "1y",  label: "1y",     from: () => daysAgo(365), to: () => TODAY },
+                { key: "custom", label: "Custom ▾", from: null, to: null },
+              ].map(opt => {
+                const isActive = dateRange === opt.key;
+                return (
+                  <button key={opt.key}
+                    onClick={() => {
+                      setDateRange(opt.key);
+                      setSelectedWeek(null);
+                      if (opt.key !== "custom") {
+                        setDateFrom(opt.from());
+                        setDateTo(opt.to());
+                        setShowCustom(false);
+                      } else {
+                        setShowCustom(s => !s);
+                      }
+                    }}
+                    style={{
+                      fontFamily: sans, fontSize: F.xs, fontWeight: isActive ? 600 : 400,
+                      padding: "4px 10px", borderRadius: 6, border: "none", cursor: "pointer",
+                      background: isActive ? T.card : "transparent",
+                      color: isActive ? T.text : T.dim,
+                      boxShadow: isActive ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
+                      transition: "all 0.12s",
+                    }}>
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Custom date inputs — shown inline when Custom is active */}
+            {showCustom && (
+              <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 8px", background: T.card, border: `1px solid ${T.border}`, borderRadius: 8 }}>
+                <input type="date" value={dateFrom}
+                  onChange={e => { setDateFrom(e.target.value); setSelectedWeek(null); }}
+                  style={{ fontFamily: sans, fontSize: F.xs, color: T.text, background: "transparent", border: "none", outline: "none", cursor: "pointer" }}
+                />
+                <span style={{ color: T.border, fontSize: F.xs }}>→</span>
+                <input type="date" value={dateTo}
+                  onChange={e => { setDateTo(e.target.value); setSelectedWeek(null); }}
+                  style={{ fontFamily: sans, fontSize: F.xs, color: T.text, background: "transparent", border: "none", outline: "none", cursor: "pointer" }}
                 />
               </div>
-            ))}
+            )}
           </div>
         </div>
       </div>

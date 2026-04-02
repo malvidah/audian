@@ -162,7 +162,9 @@ export async function POST() {
       const currentSubs = parseInt(channel.statistics?.subscriberCount || 0);
 
       const analyticsUrl = new URL('https://youtubeanalytics.googleapis.com/v2/reports');
-      analyticsUrl.searchParams.set('ids',        `channel==${channelId}`);
+      // Must use "channel==MINE" — the Analytics API doesn't accept arbitrary UCxxx IDs;
+      // it only returns data for the authenticated user's own channel.
+      analyticsUrl.searchParams.set('ids',        'channel==MINE');
       analyticsUrl.searchParams.set('metrics',    'subscribersGained,subscribersLost');
       analyticsUrl.searchParams.set('dimensions', 'day');
       analyticsUrl.searchParams.set('startDate',  '2005-01-01'); // before YouTube existed; API clips to channel creation
@@ -174,7 +176,13 @@ export async function POST() {
       });
       const analyticsData = await analyticsRes.json();
 
-      if (analyticsData.rows?.length > 0) {
+      // Log errors from Analytics API so we can debug without silently failing
+      if (analyticsData.error) {
+        console.warn('YouTube Analytics API error:', JSON.stringify(analyticsData.error));
+      }
+
+      // Only proceed if we got a meaningful number of data points (guard against partial responses)
+      if (analyticsData.rows?.length > 30) {
         const rows = analyticsData.rows; // [[date, gained, lost], ...]
 
         // Reconstruct absolute counts backwards from today's known total
@@ -208,7 +216,7 @@ export async function POST() {
       }
     } catch (analyticsErr) {
       // Analytics backfill is best-effort; don't abort the whole sync
-      console.warn('Analytics subscriber backfill skipped:', analyticsErr.message);
+      console.warn('Analytics subscriber backfill skipped:', analyticsErr.message || analyticsErr);
     }
 
     // Always write the current full snapshot (with video data) — either as a
