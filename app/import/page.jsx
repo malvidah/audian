@@ -268,6 +268,395 @@ function DropZone({ onFiles, disabled }) {
   );
 }
 
+// ── Paste-text import (Buffer / Instagram copy-paste) ────────────────────────
+function parseRelativeTime(timeAgo) {
+  const now = new Date();
+  const m = timeAgo.match(/(\d+)\s+(hour|day|week|month|minute|second)/i);
+  if (!m) return now.toISOString();
+  const num = parseInt(m[1]);
+  const unit = m[2].toLowerCase();
+  const ms = { second: 1e3, minute: 6e4, hour: 36e5, day: 864e5, week: 6048e5, month: 2592e6 };
+  return new Date(now.getTime() - (ms[unit] || 0) * num).toISOString();
+}
+
+// Split "username16 hours ago" → { handle, timeAgo }
+// Handles edge cases where the handle ends in digits (e.g. tuna_can_333 + "2 days ago")
+function splitHandleTime(remainder) {
+  const unitRe = /^(\d+)\s+(hours?|days?|weeks?|months?|minutes?|seconds?)\s+ago\s*$/i;
+  const maxByUnit = { second: 59, minute: 59, hour: 23, day: 30, week: 8, month: 12 };
+  const candidates = [];
+
+  for (let i = 1; i < remainder.length; i++) {
+    const suffix = remainder.slice(i);
+    const m = suffix.match(unitRe);
+    if (!m) continue;
+    const timeNum = parseInt(m[1]);
+    const unit = m[2].toLowerCase().replace(/s$/, "");
+    if (timeNum < 1 || timeNum > (maxByUnit[unit] || 999)) continue;
+    const handle = remainder.slice(0, i).trim();
+    if (!handle) continue;
+    candidates.push({ handle, timeAgo: m[0].trim(), timeNum, endsDigit: /\d$/.test(handle) });
+  }
+
+  if (!candidates.length) return null;
+
+  // Prefer handles that don't end in a digit (cleaner boundary)
+  const clean = candidates.filter(c => !c.endsDigit);
+  if (clean.length) {
+    clean.sort((a, b) => a.timeNum - b.timeNum);
+    return clean[0];
+  }
+  // All end in digit: pick smallest time; tie-break by longest handle
+  candidates.sort((a, b) => a.timeNum !== b.timeNum
+    ? a.timeNum - b.timeNum
+    : b.handle.length - a.handle.length);
+  return candidates[0];
+}
+
+function parseBufferPaste(text, platform = "instagram") {
+  // Format: "N. username16 hours ago\nComment text\n2. ..."
+  // Handle and time are directly concatenated (no space between them).
+  const leadRe = /^(\d+)\.\s+(.+)$/;
+  const lines = text.split("\n");
+  const entries = [];
+  let current = null;
+
+  for (const line of lines) {
+    const lead = line.match(leadRe);
+    if (lead) {
+      const split = splitHandleTime(lead[2]);
+      if (split) {
+        if (current) entries.push(current);
+        current = { num: parseInt(lead[1]), handle: split.handle, timeAgo: split.timeAgo, contentLines: [] };
+        continue;
+      }
+    }
+    if (current) current.contentLines.push(line);
+  }
+  if (current) entries.push(current);
+
+  return entries
+    .filter(e => e.handle)
+    .map(e => ({
+      handle: e.handle.replace(/^@/, "").trim(),
+      platform,
+      interaction_type: "comment",
+      content: e.contentLines.join("\n").trim() || null,
+      interacted_at: parseRelativeTime(e.timeAgo),
+      zone: "IGNORE",
+      verified: false,
+      followers: null,
+      name: null,
+      bio: null,
+      _source: "paste",
+      _id: `paste_${e.num}_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+    }));
+}
+
+function PasteTextImport({ onImport, platform, postUrl }) {
+  const [text, setText] = useState("");
+  const [parsed, setParsed] = useState(null);
+  const [error, setError] = useState(null);
+
+  // Re-parse automatically when platform changes while text is already entered
+  useEffect(() => { if (parsed) setParsed(null); }, [platform]);
+
+  function handleParse() {
+    setError(null);
+    if (!text.trim()) return;
+    try {
+      const items = parseBufferPaste(text, platform);
+      if (!items.length) {
+        setError("No comments detected. Ensure each line starts with a number like "1. username16 hours ago".");
+        return;
+      }
+      setParsed(items);
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
+  function handleImport() {
+    if (!parsed?.length) return;
+    onImport(parsed.map(p => ({ ...p, post_url: postUrl?.trim() || null })));
+    setText("");
+    setParsed(null);
+    setError(null);
+  }
+
+  return (
+    <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14,
+      padding: 22, boxShadow: T.shadow }}>
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start",
+        gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
+        <div>
+          <div style={{ fontFamily: sans, fontSize: F.lg, fontWeight: 700, color: T.text, marginBottom: 4 }}>
+            📋 Paste comment text
+          </div>
+          <div style={{ fontFamily: sans, fontSize: F.sm, color: T.sub, lineHeight: 1.6 }}>
+            Copy-paste comments from Buffer (or Instagram). Each entry should start with a number,
+            e.g.{" "}
+            <code style={{ background: T.well, padding: "1px 6px", borderRadius: 4,
+              fontSize: F.xs, fontFamily: "ui-monospace, monospace", color: T.text }}>
+              1. username16 hours ago
+            </code>
+            {" "}followed by the comment text.
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
+          {!parsed ? (
+            <Btn onClick={handleParse} disabled={!text.trim()}>Parse comments</Btn>
+          ) : (
+            <Btn onClick={handleImport}>✓ Add {parsed.length} to review</Btn>
+          )}
+        </div>
+      </div>
+
+      {!parsed ? (
+        <textarea
+          value={text}
+          onChange={e => { setText(e.target.value); setParsed(null); setError(null); }}
+          placeholder={"1. username16 hours ago\nComment text here...\n\n2. otheruser1 day ago\nAnother comment..."}
+          style={{
+            width: "100%", minHeight: 220, resize: "vertical", boxSizing: "border-box",
+            borderRadius: 12, border: `1px solid ${error ? T.red : T.border}`,
+            background: T.well, color: T.text, padding: "14px 16px",
+            fontFamily: "'SFMono-Regular', ui-monospace, Menlo, monospace",
+            fontSize: 12, lineHeight: 1.6, outline: "none",
+          }}
+        />
+      ) : (
+        <div style={{ background: T.well, borderRadius: 10, padding: "14px 16px" }}>
+          <div style={{ fontFamily: sans, fontSize: F.sm, color: T.green, fontWeight: 600, marginBottom: 8 }}>
+            ✓ Parsed {parsed.length} comments{postUrl.trim() ? ` · post URL set` : ""} — click "Add {parsed.length} to review" above to continue
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {parsed.slice(0, 10).map((p, i) => (
+              <span key={i} style={{ fontFamily: sans, fontSize: F.xs, background: T.card,
+                border: `1px solid ${T.border}`, borderRadius: 6, padding: "3px 8px", color: T.sub }}>
+                @{p.handle}
+              </span>
+            ))}
+            {parsed.length > 10 && (
+              <span style={{ fontFamily: sans, fontSize: F.xs, color: T.dim, padding: "3px 0" }}>
+                +{parsed.length - 10} more
+              </span>
+            )}
+          </div>
+          <button onClick={() => setParsed(null)}
+            style={{ marginTop: 10, background: "none", border: "none", fontFamily: sans,
+              fontSize: F.xs, color: T.sub, cursor: "pointer", padding: 0 }}>
+            ← Edit text
+          </button>
+        </div>
+      )}
+
+      {error && (
+        <div style={{ fontFamily: sans, fontSize: F.sm, color: T.red, marginTop: 8 }}>{error}</div>
+      )}
+    </div>
+  );
+}
+
+// ── CSV import (interactions) ─────────────────────────────────────────────────
+// Robust quoted-field CSV parser
+function parseCsvText(text) {
+  const rows = [];
+  let row = [], field = "", inQuotes = false, i = 0;
+  while (i < text.length) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"' && text[i + 1] === '"') { field += '"'; i += 2; continue; }
+      if (ch === '"') { inQuotes = false; i++; continue; }
+      field += ch; i++;
+    } else {
+      if (ch === '"') { inQuotes = true; i++; continue; }
+      if (ch === ',') { row.push(field); field = ""; i++; continue; }
+      if (ch === '\n' || ch === '\r') {
+        row.push(field); field = "";
+        if (row.some(f => f.trim())) rows.push(row);
+        row = [];
+        i += (ch === '\r' && text[i + 1] === '\n') ? 2 : 1;
+        continue;
+      }
+      field += ch; i++;
+    }
+  }
+  row.push(field);
+  if (row.some(f => f.trim())) rows.push(row);
+  if (rows.length < 2) return [];
+  const headers = rows[0].map(h => h.trim().toLowerCase().replace(/\s+/g, "_"));
+  return rows.slice(1).map(cells => {
+    const obj = {};
+    headers.forEach((h, idx) => { obj[h] = (cells[idx] || "").trim(); });
+    return obj;
+  });
+}
+
+function parseInteractionsCsv(text, platform = "instagram", postUrl = "") {
+  const rows = parseCsvText(text);
+  if (!rows.length) return [];
+  const BOOL_TRUE = new Set(["true", "yes", "1", "y"]);
+  const VALID_ZONES = new Set(["ELITE", "INFLUENTIAL", "SIGNAL", "IGNORE"]);
+
+  return rows.map((row, idx) => {
+    const handle = (
+      row.handle || row.username || row.instagram_handle ||
+      row.x_handle || row.youtube_handle || row.linkedin_handle || ""
+    ).replace(/^@/, "").trim();
+    if (!handle) return null;
+
+    const rowPlatform = row.platform || platform;
+    const rawDate = row.interacted_at || row.date || row.timestamp || row.created_at || "";
+    let interacted_at = null;
+    if (rawDate) {
+      const d = new Date(rawDate);
+      if (!isNaN(d.getTime())) interacted_at = d.toISOString();
+    }
+    const followers = row.followers
+      ? parseInt(row.followers.replace(/[,_\s]/g, ""), 10) || null : null;
+    const rowZone = (row.zone || "").toUpperCase();
+
+    return {
+      handle,
+      platform: rowPlatform,
+      interaction_type: row.interaction_type || row.type || "comment",
+      content: row.content || row.comment || row.text || null,
+      interacted_at,
+      followers,
+      verified: BOOL_TRUE.has((row.verified || "").toLowerCase()),
+      name: row.name || row.display_name || null,
+      bio: row.bio || row.description || null,
+      post_url: row.post_url || row.url || postUrl?.trim() || null,
+      zone: VALID_ZONES.has(rowZone) ? rowZone : "IGNORE",
+      notes: row.notes || null,
+      _source: "csv",
+      _id: `csv_${idx}_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+    };
+  }).filter(Boolean);
+}
+
+function CsvInteractionsImport({ onImport, platform, postUrl }) {
+  const [text, setText] = useState("");
+  const [parsed, setParsed] = useState(null);
+  const [error, setError] = useState(null);
+  const fileRef = useRef(null);
+
+  useEffect(() => { if (parsed) setParsed(null); }, [platform]);
+
+  async function loadFile(file) {
+    if (!file) return;
+    setText(await file.text());
+    setParsed(null);
+    setError(null);
+  }
+
+  function handleParse() {
+    setError(null);
+    if (!text.trim()) return;
+    try {
+      const items = parseInteractionsCsv(text, platform, postUrl);
+      if (!items.length) {
+        setError("No rows parsed. Make sure the CSV has a header row with a 'handle' column.");
+        return;
+      }
+      setParsed(items);
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
+  function handleImport() {
+    if (!parsed?.length) return;
+    onImport(parsed);
+    setText("");
+    setParsed(null);
+    setError(null);
+  }
+
+  const codeStyle = {
+    background: T.well, padding: "1px 5px", borderRadius: 4,
+    fontSize: F.xs, fontFamily: "ui-monospace, monospace", color: T.text,
+  };
+
+  return (
+    <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14,
+      padding: 22, boxShadow: T.shadow }}>
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start",
+        gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
+        <div>
+          <div style={{ fontFamily: sans, fontSize: F.lg, fontWeight: 700, color: T.text, marginBottom: 4 }}>
+            📄 Import interactions CSV
+          </div>
+          <div style={{ fontFamily: sans, fontSize: F.sm, color: T.sub, lineHeight: 1.6 }}>
+            Upload or paste a CSV — needs a <code style={codeStyle}>handle</code> column.
+            Optional: <code style={codeStyle}>platform</code>, <code style={codeStyle}>interaction_type</code>,{" "}
+            <code style={codeStyle}>content</code>, <code style={codeStyle}>interacted_at</code>,{" "}
+            <code style={codeStyle}>followers</code>, <code style={codeStyle}>verified</code>,{" "}
+            <code style={codeStyle}>name</code>, <code style={codeStyle}>bio</code>,{" "}
+            <code style={codeStyle}>post_url</code>. Session defaults fill in any gaps.
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
+          <Btn variant="secondary" onClick={() => fileRef.current?.click()}>Upload CSV</Btn>
+          {!parsed ? (
+            <Btn onClick={handleParse} disabled={!text.trim()}>Parse CSV</Btn>
+          ) : (
+            <Btn onClick={handleImport}>✓ Add {parsed.length} to review</Btn>
+          )}
+          <input ref={fileRef} type="file" accept=".csv,text/csv" style={{ display: "none" }}
+            onChange={e => loadFile(e.target.files?.[0])} />
+        </div>
+      </div>
+
+      {!parsed ? (
+        <textarea
+          value={text}
+          onChange={e => { setText(e.target.value); setParsed(null); setError(null); }}
+          placeholder={"handle,platform,interaction_type,content,followers,interacted_at\njanedoe,instagram,comment,\"Love this!\",5200,2026-03-15\njohnsmith,instagram,like,,1200,"}
+          style={{
+            width: "100%", minHeight: 160, resize: "vertical", boxSizing: "border-box",
+            borderRadius: 12, border: `1px solid ${error ? T.red : T.border}`,
+            background: T.well, color: T.text, padding: "14px 16px",
+            fontFamily: "'SFMono-Regular', ui-monospace, Menlo, monospace",
+            fontSize: 12, lineHeight: 1.6, outline: "none",
+          }}
+        />
+      ) : (
+        <div style={{ background: T.well, borderRadius: 10, padding: "14px 16px" }}>
+          <div style={{ fontFamily: sans, fontSize: F.sm, color: T.green, fontWeight: 600, marginBottom: 8 }}>
+            ✓ Parsed {parsed.length} rows{postUrl?.trim() ? ` · post URL set` : ""} — click "Add {parsed.length} to review" above to continue
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {parsed.slice(0, 10).map((p, i) => (
+              <span key={i} style={{ fontFamily: sans, fontSize: F.xs, background: T.card,
+                border: `1px solid ${T.border}`, borderRadius: 6, padding: "3px 8px", color: T.sub }}>
+                @{p.handle}
+              </span>
+            ))}
+            {parsed.length > 10 && (
+              <span style={{ fontFamily: sans, fontSize: F.xs, color: T.dim, padding: "3px 0" }}>
+                +{parsed.length - 10} more
+              </span>
+            )}
+          </div>
+          <button onClick={() => setParsed(null)}
+            style={{ marginTop: 10, background: "none", border: "none", fontFamily: sans,
+              fontSize: F.xs, color: T.sub, cursor: "pointer", padding: 0 }}>
+            ← Edit CSV
+          </button>
+        </div>
+      )}
+
+      {error && (
+        <div style={{ fontFamily: sans, fontSize: F.sm, color: T.red, marginTop: 8 }}>{error}</div>
+      )}
+    </div>
+  );
+}
+
 // ── Single interaction row (editable) ────────────────────────────────────────
 // ── Inline editable cell ─────────────────────────────────────────────────────
 function EditableCell({ value, onChange, type = "text", placeholder = "—", width, options }) {
@@ -563,6 +952,10 @@ export default function ImportPage() {
   const [autoEnrichStatus, setAutoEnrichStatus] = useState(null);
   const [showManualAdd, setShowManualAdd] = useState(false);
   const [knownProfiles, setKnownProfiles] = useState({}); // handle → all previously seen accounts
+  // Global session defaults — apply to both screenshot and paste imports
+  const [sessionPlatform, setSessionPlatform] = useState("instagram");
+  const [sessionPostUrl, setSessionPostUrl] = useState("");
+  const [sessionDefaultZone, setSessionDefaultZone] = useState("IGNORE");
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -686,7 +1079,8 @@ export default function ImportPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          images: images.map(i => ({ base64: i.base64, mediaType: i.mediaType, filename: i.filename }))
+          images: images.map(i => ({ base64: i.base64, mediaType: i.mediaType, filename: i.filename })),
+          platformHint: sessionPlatform,
         }),
       });
 
@@ -736,7 +1130,7 @@ export default function ImportPage() {
       for (const i of newInteractions) {
         if (i.platform) platCounts[i.platform] = (platCounts[i.platform] || 0) + 1;
       }
-      const detectedPlatform = Object.entries(platCounts).sort((a,b) => b[1]-a[1])[0]?.[0] || "instagram";
+      const detectedPlatform = Object.entries(platCounts).sort((a,b) => b[1]-a[1])[0]?.[0] || sessionPlatform;
 
       const newHandles = new Set(newInteractions.map(i =>
         `${(i.platform || detectedPlatform)}:${i.handle?.toLowerCase()}`).filter(Boolean));
@@ -927,6 +1321,48 @@ export default function ImportPage() {
     setAutoEnrichStatus(null);
   };
 
+  // ── Paste import: merge parsed comments into the review table ───────────────
+  const handlePasteImport = (items) => {
+    const withFill = items.map(item => autofillKnown({ ...item }));
+    const withZone = withFill.map(item => {
+      const computed = computeZone(item);
+      // For paste items with no enrichment data yet, computeZone returns IGNORE.
+      // Apply the session default zone instead so the user's choice is respected.
+      const zone = (computed === "IGNORE" && item._source === "paste") ? sessionDefaultZone : computed;
+      return { ...item, zone };
+    });
+    const newKeys  = new Set(withZone.map(i => `${i.platform}:${i.handle?.toLowerCase()}`));
+
+    let freshList = [];
+    setAllInteractions(prev => {
+      const map = new Map(prev.map(i => [`${i.platform || "instagram"}:${i.handle?.toLowerCase()}`, i]));
+      for (const item of withZone) {
+        const key = `${item.platform}:${item.handle?.toLowerCase()}`;
+        if (!key || !item.handle) continue;
+        if (!map.has(key)) {
+          map.set(key, item);
+        } else {
+          const existing = map.get(key);
+          const allTypes = [...new Set([
+            ...(existing.interaction_type ? existing.interaction_type.split(",") : []),
+            ...(item.interaction_type ? item.interaction_type.split(",") : []),
+          ])].join(",");
+          const merged = { ...existing, interaction_type: allTypes };
+          merged.zone = computeZone({ ...merged, on_watchlist: item.on_watchlist || existing.on_watchlist });
+          map.set(key, merged);
+        }
+      }
+      freshList = Array.from(map.values());
+      return freshList;
+    });
+
+    // Trigger enrichment for newly added handles
+    setTimeout(() => {
+      const toEnrich = freshList.filter(i => newKeys.has(`${i.platform}:${i.handle?.toLowerCase()}`));
+      if (toEnrich.length) autoEnrich(toEnrich);
+    }, 50);
+  };
+
     const handleSave = async () => {
     // Save ALL interactions — not just filtered view
     const toSave = allInteractions.filter(i => i.handle);
@@ -1020,6 +1456,73 @@ export default function ImportPage() {
           <HandlesCsvImport platform={platform} />
         ) : (
           <>
+            {/* ── Global session settings ───────────────────────────────── */}
+            <div style={{
+              background: T.card, border: `1px solid ${T.border}`, borderRadius: 12,
+              padding: "14px 18px", marginBottom: 20, display: "flex",
+              alignItems: "center", gap: 14, flexWrap: "wrap", boxShadow: T.shadow,
+            }}>
+              <span style={{ fontFamily: sans, fontSize: F.xs, fontWeight: 700,
+                color: T.dim, textTransform: "uppercase", letterSpacing: "0.06em",
+                whiteSpace: "nowrap" }}>Session defaults</span>
+
+              {/* Platform */}
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <label style={{ fontFamily: sans, fontSize: F.xs, fontWeight: 600,
+                  color: T.sub, whiteSpace: "nowrap" }}>Platform</label>
+                <select value={sessionPlatform} onChange={e => setSessionPlatform(e.target.value)}
+                  style={{ fontFamily: sans, fontSize: F.sm, color: T.text, background: T.well,
+                    border: `1px solid ${T.border}`, borderRadius: 8, padding: "6px 10px",
+                    cursor: "pointer" }}>
+                  {Object.entries(PLATFORM_LABELS).map(([k, v]) => (
+                    <option key={k} value={k}>{PLATFORM_ICONS[k]} {v}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Default zone (paste imports only) */}
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <label style={{ fontFamily: sans, fontSize: F.xs, fontWeight: 600,
+                  color: T.sub, whiteSpace: "nowrap" }}>Default zone</label>
+                <select value={sessionDefaultZone} onChange={e => setSessionDefaultZone(e.target.value)}
+                  style={{ fontFamily: sans, fontSize: F.sm, color: T.text, background: T.well,
+                    border: `1px solid ${T.border}`, borderRadius: 8, padding: "6px 10px",
+                    cursor: "pointer" }}>
+                  <option value="IGNORE">IGNORE</option>
+                  <option value="SIGNAL">SIGNAL</option>
+                  <option value="INFLUENTIAL">INFLUENTIAL</option>
+                </select>
+                <span style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>paste imports</span>
+              </div>
+
+              {/* Post URL */}
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 240 }}>
+                <label style={{ fontFamily: sans, fontSize: F.xs, fontWeight: 600,
+                  color: T.sub, whiteSpace: "nowrap" }}>Post URL</label>
+                <input
+                  type="url"
+                  value={sessionPostUrl}
+                  onChange={e => setSessionPostUrl(e.target.value)}
+                  placeholder={`https://${sessionPlatform === "youtube" ? "youtube.com/watch?v=…" : sessionPlatform === "x" ? "x.com/user/status/…" : sessionPlatform === "linkedin" ? "linkedin.com/posts/…" : "instagram.com/p/…"} (optional)`}
+                  style={{
+                    flex: 1, fontFamily: sans, fontSize: F.sm, color: T.text,
+                    background: T.well, border: `1px solid ${T.border}`,
+                    borderRadius: 8, padding: "6px 12px", outline: "none",
+                  }}
+                />
+                {sessionPostUrl.trim() && (
+                  <button onClick={() => setSessionPostUrl("")}
+                    style={{ background: "none", border: "none", color: T.dim,
+                      cursor: "pointer", fontSize: 16, padding: "0 2px", lineHeight: 1 }}
+                    title="Clear post URL">×</button>
+                )}
+              </div>
+
+              <div style={{ fontFamily: sans, fontSize: F.xs, color: T.dim, lineHeight: 1.5 }}>
+                Applies to all screenshots and paste imports this session.
+              </div>
+            </div>
+
             {/* Drop zone */}
             <div style={{ marginBottom: 28 }}>
               <DropZone onFiles={handleFiles} disabled={parsing} />
@@ -1028,9 +1531,27 @@ export default function ImportPage() {
                   fontSize: F.sm, color: T.sub }}>
                   <span style={{ display: "inline-block", animation: "spin 1s linear infinite",
                     marginRight: 8 }}>⟳</span>
-                  Parsing screenshots with Claude Vision…
+                  Parsing {PLATFORM_LABELS[sessionPlatform] || "screenshots"} with Claude Vision…
                 </div>
               )}
+            </div>
+
+            {/* Paste text import */}
+            <div style={{ marginBottom: 28 }}>
+              <PasteTextImport
+                onImport={handlePasteImport}
+                platform={sessionPlatform}
+                postUrl={sessionPostUrl}
+              />
+            </div>
+
+            {/* CSV import */}
+            <div style={{ marginBottom: 28 }}>
+              <CsvInteractionsImport
+                onImport={handlePasteImport}
+                platform={sessionPlatform}
+                postUrl={sessionPostUrl}
+              />
             </div>
 
             {/* Screenshot cards */}
@@ -1159,14 +1680,15 @@ export default function ImportPage() {
             )}
 
             {/* Empty state */}
-            {!parsing && screenshots.length === 0 && (
+            {!parsing && screenshots.length === 0 && allInteractions.length === 0 && (
               <div style={{ textAlign: "center", padding: "48px 0", color: T.dim }}>
                 <div style={{ fontSize: 48, marginBottom: 12, opacity: 0.4 }}>📱</div>
                 <div style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 500 }}>
-                  Drop your Instagram screenshots above to get started
+                  Drop screenshots above — or paste comment text directly
                 </div>
                 <div style={{ fontFamily: sans, fontSize: F.xs, marginTop: 8, lineHeight: 1.6 }}>
-                  Works best with: Activity/Notifications feed · Post likers · Follower lists · Comment sections
+                  Screenshots: Activity feed · Post likers · Follower lists · Comment sections<br />
+                  Paste text: Copy comments from Buffer or Instagram
                 </div>
               </div>
             )}

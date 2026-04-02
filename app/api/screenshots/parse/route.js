@@ -3,13 +3,17 @@ import { NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
-const SYSTEM_PROMPT = `You are parsing social media screenshots to extract interaction data for a brand analytics dashboard.
+function buildSystemPrompt(platformHint) {
+  const hintLine = platformHint
+    ? `\nPLATFORM HINT: If you cannot confidently determine the platform from visual UI cues in the screenshot, use "${platformHint}" as the platform for all rows. Always prefer visual detection over this hint.`
+    : "";
+  return `You are parsing social media screenshots to extract interaction data for a brand analytics dashboard.
 
 FIRST: Identify which platform this screenshot is from. Look for platform-specific UI cues:
 - Instagram: Stories, Reels, round profile photos, heart likes, follower counts, blue verified checkmark
 - X (Twitter): Tweet format, retweet/quote icons, X logo, blue verified badge or gray badge
 - YouTube: Video thumbnails, subscriber counts, comment sections with thumbs up, YouTube logo
-- LinkedIn: Professional profile layouts, connection counts, LinkedIn blue UI
+- LinkedIn: Professional profile layouts, connection counts, LinkedIn blue UI${hintLine}
 
 For each visible person/account extract:
 - handle: Username/handle without @ or prefix (required — skip if not visible)
@@ -28,8 +32,9 @@ Return ONLY a valid JSON array, no markdown fences, no explanation:
 [{"handle":"username","name":"Display Name","followers":45200,"verified":true,"interaction_type":"like","content":null,"platform":"instagram","zone":"INFLUENTIAL","notes":""}]
 
 If no interactions visible, return [].`;
+}
 
-async function parseOne(img, apiKey) {
+async function parseOne(img, apiKey, platformHint) {
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -40,7 +45,7 @@ async function parseOne(img, apiKey) {
     body: JSON.stringify({
       model: 'claude-opus-4-6',
       max_tokens: 2000,
-      system: SYSTEM_PROMPT,
+      system: buildSystemPrompt(platformHint),
       messages: [{
         role: 'user',
         content: [
@@ -80,7 +85,7 @@ async function parseOne(img, apiKey) {
 
 export async function POST(req) {
   try {
-    const { images } = await req.json();
+    const { images, platformHint } = await req.json();
     if (!images?.length) {
       return NextResponse.json({ error: 'No images provided' }, { status: 400 });
     }
@@ -91,7 +96,7 @@ export async function POST(req) {
     }
 
     // Process all images in parallel — sequential was the 504 culprit
-    const settled = await Promise.allSettled(images.map(img => parseOne(img, apiKey)));
+    const settled = await Promise.allSettled(images.map(img => parseOne(img, apiKey, platformHint)));
 
     const results = settled.map((r, i) => ({
       filename:     images[i].filename,
