@@ -525,19 +525,104 @@ function parseYouTubePaste(text, platform = "youtube") {
   }));
 }
 
+// ── Buffer per-post format ────────────────────────────────────────────────────
+// Format:
+//   handle
+//   17 hours ago
+//   Comment text (multi-line until next handle+time pair)
+//
+// Key: handle is alone on its own line (no spaces — social handles never have them),
+// immediately followed by a standalone timestamp line.
+function parseBufferPerPost(text, platform = "instagram") {
+  const timeRe = /^(\d+)\s+(hours?|days?|weeks?|months?|minutes?|seconds?|years?)\s+ago$/i;
+  const lines = text.split("\n").map(l => l.trim());
+
+  // A line is a handle candidate if:
+  // - non-empty, no spaces (handles never have spaces)
+  // - not itself a timestamp
+  // - not a numbered-list entry (1. ...)
+  // - AND the very next non-empty line is a timestamp
+  function isHandleLine(idx) {
+    const l = lines[idx];
+    if (!l || /\s/.test(l) || timeRe.test(l) || /^\d+\.\s+/.test(l)) return false;
+    // Look for the next non-empty line
+    for (let j = idx + 1; j < lines.length; j++) {
+      if (lines[j] === "") continue;
+      return timeRe.test(lines[j]);
+    }
+    return false;
+  }
+
+  const entries = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    if (isHandleLine(i)) {
+      const handle = lines[i].replace(/^@/, "");
+      i++;
+      // Advance past blank lines to find the timestamp
+      while (i < lines.length && lines[i] === "") i++;
+      const timeAgo = timeRe.test(lines[i] || "") ? lines[i] : null;
+      if (timeAgo) i++;
+
+      const contentLines = [];
+      // Collect until the next handle+time pair
+      while (i < lines.length && !isHandleLine(i)) {
+        contentLines.push(lines[i]);
+        i++;
+      }
+      // Trim trailing blank lines
+      while (contentLines.length > 0 && !contentLines[contentLines.length - 1]) contentLines.pop();
+
+      if (handle) entries.push({ handle, timeAgo, content: contentLines.join("\n").trim() || null });
+    } else {
+      i++;
+    }
+  }
+
+  return entries.map((e, idx) => ({
+    handle: e.handle,
+    platform,
+    interaction_type: "comment",
+    content: e.content,
+    interacted_at: e.timeAgo ? parseRelativeTime(e.timeAgo) : null,
+    zone: "IGNORE",
+    verified: false,
+    followers: null,
+    name: null,
+    bio: null,
+    _source: "paste",
+    _id: `paste_pp_${idx}_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+  }));
+}
+
 // Auto-detect paste format
 function detectPasteFormat(text) {
-  const lines = text.split("\n");
+  const lines = text.split("\n").map(l => l.trim());
+  const timeRe = /^\d+\s+(?:hours?|days?|weeks?|months?|minutes?|seconds?|years?)\s+ago$/i;
   const inlineTimeRe = /\d+\s+(?:hours?|days?|weeks?|months?|minutes?|seconds?)\s+ago/i;
-  const numberedCount   = lines.filter(l => /^\d+\.\s+\S/.test(l)).length;
-  const handleCount     = lines.filter(l => /^@\S/.test(l.trim())).length;
-  // Unnumbered: line has inline time but isn't a numbered or @handle line
-  const unnumberedCount = lines.filter(l => {
-    const t = l.trim();
-    return t && !(/^\d+\.\s+/.test(t)) && !(/^@\S/.test(t)) && inlineTimeRe.test(t);
+
+  const numberedCount = lines.filter(l => /^\d+\.\s+\S/.test(l)).length;
+  const handleCount   = lines.filter(l => /^@\S/.test(l)).length;
+
+  // Unnumbered: single-line handle+time (no @ prefix, no numbering, inline timestamp)
+  const unnumberedCount = lines.filter(l =>
+    l && !(/^\d+\.\s+/.test(l)) && !(/^@\S/.test(l)) && inlineTimeRe.test(l)
+  ).length;
+
+  // Per-post: handle (no spaces) on its own line, immediately followed by standalone timestamp
+  const perPostCount = lines.filter((l, i) => {
+    if (!l || /\s/.test(l) || timeRe.test(l) || /^\d+\.\s+/.test(l) || /^@\S/.test(l)) return false;
+    for (let j = i + 1; j < lines.length; j++) {
+      if (lines[j] === "") continue;
+      return timeRe.test(lines[j]);
+    }
+    return false;
   }).length;
-  const best = Math.max(numberedCount, handleCount, unnumberedCount);
+
+  const best = Math.max(numberedCount, handleCount, unnumberedCount, perPostCount);
   if (best === 0) return "unknown";
+  if (perPostCount === best)    return "per_post";
   if (handleCount === best)     return "handle";
   if (numberedCount === best)   return "buffer";
   return "unnumbered";
@@ -545,11 +630,13 @@ function detectPasteFormat(text) {
 
 function parsePaste(text, platform) {
   const fmt = detectPasteFormat(text);
-  if (fmt === "handle")     return { items: parseYouTubePaste(text, platform), fmt };
-  if (fmt === "buffer")     return { items: parseBufferPaste(text, platform), fmt };
+  if (fmt === "per_post")   return { items: parseBufferPerPost(text, platform),   fmt };
+  if (fmt === "handle")     return { items: parseYouTubePaste(text, platform),    fmt };
+  if (fmt === "buffer")     return { items: parseBufferPaste(text, platform),     fmt };
   if (fmt === "unnumbered") return { items: parseBufferUnnumbered(text, platform), fmt };
-  // Unknown — try all three, return whichever yields most results
+  // Unknown — try all, return whichever yields most results
   const results = [
+    { items: parseBufferPerPost(text, platform),    fmt: "per_post" },
     { items: parseBufferPaste(text, platform),      fmt: "buffer" },
     { items: parseYouTubePaste(text, platform),     fmt: "handle" },
     { items: parseBufferUnnumbered(text, platform), fmt: "unnumbered" },
@@ -558,7 +645,8 @@ function parsePaste(text, platform) {
 }
 
 const FORMAT_LABELS = {
-  buffer:     "Buffer / Instagram numbered",
+  per_post:   "Buffer per-post (handle / time / content)",
+  buffer:     "Buffer numbered (1. handle+time)",
   handle:     "@handle (YouTube / generic)",
   unnumbered: "Buffer unnumbered (inline timestamp)",
   unknown:    "auto-detected",
@@ -579,7 +667,7 @@ function PasteTextImport({ onImport, platform, postUrl }) {
     try {
       const { items, fmt } = parsePaste(text, platform);
       if (!items.length) {
-        setError('No comments detected. Try pasting Buffer numbered comments (1. username16 hours ago) or YouTube comments (@handle on its own line).');
+        setError('No comments detected. Supported formats: Buffer per-post (handle on its own line, then timestamp, then comment), Buffer numbered (1. handle16 hours ago), or YouTube (@handle on its own line).');
         return;
       }
       setParsed(items);
@@ -612,11 +700,15 @@ function PasteTextImport({ onImport, platform, postUrl }) {
             Paste comments from Buffer, Instagram, YouTube, or anywhere else. Auto-detects format:{" "}
             <code style={{ background: T.well, padding: "1px 5px", borderRadius: 4,
               fontSize: F.xs, fontFamily: "ui-monospace, monospace", color: T.text }}>
-              1. username16 hours ago
-            </code>{" "}(Buffer) or{" "}
+              handle↵17 hours ago↵comment
+            </code>{" "}(Buffer per-post),{" "}
             <code style={{ background: T.well, padding: "1px 5px", borderRadius: 4,
               fontSize: F.xs, fontFamily: "ui-monospace, monospace", color: T.text }}>
-              @handle / 13 hours ago / comment
+              1. handle16h ago
+            </code>{" "}(Buffer numbered), or{" "}
+            <code style={{ background: T.well, padding: "1px 5px", borderRadius: 4,
+              fontSize: F.xs, fontFamily: "ui-monospace, monospace", color: T.text }}>
+              @handle↵time↵comment
             </code>{" "}(YouTube).
           </div>
         </div>
@@ -633,7 +725,7 @@ function PasteTextImport({ onImport, platform, postUrl }) {
         <textarea
           value={text}
           onChange={e => { setText(e.target.value); setParsed(null); setError(null); }}
-          placeholder={"Buffer numbered:  1. username16 hours ago  Comment text...\nBuffer plain:     username15 days ago  Comment text...\nYouTube:          @handle\n                  13 hours ago\n                  Comment text"}
+          placeholder={"Buffer per-post:  handle\n                  17 hours ago\n                  Comment text...\nBuffer numbered:  1. username16 hours ago  Comment text...\nBuffer plain:     username15 days ago  Comment text...\nYouTube:          @handle\n                  13 hours ago\n                  Comment text"}
           style={{
             width: "100%", minHeight: 220, resize: "vertical", boxSizing: "border-box",
             borderRadius: 12, border: `1px solid ${error ? T.red : T.border}`,
