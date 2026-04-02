@@ -62,7 +62,7 @@ const TAB_STYLE = (active) => ({
 });
 
 const TABS = [
-  { key: "engagement",   label: "Content",      emoji: "\uD83D\uDCCA", href: "/" },
+  { key: "engagement",   label: "Posts",        emoji: "\uD83D\uDCCA", href: "/" },
   { key: "interactions", label: "Interactions", emoji: "\uD83E\uDD1D", href: "/interactions" },
   { key: "handles",      label: "Handles",      emoji: "\uD83D\uDC64", href: "/handles" },
 ];

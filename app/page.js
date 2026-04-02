@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import PageShell, { T, sans, F } from "../components/PageShell";
 
 const PLAT_COLORS = { youtube: "#FF0000", x: "#000000", instagram: "#E1306C", linkedin: "#0077B5" };
@@ -38,6 +38,44 @@ function weekEnd(key) {
   const d = new Date(key + "T00:00:00Z");
   d.setUTCDate(d.getUTCDate() + 6);
   return d;
+}
+
+// ─── CSV helpers ─────────────────────────────────────────────────────────────
+function parseCSVLine(line, sep = ",") {
+  const cols = []; let cur = "", inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQ && line[i + 1] === '"') { cur += '"'; i++; } else inQ = !inQ;
+    } else if (ch === sep && !inQ) { cols.push(cur.trim()); cur = ""; }
+    else cur += ch;
+  }
+  cols.push(cur.trim()); return cols;
+}
+
+function normPlatform(p) {
+  if (!p) return "";
+  p = p.toLowerCase().trim();
+  if (p === "twitter" || p === "x (twitter)" || p === "x/twitter") return "x";
+  if (p === "ig") return "instagram";
+  if (p === "yt") return "youtube";
+  if (p === "li") return "linkedin";
+  return p;
+}
+
+function detectPlatformFromUrl(url) {
+  if (!url) return "";
+  if (url.includes("instagram.com"))                          return "instagram";
+  if (url.includes("youtube.com") || url.includes("youtu.be")) return "youtube";
+  if (url.includes("twitter.com") || url.includes("x.com"))  return "x";
+  if (url.includes("linkedin.com"))                           return "linkedin";
+  return "";
+}
+
+function parseDateStr(str) {
+  if (!str) return null;
+  const d = new Date(str);
+  return isNaN(d) ? null : d.toISOString();
 }
 
 // ─── Platform SVG icons ───────────────────────────────────────────────────────
@@ -467,6 +505,303 @@ function Outliers({ posts, activePlatform, selectedWeek }) {
   );
 }
 
+// ─── Import Posts panel ───────────────────────────────────────────────────────
+function ImportPostsPanel({ activePlatform, onImported, onClose }) {
+  const [rawText,    setRawText]    = useState("");
+  const [imageFiles, setImageFiles] = useState([]);
+  const [parsed,     setParsed]     = useState(null);
+  const [loading,    setLoading]    = useState(false);
+  const [result,     setResult]     = useState(null);
+  const [dragging,   setDragging]   = useState(false);
+
+  useEffect(() => {
+    if (!rawText.trim()) { setParsed(null); return; }
+    setParsed(parsePostsText(rawText));
+  }, [rawText, activePlatform]); // eslint-disable-line
+
+  function parsePostsText(text) {
+    const lines = text.trim().split(/\r?\n/).filter(l => l.trim());
+    if (!lines.length) return null;
+    const sep   = lines[0].includes("\t") ? "\t" : ",";
+    const first = lines[0].trim();
+    const isURL = first.startsWith("http") || first.startsWith("www.");
+    const isCSV = !isURL && (first.includes(sep) && !first.startsWith("@"));
+
+    if (isURL) {
+      // One URL per line
+      const rows = lines.map(url => ({
+        platform:    detectPlatformFromUrl(url) || (activePlatform !== "all" ? activePlatform : ""),
+        permalink:   url.trim(), content: null, likes: 0, comments: 0,
+      })).filter(r => r.platform);
+      return { rows, format: "urls" };
+    }
+
+    if (isCSV || first.toLowerCase().includes("url") || first.toLowerCase().includes("date")
+              || first.toLowerCase().includes("platform")) {
+      const splitFn = l => sep === "\t" ? l.split("\t").map(s => s.trim()) : parseCSVLine(l, sep);
+      const headers = splitFn(lines[0]).map(h => h.toLowerCase().replace(/['"]/g, "").trim());
+      const ix = name => {
+        const aliases = {
+          platform:    ["platform","network","channel","source"],
+          permalink:   ["permalink","url","link","post_url","post_link","post url"],
+          content:     ["content","caption","text","title","message","body","description"],
+          published_at:["date","published_at","published","posted","post_date","created_at","created"],
+          likes:       ["likes","like_count","hearts","favorites","faves"],
+          comments:    ["comments","comment_count","replies","reply_count"],
+          impressions: ["impressions","reach","views","view_count","impr"],
+          shares:      ["shares","retweets","reposts","reshares"],
+        };
+        for (const a of (aliases[name] || [name])) {
+          const i = headers.findIndex(h => h === a || h.includes(a));
+          if (i !== -1) return i;
+        }
+        return -1;
+      };
+      const rows = [];
+      for (let i = 1; i < lines.length; i++) {
+        if (!lines[i].trim()) continue;
+        const cols  = splitFn(lines[i]);
+        const get   = n => { const j = ix(n); return j !== -1 ? (cols[j] || "").replace(/^["']|["']$/g, "").trim() : ""; };
+        const plat  = normPlatform(get("platform")) || (activePlatform !== "all" ? activePlatform : "");
+        if (!plat) continue;
+        rows.push({
+          platform:    plat,
+          permalink:   get("permalink") || null,
+          content:     get("content")   || null,
+          published_at: parseDateStr(get("published_at")),
+          likes:       parseInt(get("likes"))       || 0,
+          comments:    parseInt(get("comments"))    || 0,
+          impressions: parseInt(get("impressions")) || 0,
+          shares:      parseInt(get("shares"))      || 0,
+        });
+      }
+      return rows.length ? { rows, format: "csv" } : null;
+    }
+    return null;
+  }
+
+  function handleDrop(e) {
+    e.preventDefault(); setDragging(false);
+    for (const file of Array.from(e.dataTransfer.files)) {
+      if (file.type === "text/csv" || file.name.endsWith(".csv") || file.type === "text/plain" || file.name.endsWith(".tsv")) {
+        const r = new FileReader(); r.onload = ev => setRawText(t => t ? t + "\n" + ev.target.result : ev.target.result); r.readAsText(file);
+      } else if (file.type.startsWith("image/")) {
+        const r = new FileReader(); r.onload = ev => setImageFiles(f => [...f, { name: file.name, preview: ev.target.result }]); r.readAsDataURL(file);
+      }
+    }
+  }
+
+  async function handleImport() {
+    if (!parsed?.rows?.length || loading) return;
+    setLoading(true); setResult(null);
+    try {
+      const res  = await fetch("/api/posts/import", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ posts: parsed.rows }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setResult({ ok: true, msg: `Imported ${data.imported} post${data.imported !== 1 ? "s" : ""}` });
+      onImported?.();
+      setTimeout(() => { setRawText(""); setParsed(null); setResult(null); setImageFiles([]); }, 2500);
+    } catch (e) { setResult({ ok: false, msg: e.message }); }
+    finally { setLoading(false); }
+  }
+
+  const count = parsed?.rows?.length || 0;
+  return (
+    <div style={{ marginBottom: 20, background: T.well, border: `1px solid ${T.border}`, borderRadius: 12, padding: "16px 20px" }}>
+      <div style={{ display: "flex", alignItems: "center", marginBottom: 12 }}>
+        <div style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text }}>Import Posts</div>
+        <button onClick={onClose} style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: T.dim, fontSize: 16, lineHeight: 1, padding: "2px 4px" }}>✕</button>
+      </div>
+
+      {/* Drop zone + textarea */}
+      <div
+        onDragOver={e => { e.preventDefault(); setDragging(true); }}
+        onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setDragging(false); }}
+        onDrop={handleDrop}
+        style={{ position: "relative", borderRadius: 10, border: `2px dashed ${dragging ? T.accent : T.border}`, background: dragging ? T.accent + "08" : T.card, transition: "border-color 0.15s, background 0.15s" }}
+      >
+        <textarea
+          value={rawText}
+          onChange={e => setRawText(e.target.value)}
+          placeholder={"Drop CSV or screenshots here, or paste data…\n\nAccepts:\n  • URLs (one per line)\n  • CSV with columns: url, date, platform, content, likes, comments, impressions\n  • Drag & drop .csv or .tsv files\n  • Drag & drop screenshots (coming soon)"}
+          style={{ width: "100%", minHeight: 130, padding: "14px 16px", fontFamily: "monospace", fontSize: 12, color: T.text, background: "transparent", border: "none", outline: "none", resize: "vertical", lineHeight: 1.6, boxSizing: "border-box" }}
+        />
+        {dragging && (
+          <div style={{ position: "absolute", inset: 0, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none", background: T.accent + "12" }}>
+            <span style={{ fontFamily: sans, fontSize: F.md, fontWeight: 700, color: T.accent }}>Drop to import</span>
+          </div>
+        )}
+      </div>
+
+      {/* Image previews */}
+      {imageFiles.length > 0 && (
+        <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap", alignItems: "center" }}>
+          {imageFiles.map((f, i) => (
+            <div key={i} style={{ position: "relative", width: 72, height: 54, borderRadius: 6, overflow: "hidden", border: `1px solid ${T.border}`, flexShrink: 0 }}>
+              <img src={f.preview} alt={f.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              <button onClick={() => setImageFiles(fs => fs.filter((_, j) => j !== i))} style={{ position: "absolute", top: 2, right: 2, width: 16, height: 16, borderRadius: "50%", background: "rgba(0,0,0,0.65)", color: "#fff", border: "none", cursor: "pointer", fontSize: 9, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
+            </div>
+          ))}
+          <span style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>Screenshot parsing coming soon</span>
+        </div>
+      )}
+
+      {/* Preview */}
+      {parsed?.rows?.length > 0 && (
+        <div style={{ marginTop: 12 }}>
+          <div style={{ fontFamily: sans, fontSize: F.xs, color: T.sub, marginBottom: 6 }}>
+            {count} post{count !== 1 ? "s" : ""} detected · {parsed.format === "csv" ? "CSV" : "URL list"}
+          </div>
+          <div style={{ maxHeight: 160, overflowY: "auto", borderRadius: 8, border: `1px solid ${T.border}`, background: T.card }}>
+            {parsed.rows.slice(0, 25).map((r, i) => (
+              <div key={i} style={{ display: "flex", gap: 8, padding: "6px 12px", alignItems: "center", borderBottom: i < Math.min(count, 25) - 1 ? `1px solid ${T.border}` : "none", fontFamily: sans, fontSize: F.xs }}>
+                <PlatDot platform={r.platform} size={8} />
+                <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: T.text }}>
+                  {r.content || r.permalink || "(no content)"}
+                </span>
+                {r.likes > 0 && <span style={{ color: T.dim, flexShrink: 0 }}>♥ {r.likes}</span>}
+                {r.published_at && <span style={{ color: T.dim, flexShrink: 0 }}>{fmtDate(r.published_at)}</span>}
+              </div>
+            ))}
+            {count > 25 && <div style={{ padding: "6px 12px", fontFamily: sans, fontSize: F.xs, color: T.dim }}>+ {count - 25} more</div>}
+          </div>
+        </div>
+      )}
+
+      {/* Actions */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12 }}>
+        <button
+          disabled={!count || loading}
+          onClick={handleImport}
+          style={{ padding: "7px 18px", borderRadius: 8, border: "none", fontFamily: sans, fontSize: F.xs, fontWeight: 600, cursor: count && !loading ? "pointer" : "default", background: count ? T.accent : T.border, color: count ? "#fff" : T.dim, transition: "background 0.15s" }}>
+          {loading ? "Importing…" : `Import ${count} post${count !== 1 ? "s" : ""}`}
+        </button>
+        {result && (
+          <span style={{ fontFamily: sans, fontSize: F.xs, fontWeight: 500, color: result.ok ? T.green : T.red }}>
+            {result.ok ? "✓ " : "✗ "}{result.msg}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Import Interactions panel (per-post) ─────────────────────────────────────
+function ImportInteractionsPanel({ post, onImported }) {
+  const [rawText,  setRawText]  = useState("");
+  const [loading,  setLoading]  = useState(false);
+  const [result,   setResult]   = useState(null);
+  const [dragging, setDragging] = useState(false);
+
+  function handleDrop(e) {
+    e.preventDefault(); setDragging(false);
+    for (const file of Array.from(e.dataTransfer.files)) {
+      if (file.type === "text/csv" || file.name.endsWith(".csv") || file.type === "text/plain") {
+        const r = new FileReader(); r.onload = ev => setRawText(ev.target.result); r.readAsText(file);
+      }
+    }
+  }
+
+  function parseInteractionsText(text) {
+    const lines = text.trim().split(/\r?\n/).filter(l => l.trim());
+    if (!lines.length) return [];
+    const sep   = lines[0].includes("\t") ? "\t" : ",";
+    const first = lines[0].trim().toLowerCase();
+    const hasHeader = first.includes("handle") || first.includes("name") || first.includes("user") || first.includes("type");
+    const startIdx  = hasHeader ? 1 : 0;
+    const splitFn   = l => sep === "\t" ? l.split("\t").map(s => s.trim()) : parseCSVLine(l, sep);
+
+    let headers = hasHeader ? splitFn(lines[0]).map(h => h.toLowerCase().trim()) : ["handle","type","date","content"];
+    const ix    = name => { const i = headers.findIndex(h => h.includes(name)); return i === -1 ? -1 : i; };
+
+    const rows = [];
+    for (let i = startIdx; i < lines.length; i++) {
+      if (!lines[i].trim()) continue;
+      const cols = splitFn(lines[i]);
+      // Single handle per line (no commas / tabs)
+      if (cols.length === 1) {
+        const h = cols[0].replace(/^@/, "").trim();
+        if (h) rows.push({ name: h, handle: h, platform: post.platform, interaction_type: "comment", post_url: post.permalink });
+        continue;
+      }
+      const get = name => { const j = ix(name); return j !== -1 ? (cols[j] || "").replace(/^["']|["']$/g, "").trim() : ""; };
+      const rawHandle = get("handle") || get("user") || get("name") || cols[0];
+      const handle    = rawHandle.replace(/^@/, "");
+      if (!handle) continue;
+      const interacted_at = parseDateStr(get("date") || get("time") || get("created"));
+      rows.push({
+        name:             handle,
+        handle:           handle,
+        platform:         post.platform,
+        interaction_type: (get("type") || get("interaction") || "comment").toLowerCase(),
+        content:          get("content") || get("comment") || get("text") || undefined,
+        interacted_at:    interacted_at || undefined,
+        post_url:         post.permalink,
+      });
+    }
+    return rows;
+  }
+
+  async function handleImport() {
+    if (!rawText.trim() || loading) return;
+    setLoading(true); setResult(null);
+    const rows = parseInteractionsText(rawText);
+    if (!rows.length) { setResult({ ok: false, msg: "No interactions parsed" }); setLoading(false); return; }
+    let ok = 0, fail = 0;
+    for (const row of rows) {
+      try {
+        const res = await fetch("/api/interactions/add", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(row) });
+        if (res.ok) ok++; else fail++;
+      } catch { fail++; }
+    }
+    setResult({ ok: ok > 0, msg: `${ok} imported${fail > 0 ? `, ${fail} failed` : ""}` });
+    if (ok > 0) { onImported?.(); setRawText(""); }
+    setLoading(false);
+  }
+
+  return (
+    <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${T.border}` }}>
+      <div style={{ fontFamily: sans, fontSize: F.xs, fontWeight: 600, color: T.text, marginBottom: 4 }}>
+        Import Interactions
+      </div>
+      <div style={{ fontFamily: sans, fontSize: F.xs, color: T.dim, marginBottom: 8, lineHeight: 1.5 }}>
+        Platform: <strong>{post.platform}</strong>
+        {post.permalink && <> · <a href={post.permalink} target="_blank" rel="noreferrer" style={{ color: T.accent, textDecoration: "none" }}>{post.permalink.length > 50 ? post.permalink.slice(0, 50) + "…" : post.permalink}</a></>}
+      </div>
+      <div
+        onDragOver={e => { e.preventDefault(); setDragging(true); }}
+        onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setDragging(false); }}
+        onDrop={handleDrop}
+        style={{ borderRadius: 8, border: `1.5px dashed ${dragging ? T.accent : T.border}`, background: dragging ? T.accent + "08" : T.card, transition: "all 0.15s", position: "relative" }}
+      >
+        <textarea
+          value={rawText}
+          onChange={e => setRawText(e.target.value)}
+          placeholder={"Paste interactions or drop a CSV…\n\nFormats:\n  @handle (one per line)\n  handle, type, date, content (CSV)\n  CSV with header row: handle, type, date, content"}
+          style={{ width: "100%", minHeight: 90, padding: "10px 12px", fontFamily: "monospace", fontSize: 12, color: T.text, background: "transparent", border: "none", outline: "none", resize: "vertical", lineHeight: 1.6, boxSizing: "border-box" }}
+        />
+        {dragging && (
+          <div style={{ position: "absolute", inset: 0, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none", background: T.accent + "12" }}>
+            <span style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 700, color: T.accent }}>Drop CSV</span>
+          </div>
+        )}
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
+        <button
+          disabled={!rawText.trim() || loading}
+          onClick={handleImport}
+          style={{ padding: "5px 14px", borderRadius: 7, border: "none", fontFamily: sans, fontSize: F.xs, fontWeight: 600, cursor: rawText.trim() && !loading ? "pointer" : "default", background: rawText.trim() ? T.accent : T.border, color: rawText.trim() ? "#fff" : T.dim }}>
+          {loading ? "Importing…" : "Import"}
+        </button>
+        {result && <span style={{ fontFamily: sans, fontSize: F.xs, color: result.ok ? T.green : T.red }}>{result.ok ? "✓ " : "✗ "}{result.msg}</span>}
+      </div>
+    </div>
+  );
+}
+
 // ─── Inline post interactions expansion ──────────────────────────────────────
 const ZONE_CFG_PANEL = {
   ELITE:       { color: "#FF6B35", bg: "#FFF3EE", border: "#FFD4C2" },
@@ -491,9 +826,16 @@ function ExpandedInteractions({ post, typeFilter, onClose, colSpan }) {
   const [interactions, setInteractions] = useState([]);
   const [loading, setLoading]           = useState(true);
   const [activeType, setActiveType]     = useState(typeFilter || null);
+  const [showImport, setShowImport]     = useState(false);
 
   // Sync when parent switches stat button
   useEffect(() => { setActiveType(typeFilter || null); }, [typeFilter]);
+
+  function refreshInteractions() {
+    if (!post?.permalink) return;
+    fetch(`/api/interactions/list?post_url=${encodeURIComponent(post.permalink)}&limit=200`)
+      .then(r => r.json()).then(d => setInteractions(d.interactions || [])).catch(() => {});
+  }
 
   useEffect(() => {
     if (!post?.permalink) { setLoading(false); return; }
@@ -562,11 +904,12 @@ function ExpandedInteractions({ post, typeFilter, onClose, colSpan }) {
               );
             })}
             <div style={{ flex: 1 }} />
-            <a href={importHref} style={{
-              fontSize: F.xs, fontWeight: 600, color: T.accent, textDecoration: "none",
-              background: "#FFF3EE", border: "1px solid #FFD4C2",
-              borderRadius: 6, padding: "3px 10px", flexShrink: 0,
-            }}>+ Import</a>
+            <button onClick={() => setShowImport(s => !s)} style={{
+              fontSize: F.xs, fontWeight: 600, color: showImport ? "#fff" : T.accent,
+              background: showImport ? T.accent : "#FFF3EE",
+              border: `1px solid ${showImport ? T.accent : "#FFD4C2"}`,
+              borderRadius: 6, padding: "3px 10px", flexShrink: 0, cursor: "pointer",
+            }}>{showImport ? "✕ Close" : "+ Import interactions"}</button>
             <button onClick={onClose} style={{
               background: "none", border: "none", color: T.dim,
               cursor: "pointer", fontSize: 16, padding: "2px 5px", lineHeight: 1, flexShrink: 0,
@@ -594,11 +937,11 @@ function ExpandedInteractions({ post, typeFilter, onClose, colSpan }) {
                     : `No ${activeType} interactions found.`}
                 </div>
                 {interactions.length === 0 && (
-                  <a href={importHref} style={{
+                  <button onClick={() => setShowImport(true)} style={{
                     display: "inline-block", fontSize: F.xs, fontWeight: 600,
-                    color: "#fff", background: T.accent, textDecoration: "none",
-                    borderRadius: 8, padding: "6px 14px",
-                  }}>Import interactions →</a>
+                    color: "#fff", background: T.accent, border: "none",
+                    borderRadius: 8, padding: "6px 14px", cursor: "pointer",
+                  }}>Import interactions →</button>
                 )}
               </div>
             )}
@@ -654,6 +997,11 @@ function ExpandedInteractions({ post, typeFilter, onClose, colSpan }) {
             })}
           </div>
 
+          {/* Import Interactions panel — toggled by button in toolbar */}
+          {showImport && (
+            <ImportInteractionsPanel post={post} onImported={refreshInteractions} />
+          )}
+
         </div>
       </td>
     </tr>
@@ -661,10 +1009,11 @@ function ExpandedInteractions({ post, typeFilter, onClose, colSpan }) {
 }
 
 // ─── Posts table ──────────────────────────────────────────────────────────────
-function PostsTable({ posts, activePlatform, selectedWeek }) {
-  const [sortBy,   setSortBy]   = useState("published_at");
-  const [sortDesc, setSortDesc] = useState(true);
-  const [expanded, setExpanded] = useState(null); // { post, typeFilter }
+function PostsTable({ posts, activePlatform, selectedWeek, onImported }) {
+  const [sortBy,      setSortBy]      = useState("published_at");
+  const [sortDesc,    setSortDesc]    = useState(true);
+  const [expanded,    setExpanded]    = useState(null); // { post, typeFilter }
+  const [showImport,  setShowImport]  = useState(false);
 
   const visible = posts.filter(p => {
     if (activePlatform !== "all" && p.platform !== activePlatform) return false;
@@ -705,9 +1054,9 @@ function PostsTable({ posts, activePlatform, selectedWeek }) {
   return (
     <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14,
       padding: "20px 24px", marginBottom: 24, boxShadow: T.shadowSm }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: showImport ? 12 : 14 }}>
         <div style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text }}>
-          All Content
+          All Posts
           <span style={{
             display: "inline-flex", alignItems: "center", justifyContent: "center",
             marginLeft: 8, minWidth: 22, height: 20, padding: "0 7px",
@@ -720,7 +1069,27 @@ function PostsTable({ posts, activePlatform, selectedWeek }) {
             week of {weekLabel(selectedWeek)}
           </div>
         )}
+        <button
+          onClick={() => setShowImport(s => !s)}
+          style={{
+            marginLeft: "auto", padding: "5px 14px", borderRadius: 8, cursor: "pointer",
+            fontFamily: sans, fontSize: F.xs, fontWeight: 600, border: "1px solid",
+            borderColor: showImport ? T.accent : T.border,
+            background:  showImport ? T.accent : T.well,
+            color:       showImport ? "#fff"   : T.text,
+            transition: "all 0.15s",
+          }}>
+          {showImport ? "✕ Close" : "↑ Import Posts"}
+        </button>
       </div>
+
+      {showImport && (
+        <ImportPostsPanel
+          activePlatform={activePlatform}
+          onImported={onImported}
+          onClose={() => setShowImport(false)}
+        />
+      )}
 
       <div style={{ overflowX: "auto", borderRadius: 12, border: `1px solid ${T.border}` }}>
         <table style={{ width: "100%", borderCollapse: "collapse", background: T.card }}>
@@ -866,7 +1235,7 @@ function PostsTable({ posts, activePlatform, selectedWeek }) {
 export default function EngagementPage() {
   return (
     <PageShell activeTab="engagement">
-      {({ posts, activePlatform, selectedWeek, setSelectedWeek, dateFrom, dateTo, followerSnaps }) => (
+      {({ posts, activePlatform, selectedWeek, setSelectedWeek, dateFrom, dateTo, followerSnaps, loadPosts }) => (
         <>
           <FollowersChart snapshots={followerSnaps} activePlatform={activePlatform} />
 
@@ -889,6 +1258,7 @@ export default function EngagementPage() {
             posts={posts}
             activePlatform={activePlatform}
             selectedWeek={selectedWeek}
+            onImported={() => loadPosts?.(dateFrom, dateTo)}
           />
         </>
       )}
