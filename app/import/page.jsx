@@ -353,9 +353,101 @@ function parseBufferPaste(text, platform = "instagram") {
     }));
 }
 
+// ── YouTube / generic @handle format parser ───────────────────────────────────
+// Format: "@handle\nN unit ago\ncomment text\nlikeCount\nReply\nN replies"
+function parseYouTubePaste(text, platform = "youtube") {
+  const timeRe = /^(\d+)\s+(hours?|days?|weeks?|months?|minutes?|seconds?|years?)\s+ago$/i;
+  const replyMetaRe = /^\d+\s+repl(y|ies)$/i;
+  const standaloneNumRe = /^\d+$/;
+
+  const lines = text.split("\n").map(l => l.trim());
+  const entries = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+    if (!/^@\S/.test(line)) { i++; continue; }
+
+    const handle = line.slice(1).trim();
+    i++;
+    let timeAgo = null;
+    const contentLines = [];
+
+    // Next non-empty line should be the timestamp
+    if (i < lines.length && timeRe.test(lines[i])) {
+      timeAgo = lines[i];
+      i++;
+    }
+
+    // Collect body lines until the next @handle entry
+    while (i < lines.length && !/^@\S/.test(lines[i])) {
+      const l = lines[i];
+      // Skip "Reply" and "N replies" — they're YouTube UI chrome
+      if (l === "Reply" || replyMetaRe.test(l)) { i++; continue; }
+      contentLines.push(l);
+      i++;
+    }
+
+    // Strip trailing standalone like-count numbers and blank lines
+    while (contentLines.length > 0) {
+      const last = contentLines[contentLines.length - 1];
+      if (standaloneNumRe.test(last) || last === "") contentLines.pop();
+      else break;
+    }
+
+    if (handle) {
+      entries.push({ handle, timeAgo, contentLines });
+    }
+  }
+
+  return entries.map((e, idx) => ({
+    handle: e.handle,
+    platform,
+    interaction_type: "comment",
+    content: e.contentLines.join("\n").trim() || null,
+    interacted_at: e.timeAgo ? parseRelativeTime(e.timeAgo) : null,
+    zone: "IGNORE",
+    verified: false,
+    followers: null,
+    name: null,
+    bio: null,
+    _source: "paste",
+    _id: `paste_yt_${idx}_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+  }));
+}
+
+// Auto-detect whether pasted text looks like Buffer (numbered) or @handle format
+function detectPasteFormat(text) {
+  const lines = text.split("\n");
+  const bufferCount  = lines.filter(l => /^\d+\.\s+\S/.test(l)).length;
+  const handleCount  = lines.filter(l => /^@\S/.test(l.trim())).length;
+  if (handleCount > bufferCount) return "handle";
+  if (bufferCount > 0) return "buffer";
+  return "unknown";
+}
+
+function parsePaste(text, platform) {
+  const fmt = detectPasteFormat(text);
+  if (fmt === "handle") return { items: parseYouTubePaste(text, platform), fmt };
+  if (fmt === "buffer") return { items: parseBufferPaste(text, platform), fmt };
+  // Try both and return whichever yields more results
+  const buf = parseBufferPaste(text, platform);
+  const yt  = parseYouTubePaste(text, platform);
+  return yt.length >= buf.length
+    ? { items: yt, fmt: "handle" }
+    : { items: buf, fmt: "buffer" };
+}
+
+const FORMAT_LABELS = {
+  buffer: "Buffer / Instagram numbered",
+  handle: "@handle (YouTube / generic)",
+  unknown: "auto-detected",
+};
+
 function PasteTextImport({ onImport, platform, postUrl }) {
   const [text, setText] = useState("");
   const [parsed, setParsed] = useState(null);
+  const [detectedFmt, setDetectedFmt] = useState(null);
   const [error, setError] = useState(null);
 
   // Re-parse automatically when platform changes while text is already entered
@@ -365,12 +457,13 @@ function PasteTextImport({ onImport, platform, postUrl }) {
     setError(null);
     if (!text.trim()) return;
     try {
-      const items = parseBufferPaste(text, platform);
+      const { items, fmt } = parsePaste(text, platform);
       if (!items.length) {
-        setError('No comments detected. Ensure each line starts with a number like "1. username16 hours ago".');
+        setError('No comments detected. Try pasting Buffer numbered comments (1. username16 hours ago) or YouTube comments (@handle on its own line).');
         return;
       }
       setParsed(items);
+      setDetectedFmt(fmt);
     } catch (e) {
       setError(e.message);
     }
@@ -381,6 +474,7 @@ function PasteTextImport({ onImport, platform, postUrl }) {
     onImport(parsed.map(p => ({ ...p, post_url: postUrl?.trim() || null })));
     setText("");
     setParsed(null);
+    setDetectedFmt(null);
     setError(null);
   }
 
@@ -395,13 +489,15 @@ function PasteTextImport({ onImport, platform, postUrl }) {
             📋 Paste comment text
           </div>
           <div style={{ fontFamily: sans, fontSize: F.sm, color: T.sub, lineHeight: 1.6 }}>
-            Copy-paste comments from Buffer (or Instagram). Each entry should start with a number,
-            e.g.{" "}
-            <code style={{ background: T.well, padding: "1px 6px", borderRadius: 4,
+            Paste comments from Buffer, Instagram, YouTube, or anywhere else. Auto-detects format:{" "}
+            <code style={{ background: T.well, padding: "1px 5px", borderRadius: 4,
               fontSize: F.xs, fontFamily: "ui-monospace, monospace", color: T.text }}>
               1. username16 hours ago
-            </code>
-            {" "}followed by the comment text.
+            </code>{" "}(Buffer) or{" "}
+            <code style={{ background: T.well, padding: "1px 5px", borderRadius: 4,
+              fontSize: F.xs, fontFamily: "ui-monospace, monospace", color: T.text }}>
+              @handle / 13 hours ago / comment
+            </code>{" "}(YouTube).
           </div>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
@@ -417,7 +513,7 @@ function PasteTextImport({ onImport, platform, postUrl }) {
         <textarea
           value={text}
           onChange={e => { setText(e.target.value); setParsed(null); setError(null); }}
-          placeholder={"1. username16 hours ago\nComment text here...\n\n2. otheruser1 day ago\nAnother comment..."}
+          placeholder={"Buffer format:\n1. username16 hours ago\nComment text...\n\nYouTube format:\n@handle\n13 hours ago\nComment text\n4\nReply"}
           style={{
             width: "100%", minHeight: 220, resize: "vertical", boxSizing: "border-box",
             borderRadius: 12, border: `1px solid ${error ? T.red : T.border}`,
@@ -428,8 +524,17 @@ function PasteTextImport({ onImport, platform, postUrl }) {
         />
       ) : (
         <div style={{ background: T.well, borderRadius: 10, padding: "14px 16px" }}>
-          <div style={{ fontFamily: sans, fontSize: F.sm, color: T.green, fontWeight: 600, marginBottom: 8 }}>
-            ✓ Parsed {parsed.length} comments{postUrl.trim() ? ` · post URL set` : ""} — click "Add {parsed.length} to review" above to continue
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+            <span style={{ fontFamily: sans, fontSize: F.sm, color: T.green, fontWeight: 600 }}>
+              ✓ Parsed {parsed.length} comments{postUrl?.trim() ? ` · post URL set` : ""}
+            </span>
+            {detectedFmt && (
+              <span style={{ fontFamily: sans, fontSize: F.xs, color: T.dim,
+                background: T.card, border: `1px solid ${T.border}`,
+                borderRadius: 6, padding: "2px 8px" }}>
+                {FORMAT_LABELS[detectedFmt] || detectedFmt}
+              </span>
+            )}
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
             {parsed.slice(0, 10).map((p, i) => (
@@ -444,7 +549,7 @@ function PasteTextImport({ onImport, platform, postUrl }) {
               </span>
             )}
           </div>
-          <button onClick={() => setParsed(null)}
+          <button onClick={() => { setParsed(null); setDetectedFmt(null); }}
             style={{ marginTop: 10, background: "none", border: "none", fontFamily: sans,
               fontSize: F.xs, color: T.sub, cursor: "pointer", padding: 0 }}>
             ← Edit text
