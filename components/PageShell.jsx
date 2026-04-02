@@ -41,7 +41,7 @@ const PLAT_LABEL  = { youtube: "YouTube", x: "X", instagram: "Instagram", linked
 export const sans = "-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif";
 export const F    = { xl: 28, lg: 20, md: 15, sm: 13, xs: 11 };
 
-const H1_FROM = "2026-01-01";
+const H1_FROM = "2020-01-01";
 
 const TAB_STYLE = (active) => ({
   display: "inline-flex",

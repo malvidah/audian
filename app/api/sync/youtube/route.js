@@ -109,7 +109,14 @@ export async function POST() {
       synced_at:     now,
     }));
 
+    // Count genuinely new rows by checking what already exists
+    let newVideos = 0;
     if (postRows.length > 0) {
+      const existingIds = new Set(
+        ((await supabase.from('posts').select('post_id').eq('platform', 'youtube')).data || [])
+          .map(r => r.post_id)
+      );
+      newVideos = postRows.filter(r => !existingIds.has(r.post_id)).length;
       await supabase
         .from('posts')
         .upsert(postRows, { onConflict: 'platform,post_id', ignoreDuplicates: false });
@@ -234,12 +241,21 @@ export async function POST() {
       updated_at:       now,
     }).eq('platform', 'youtube');
 
-    const msg = `Synced ${postRows.length} videos · ${commentsSaved} new comments imported`;
+    const updatedVideos = postRows.length - newVideos;
+    const parts = [];
+    if (newVideos > 0)      parts.push(`${newVideos} new video${newVideos !== 1 ? 's' : ''}`);
+    if (updatedVideos > 0)  parts.push(`${updatedVideos} updated`);
+    if (commentsSaved > 0)  parts.push(`${commentsSaved} new comment${commentsSaved !== 1 ? 's' : ''}`);
+    if (parts.length === 0) parts.push(`${postRows.length} video${postRows.length !== 1 ? 's' : ''} already up to date`);
+    const msg = parts.join(' · ');
+
     return NextResponse.json({
       success:         true,
       channel:         channel.snippet?.title,
       subscribers:     channel.statistics?.subscriberCount,
+      playlist_items:  videoIds.length,
       videos_synced:   postRows.length,
+      new_videos:      newVideos,
       comments_synced: commentsSaved,
       message:         msg,
     });
