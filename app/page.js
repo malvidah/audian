@@ -467,8 +467,255 @@ function Outliers({ posts, activePlatform, selectedWeek }) {
   );
 }
 
+// ─── Post interactions panel ──────────────────────────────────────────────────
+const ZONE_CFG_PANEL = {
+  ELITE:       { color: "#FF6B35", bg: "#FFF3EE", border: "#FFD4C2" },
+  INFLUENTIAL: { color: "#16A34A", bg: "#F0FDF4", border: "#BBF7D0" },
+  SIGNAL:      { color: "#2563EB", bg: "#EFF6FF", border: "#BFDBFE" },
+  UNASSIGNED:  { color: "#64748B", bg: "#F1F5F9", border: "#CBD5E1" },
+  IGNORE:      { color: "#A8A39C", bg: "#F3F2F0", border: "#E8E6E1" },
+};
+const TYPE_CFG_PANEL = {
+  like:    { label: "Like",    icon: "♥", color: "#DC2626" },
+  follow:  { label: "Follow",  icon: "👤", color: "#2563EB" },
+  comment: { label: "Comment", icon: "💬", color: "#CA8A04" },
+  mention: { label: "Mention", icon: "@",  color: "#FF6B35" },
+  tag:     { label: "Tag",     icon: "🏷", color: "#7C3AED" },
+  view:    { label: "View",    icon: "👁", color: "#64748B" },
+  reply:   { label: "Reply",   icon: "↩", color: "#CA8A04" },
+  repost:  { label: "Repost",  icon: "↗", color: "#16A34A" },
+};
+const ZONE_ORDER = ["ELITE", "INFLUENTIAL", "SIGNAL", "UNASSIGNED", "IGNORE"];
+
+function PostInteractionsPanel({ post, onClose }) {
+  const [interactions, setInteractions] = useState([]);
+  const [loading, setLoading]           = useState(true);
+
+  useEffect(() => {
+    if (!post?.permalink) { setLoading(false); return; }
+    setLoading(true);
+    fetch(`/api/interactions/list?post_url=${encodeURIComponent(post.permalink)}&limit=200`)
+      .then(r => r.json())
+      .then(d => setInteractions(d.interactions || []))
+      .catch(() => setInteractions([]))
+      .finally(() => setLoading(false));
+  }, [post?.permalink]);
+
+  if (!post) return null;
+
+  // Sort by zone rank, then newest first
+  const sorted = [...interactions].sort((a, b) => {
+    const zi = z => ZONE_ORDER.indexOf(z) === -1 ? 4 : ZONE_ORDER.indexOf(z);
+    const zd = zi(a.zone) - zi(b.zone);
+    if (zd !== 0) return zd;
+    return new Date(b.interacted_at || 0) - new Date(a.interacted_at || 0);
+  });
+
+  const importHref = `/import?mode=interactions${post.permalink ? `&post_url=${encodeURIComponent(post.permalink)}` : ""}`;
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div onClick={onClose} style={{
+        position: "fixed", inset: 0, zIndex: 998,
+        background: "rgba(0,0,0,0.2)",
+      }} />
+
+      {/* Panel */}
+      <div style={{
+        position: "fixed", top: 0, right: 0, bottom: 0, width: 460, zIndex: 999,
+        background: "#F8F7F5", borderLeft: "1px solid #E8E6E1",
+        boxShadow: "-4px 0 32px rgba(0,0,0,0.10)",
+        display: "flex", flexDirection: "column", overflow: "hidden",
+        fontFamily: sans,
+      }}>
+        {/* Panel header */}
+        <div style={{
+          padding: "18px 24px 14px", borderBottom: "1px solid #E8E6E1",
+          background: "#fff", flexShrink: 0,
+        }}>
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              {/* Platform + date */}
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                <PlatDot platform={post.platform} size={9} />
+                <span style={{ fontSize: F.xs, color: "#A8A39C" }}>
+                  {post.published_at ? new Date(post.published_at).toLocaleDateString("en-US", {
+                    month: "short", day: "numeric", year: "numeric" }) : ""}
+                </span>
+                {post.permalink && (
+                  <a href={post.permalink} target="_blank" rel="noreferrer"
+                    style={{ marginLeft: "auto", fontSize: F.xs, color: "#FF6B35",
+                      textDecoration: "none", fontWeight: 600, flexShrink: 0 }}>
+                    Open post ↗
+                  </a>
+                )}
+              </div>
+              {/* Post content */}
+              <div style={{
+                fontSize: F.sm, color: "#1A1816", lineHeight: 1.5,
+                overflow: "hidden", display: "-webkit-box",
+                WebkitLineClamp: 3, WebkitBoxOrient: "vertical",
+              }}>
+                {post.content || "—"}
+              </div>
+              {/* Stats row */}
+              <div style={{ display: "flex", gap: 16, marginTop: 10 }}>
+                {[
+                  { label: "likes", val: fmt(post.likes) },
+                  { label: "impressions", val: fmt(post.impressions) },
+                  { label: "comments", val: fmt(post.comments) },
+                ].map(s => s.val !== "—" && (
+                  <span key={s.label} style={{ fontSize: F.xs, color: "#6B6560" }}>
+                    <span style={{ fontWeight: 700, color: "#1A1816" }}>{s.val}</span> {s.label}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <button onClick={onClose}
+              style={{ background: "none", border: "none", color: "#A8A39C",
+                cursor: "pointer", fontSize: 20, padding: "0 2px", lineHeight: 1,
+                flexShrink: 0, marginTop: -2 }}>✕</button>
+          </div>
+        </div>
+
+        {/* Interactions count + import link */}
+        <div style={{
+          padding: "10px 24px", background: "#fff",
+          borderBottom: "1px solid #E8E6E1", flexShrink: 0,
+          display: "flex", alignItems: "center", gap: 10,
+        }}>
+          <span style={{ fontSize: F.xs, fontWeight: 700, color: "#1A1816" }}>
+            {loading ? "Loading…" : `${sorted.length} interaction${sorted.length !== 1 ? "s" : ""}`}
+          </span>
+          <a href={importHref} style={{
+            marginLeft: "auto", fontSize: F.xs, fontWeight: 600,
+            color: "#FF6B35", textDecoration: "none",
+            background: "#FFF3EE", border: "1px solid #FFD4C2",
+            borderRadius: 6, padding: "3px 10px",
+          }}>
+            + Import
+          </a>
+        </div>
+
+        {/* Interactions list */}
+        <div style={{ flex: 1, overflowY: "auto" }}>
+          {loading && (
+            <div style={{ padding: "40px 24px", textAlign: "center" }}>
+              {[1,2,3,4,5].map(i => (
+                <div key={i} style={{
+                  height: 52, marginBottom: 8, borderRadius: 10,
+                  background: "#E8E6E1",
+                  opacity: 1 - i * 0.15,
+                }} />
+              ))}
+            </div>
+          )}
+
+          {!loading && sorted.length === 0 && (
+            <div style={{ padding: "48px 24px", textAlign: "center" }}>
+              <div style={{ fontSize: 32, marginBottom: 12, opacity: 0.3 }}>💬</div>
+              <div style={{ fontSize: F.sm, fontWeight: 600, color: "#1A1816", marginBottom: 6 }}>
+                No interactions yet
+              </div>
+              <div style={{ fontSize: F.xs, color: "#6B6560", marginBottom: 18, lineHeight: 1.6 }}>
+                Import comments from Buffer or paste them directly.
+              </div>
+              <a href={importHref} style={{
+                fontSize: F.sm, fontWeight: 600, color: "#fff",
+                background: "#FF6B35", textDecoration: "none",
+                borderRadius: 8, padding: "8px 18px",
+              }}>
+                Import interactions →
+              </a>
+            </div>
+          )}
+
+          {!loading && sorted.map((ix, i) => {
+            const zone = ix.zone || "IGNORE";
+            const zc   = ZONE_CFG_PANEL[zone] || ZONE_CFG_PANEL.IGNORE;
+            const type = (ix.interaction_type || "comment").split(",")[0].trim();
+            const tc   = TYPE_CFG_PANEL[type] || { label: type, icon: "·", color: "#6B6560" };
+            const d    = ix.interacted_at
+              ? new Date(ix.interacted_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+              : "";
+
+            return (
+              <div key={ix.id || i} style={{
+                display: "flex", alignItems: "flex-start", gap: 0,
+                borderBottom: "1px solid #E8E6E1",
+                background: i % 2 === 0 ? "#fff" : "#F8F7F5",
+                transition: "background 0.1s",
+              }}
+                onMouseEnter={e => e.currentTarget.style.background = "#F3F2F0"}
+                onMouseLeave={e => e.currentTarget.style.background = i % 2 === 0 ? "#fff" : "#F8F7F5"}
+              >
+                {/* Zone stripe */}
+                <div style={{ width: 3, alignSelf: "stretch", flexShrink: 0,
+                  background: zc.color }} />
+
+                <div style={{ flex: 1, padding: "12px 16px", minWidth: 0 }}>
+                  {/* Top row: handle + badges + date */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                    <span style={{ fontSize: F.sm, fontWeight: 600, color: "#1A1816",
+                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, minWidth: 0 }}>
+                      @{ix.handle}
+                    </span>
+                    {/* Type */}
+                    <span style={{ fontSize: F.xs, fontWeight: 600, color: tc.color,
+                      flexShrink: 0, whiteSpace: "nowrap" }}>
+                      {tc.icon} {tc.label}
+                    </span>
+                    {/* Zone */}
+                    <span style={{
+                      fontSize: 9, fontWeight: 700, letterSpacing: "0.04em",
+                      color: zc.color, background: zc.bg, border: `1px solid ${zc.border}`,
+                      borderRadius: 4, padding: "1px 5px", flexShrink: 0,
+                    }}>{zone}</span>
+                    {d && <span style={{ fontSize: F.xs, color: "#A8A39C", flexShrink: 0 }}>{d}</span>}
+                  </div>
+
+                  {/* Name + bio */}
+                  {(ix.name || ix.bio) && (
+                    <div style={{ fontSize: F.xs, color: "#6B6560", marginBottom: 4,
+                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {ix.name && <span style={{ fontWeight: 600 }}>{ix.name}</span>}
+                      {ix.name && ix.bio && <span style={{ margin: "0 4px", color: "#D6D3CC" }}>·</span>}
+                      {ix.bio && <span>{ix.bio}</span>}
+                    </div>
+                  )}
+
+                  {/* Comment content */}
+                  {ix.content && (
+                    <div style={{
+                      fontSize: F.xs, color: "#1A1816", lineHeight: 1.5,
+                      overflow: "hidden", display: "-webkit-box",
+                      WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
+                    }}>
+                      {ix.content}
+                    </div>
+                  )}
+
+                  {/* Followers */}
+                  {ix.followers > 0 && (
+                    <div style={{ fontSize: F.xs, color: "#A8A39C", marginTop: 3 }}>
+                      {ix.followers >= 1_000_000 ? (ix.followers/1_000_000).toFixed(1)+"M"
+                       : ix.followers >= 1_000 ? (ix.followers/1_000).toFixed(1)+"K"
+                       : ix.followers.toLocaleString()} followers
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </>
+  );
+}
+
 // ─── Posts table ──────────────────────────────────────────────────────────────
-function PostsTable({ posts, activePlatform, selectedWeek }) {
+function PostsTable({ posts, activePlatform, selectedWeek, onSelectPost }) {
   const [sortBy,   setSortBy]   = useState("published_at");
   const [sortDesc, setSortDesc] = useState(true);
   const visible = posts.filter(p => {
@@ -546,33 +793,35 @@ function PostsTable({ posts, activePlatform, selectedWeek }) {
               </td></tr>
             )}
             {sorted.map((p, i) => {
-              const likes  = parseInt(p.likes || 0);
-              const isHot  = likes >= LIKES_GOAL;
-              const contentText = p.content || "\u2014";
-              const contentEl = p.permalink
-                ? <a href={p.permalink} target="_blank" rel="noopener noreferrer"
-                    style={{
-                      color: p.post_type === "daily_aggregate" ? T.dim : T.text,
-                      textDecoration: "none",
-                      transition: "color 0.15s ease",
-                    }}
-                    onMouseEnter={e => { e.currentTarget.style.color = T.accent; }}
-                    onMouseLeave={e => { e.currentTarget.style.color = p.post_type === "daily_aggregate" ? T.dim : T.text; }}
-                  >{contentText}</a>
-                : contentText;
+              const likes   = parseInt(p.likes || 0);
+              const isHot   = likes >= LIKES_GOAL;
+              const isDailyAggregate = p.post_type === "daily_aggregate";
+              const clickable = !isDailyAggregate;
               return (
-                <tr key={p.id || i} style={{ background: i % 2 === 0 ? T.card : T.well + "88" }}>
+                <tr
+                  key={p.id || i}
+                  onClick={clickable ? () => onSelectPost(p) : undefined}
+                  style={{
+                    background: i % 2 === 0 ? T.card : T.well + "88",
+                    cursor: clickable ? "pointer" : "default",
+                    transition: "background 0.1s",
+                  }}
+                  onMouseEnter={e => { if (clickable) e.currentTarget.style.background = "#EDE9E3"; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = i % 2 === 0 ? T.card : T.well + "88"; }}
+                >
                   <td style={{ ...td, maxWidth: 0 }}>
                     <div style={{
                       overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                       fontSize: F.xs,
-                      color: p.post_type === "daily_aggregate" ? T.dim : T.text,
-                      fontStyle: p.post_type === "daily_aggregate" ? "italic" : "normal",
-                    }}>{contentEl}</div>
+                      color: isDailyAggregate ? T.dim : T.text,
+                      fontStyle: isDailyAggregate ? "italic" : "normal",
+                    }}>
+                      {p.content || "—"}
+                    </div>
                   </td>
                   <td style={td}><PlatDot platform={p.platform} size={12} /></td>
                   <td style={{ ...td, fontWeight: isHot ? 700 : 400, color: isHot ? T.green : T.text }}>
-                    {isHot && "\uD83D\uDD25 "}{fmt(likes)}
+                    {isHot && "🔥 "}{fmt(likes)}
                   </td>
                   <td style={{ ...td, color: T.sub }}>{fmt(p.impressions)}</td>
                   <td style={{ ...td, color: T.sub }}>{fmt(p.comments)}</td>
@@ -591,6 +840,8 @@ function PostsTable({ posts, activePlatform, selectedWeek }) {
 
 // ─── Main page — Engagement tab ──────────────────────────────────────────────
 export default function EngagementPage() {
+  const [selectedPost, setSelectedPost] = useState(null);
+
   return (
     <PageShell activeTab="engagement">
       {({ posts, activePlatform, selectedWeek, setSelectedWeek, dateFrom, dateTo, followerSnaps }) => (
@@ -616,7 +867,15 @@ export default function EngagementPage() {
             posts={posts}
             activePlatform={activePlatform}
             selectedWeek={selectedWeek}
+            onSelectPost={setSelectedPost}
           />
+
+          {selectedPost && (
+            <PostInteractionsPanel
+              post={selectedPost}
+              onClose={() => setSelectedPost(null)}
+            />
+          )}
         </>
       )}
     </PageShell>

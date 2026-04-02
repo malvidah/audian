@@ -21,7 +21,10 @@ export async function GET(req) {
     .order('interacted_at', { ascending: false })
     .limit(500);
 
+  const post_url = searchParams.get('post_url');
+
   if (handle_id) query = query.eq('handle_id', handle_id);
+  if (post_url)  query = query.eq('post_url', post_url);
 
   const { data, error } = await query;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
