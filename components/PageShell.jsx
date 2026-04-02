@@ -155,6 +155,21 @@ function ImportPanel({ posts, onImported }) {
     }
   }
 
+  async function syncYouTube() {
+    setLoading("youtube");
+    setMessage(null);
+    try {
+      const res  = await fetch("/api/sync/youtube", { method: "POST" });
+      const data = await res.json();
+      setMessage(data.error ? `Error: ${data.error}` : `✓ ${data.message}`);
+      if (!data.error) onImported();
+    } catch (e) {
+      setMessage(`Error: ${e.message}`);
+    } finally {
+      setLoading(null);
+    }
+  }
+
   async function importFile(platform, file) {
     if (!file) return;
     setLoading(platform);
@@ -285,6 +300,15 @@ function ImportPanel({ posts, onImported }) {
                 fontFamily: sans, cursor: "pointer",
               }}>{loading === "instagram" ? "Syncing…" : "Sync from API"}</button>,
               hint: "Pulls individual posts from last API sync",
+            },
+            {
+              id: "youtube", label: "YouTube", color: "#FF0000",
+              action: <button disabled={loading === "youtube"} onClick={syncYouTube} style={{
+                background: "#FF000018", color: "#FF0000", border: "1px solid #FF000044",
+                borderRadius: 7, padding: "6px 14px", fontSize: F.xs, fontWeight: 600,
+                fontFamily: sans, cursor: "pointer",
+              }}>{loading === "youtube" ? "Syncing…" : "Sync from API"}</button>,
+              hint: "Pulls videos + comments from your YouTube channel",
             },
             {
               id: "x", label: "X / Twitter", color: "#000",

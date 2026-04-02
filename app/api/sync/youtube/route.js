@@ -1,23 +1,44 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin as supabase } from '@/lib/supabase';
 
-async function refreshYouTubeToken(refreshToken) {
+export const dynamic = 'force-dynamic';
+
+const BASE = 'https://www.googleapis.com/youtube/v3';
+
+// ── Token refresh ────────────────────────────────────────────────────────────
+async function getAccessToken(conn) {
+  if (!conn.expires_at || new Date(conn.expires_at) > new Date()) {
+    return conn.access_token;
+  }
   const res = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
-      refresh_token: refreshToken,
-      client_id: process.env.GOOGLE_CLIENT_ID,
-      client_secret: process.env.GOOGLE_CLIENT_SECRET,
-      grant_type: 'refresh_token',
+      refresh_token:  conn.refresh_token,
+      client_id:      process.env.GOOGLE_CLIENT_ID,
+      client_secret:  process.env.GOOGLE_CLIENT_SECRET,
+      grant_type:     'refresh_token',
     }),
+  });
+  const data = await res.json();
+  if (!data.access_token) throw new Error('Token refresh failed: ' + JSON.stringify(data));
+  await supabase.from('platform_connections').update({
+    access_token: data.access_token,
+    expires_at:   new Date(Date.now() + data.expires_in * 1000).toISOString(),
+  }).eq('platform', 'youtube');
+  return data.access_token;
+}
+
+async function ytGet(path, token) {
+  const res = await fetch(`${BASE}${path}`, {
+    headers: { Authorization: `Bearer ${token}` },
   });
   return res.json();
 }
 
+// ── Main sync ─────────────────────────────────────────────────────────────────
 export async function POST() {
   try {
-    // Get YouTube connection
     const { data: conns, error } = await supabase
       .from('platform_connections')
       .select('*')
@@ -30,121 +51,197 @@ export async function POST() {
       return NextResponse.json({ error: 'YouTube not connected' }, { status: 400 });
     }
 
-    // Refresh token if expired
-    let accessToken = conn.access_token;
-    if (new Date(conn.expires_at) < new Date()) {
-      const refreshed = await refreshYouTubeToken(conn.refresh_token);
-      accessToken = refreshed.access_token;
-      await supabase.from('platform_connections').update({
-        access_token: accessToken,
-        expires_at: new Date(Date.now() + refreshed.expires_in * 1000).toISOString(),
-      }).eq('platform', 'youtube');
-    }
+    const token = await getAccessToken(conn);
 
-    const headers = { 'Authorization': `Bearer ${accessToken}` };
-
-    // Fetch channel stats
-    const channelRes = await fetch(
-      'https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics&mine=true',
-      { headers }
+    // ── 1. Channel info + uploads playlist ID ────────────────────────────────
+    const channelData = await ytGet(
+      '/channels?part=snippet,statistics,contentDetails&mine=true',
+      token
     );
-    const channelData = await channelRes.json();
     const channel = channelData.items?.[0];
+    if (!channel) {
+      return NextResponse.json({ error: 'No YouTube channel found on this account' }, { status: 400 });
+    }
+    const uploadsId = channel.contentDetails?.relatedPlaylists?.uploads;
 
-    // Fetch recent videos
-    const videosRes = await fetch(
-      'https://www.googleapis.com/youtube/v3/search?part=snippet&forMine=true&type=video&maxResults=20&order=date',
-      { headers }
-    );
-    const videosData = await videosRes.json();
-    const videoIds = videosData.items?.map(v => v.id.videoId).join(',');
-
-    // Fetch video stats
-    let videoStats = [];
-    if (videoIds) {
-      const statsRes = await fetch(
-        `https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics&id=${videoIds}`,
-        { headers }
+    // ── 2. Fetch recent videos via playlistItems (1 unit/req vs 100 for search) ─
+    const allPlaylistItems = [];
+    let pageToken = null;
+    do {
+      const data = await ytGet(
+        `/playlistItems?part=snippet,contentDetails&playlistId=${uploadsId}&maxResults=50${pageToken ? `&pageToken=${pageToken}` : ''}`,
+        token
       );
-      const statsData = await statsRes.json();
-      videoStats = statsData.items || [];
+      allPlaylistItems.push(...(data.items || []));
+      pageToken = data.nextPageToken || null;
+    } while (pageToken && allPlaylistItems.length < 100);
+
+    const videoIds = allPlaylistItems
+      .map(v => v.contentDetails?.videoId)
+      .filter(Boolean);
+
+    // ── 3. Fetch video stats in batches of 50 (single request per batch) ─────
+    const videoStats = [];
+    for (let i = 0; i < videoIds.length; i += 50) {
+      const ids  = videoIds.slice(i, i + 50).join(',');
+      const data = await ytGet(
+        `/videos?part=snippet,statistics&id=${ids}`,
+        token
+      );
+      videoStats.push(...(data.items || []));
     }
 
-    // Fetch top comments across recent videos
-    const comments = [];
-    for (const video of videoStats.slice(0, 5)) {
-      const commentsRes = await fetch(
-        `https://www.googleapis.com/youtube/v3/commentThreads?part=snippet&videoId=${video.id}&maxResults=20&order=relevance`,
-        { headers }
-      );
-      const commentsData = await commentsRes.json();
-      const topComments = (commentsData.items || []).map(item => ({
-        platform: 'youtube',
-        video_id: video.id,
-        video_title: video.snippet?.title,
-        author_name: item.snippet?.topLevelComment?.snippet?.authorDisplayName,
-        author_channel_url: item.snippet?.topLevelComment?.snippet?.authorChannelUrl,
-        content: item.snippet?.topLevelComment?.snippet?.textDisplay,
-        likes: item.snippet?.topLevelComment?.snippet?.likeCount,
-        reply_count: item.snippet?.totalReplyCount,
-        published_at: item.snippet?.topLevelComment?.snippet?.publishedAt,
-      }));
-      comments.push(...topComments);
+    // ── 4. Upsert videos → posts table ────────────────────────────────────────
+    const now      = new Date().toISOString();
+    const postRows = videoStats.map(v => ({
+      platform:      'youtube',
+      post_id:       v.id,
+      content:       v.snippet?.title || null,
+      permalink:     `https://www.youtube.com/watch?v=${v.id}`,
+      published_at:  v.snippet?.publishedAt || null,
+      likes:         parseInt(v.statistics?.likeCount    || 0),
+      comments:      parseInt(v.statistics?.commentCount || 0),
+      views:         parseInt(v.statistics?.viewCount    || 0),
+      impressions:   parseInt(v.statistics?.viewCount    || 0),
+      post_type:     'video',
+      thumbnail_url: v.snippet?.thumbnails?.medium?.url || null,
+      source:        'api',
+      synced_at:     now,
+    }));
+
+    if (postRows.length > 0) {
+      await supabase
+        .from('posts')
+        .upsert(postRows, { onConflict: 'platform,post_id', ignoreDuplicates: false });
     }
 
-    // Store metrics snapshot
-    const metrics = {
-      platform: 'youtube',
-      snapshot_at: new Date().toISOString(),
-      followers: parseInt(channel?.statistics?.subscriberCount || 0),
-      total_views: parseInt(channel?.statistics?.viewCount || 0),
-      video_count: parseInt(channel?.statistics?.videoCount || 0),
+    // ── 5. Metrics snapshot ───────────────────────────────────────────────────
+    await supabase.from('platform_metrics').insert({
+      platform:    'youtube',
+      snapshot_at: now,
+      followers:   parseInt(channel.statistics?.subscriberCount || 0),
+      total_views: parseInt(channel.statistics?.viewCount       || 0),
+      video_count: parseInt(channel.statistics?.videoCount      || 0),
       videos: videoStats.map(v => ({
-        id: v.id,
-        title: v.snippet?.title,
+        id:           v.id,
+        title:        v.snippet?.title,
         published_at: v.snippet?.publishedAt,
-        views: parseInt(v.statistics?.viewCount || 0),
-        likes: parseInt(v.statistics?.likeCount || 0),
-        comments: parseInt(v.statistics?.commentCount || 0),
-        thumbnail: v.snippet?.thumbnails?.medium?.url,
+        views:        parseInt(v.statistics?.viewCount    || 0),
+        likes:        parseInt(v.statistics?.likeCount    || 0),
+        comments:     parseInt(v.statistics?.commentCount || 0),
+        thumbnail:    v.snippet?.thumbnails?.medium?.url,
+        permalink:    `https://www.youtube.com/watch?v=${v.id}`,
       })),
-    };
+    });
 
-    await supabase.from('platform_metrics').insert(metrics);
+    // ── 6. Fetch & store comments for the 15 most recent videos ─────────────
+    // Uses commentThreads.list at 1 unit/req with maxResults=100.
+    // Deduplicates by (handle_id, post_url, interacted_at) so re-syncing is safe.
+    let commentsSaved = 0;
+    const videosForComments = videoStats.slice(0, 15);
 
-    // Store comments
-    const now = new Date().toISOString();
-    if (comments.length > 0) {
-      // Write YouTube comments to interactions table
-      for (const comment of comments) {
-        // Upsert person by name/handle
-      const authorHandle = (comment.author_name || '').toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
-        if (!authorHandle) continue;
-        const { data: existing } = await supabase.from('handles').select('id').eq('handle_youtube', authorHandle).maybeSingle();
-        let handleId = existing?.id;
-        if (!handleId) {
-          const { data: created } = await supabase.from('handles').insert({
-            name: comment.author_name, handle_youtube: authorHandle, zone: 'SIGNAL',
-            added_at: now, updated_at: now,
-          }).select('id').single();
-          handleId = created?.id;
-        }
-        if (handleId) {
-          await supabase.from('interactions').insert({
-            handle_id: handleId, platform: 'youtube', interaction_type: 'comment',
-            content: comment.content, interacted_at: comment.published_at || now,
-            synced_at: now,
-          });
-        }
+    for (const video of videosForComments) {
+      const postUrl = `https://www.youtube.com/watch?v=${video.id}`;
+
+      try {
+        let commentPage = null;
+        let pages       = 0;
+
+        do {
+          const data = await ytGet(
+            `/commentThreads?part=snippet&videoId=${video.id}&maxResults=100&order=time${commentPage ? `&pageToken=${commentPage}` : ''}`,
+            token
+          );
+
+          // Comments disabled on this video or quota hit — skip
+          if (data.error) break;
+
+          for (const item of (data.items || [])) {
+            const c = item.snippet?.topLevelComment?.snippet;
+            if (!c) continue;
+
+            const channelId = c.authorChannelId?.value; // stable unique YouTube channel ID
+            if (!channelId) continue;
+
+            // ── Upsert handle by YouTube channel ID ──────────────────────────
+            const { data: existing } = await supabase
+              .from('handles')
+              .select('id, name')
+              .eq('handle_youtube', channelId)
+              .maybeSingle();
+
+            let handleId = existing?.id;
+
+            if (!handleId) {
+              const { data: created } = await supabase
+                .from('handles')
+                .insert({
+                  name:           c.authorDisplayName,
+                  handle_youtube: channelId,
+                  zone:           'UNASSIGNED',
+                  added_at:       now,
+                  updated_at:     now,
+                })
+                .select('id')
+                .single();
+              handleId = created?.id;
+            } else if (existing && !existing.name) {
+              // Back-fill display name if missing
+              await supabase.from('handles')
+                .update({ name: c.authorDisplayName, updated_at: now })
+                .eq('id', handleId);
+            }
+
+            if (!handleId) continue;
+
+            // ── Dedup: skip if we already have this exact comment ────────────
+            const { data: dup } = await supabase
+              .from('interactions')
+              .select('id')
+              .eq('handle_id',      handleId)
+              .eq('post_url',       postUrl)
+              .eq('interacted_at',  c.publishedAt)
+              .maybeSingle();
+
+            if (dup) continue;
+
+            await supabase.from('interactions').insert({
+              handle_id:        handleId,
+              platform:         'youtube',
+              interaction_type: 'comment',
+              content:          c.textDisplay,
+              post_url:         postUrl,
+              interacted_at:    c.publishedAt,
+              synced_at:        now,
+            });
+            commentsSaved++;
+          }
+
+          commentPage = data.nextPageToken || null;
+          pages++;
+        } while (commentPage && pages < 3); // max 300 comments per video per sync
+
+      } catch (err) {
+        // Don't abort the whole sync if one video fails
+        console.warn(`Comments skipped for video ${video.id}:`, err.message);
       }
     }
 
+    // ── 7. Update subscriber count on connection record ───────────────────────
+    await supabase.from('platform_connections').update({
+      subscriber_count: parseInt(channel.statistics?.subscriberCount || 0),
+      channel_name:     channel.snippet?.title,
+      updated_at:       now,
+    }).eq('platform', 'youtube');
+
+    const msg = `Synced ${postRows.length} videos · ${commentsSaved} new comments imported`;
     return NextResponse.json({
-      success: true,
-      channel: channel?.snippet?.title,
-      subscribers: channel?.statistics?.subscriberCount,
-      videos_synced: videoStats.length,
-      comments_synced: comments.length,
+      success:         true,
+      channel:         channel.snippet?.title,
+      subscribers:     channel.statistics?.subscriberCount,
+      videos_synced:   postRows.length,
+      comments_synced: commentsSaved,
+      message:         msg,
     });
 
   } catch (err) {
