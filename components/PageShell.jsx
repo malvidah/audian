@@ -660,7 +660,7 @@ export default function PageShell({ activeTab, children }) {
   const [activePlatform, setActivePlatform] = useState("all");
   const [selectedWeek,   setSelectedWeek]  = useState(null);
   const [dateFrom,       setDateFrom]      = useState(H1_FROM);
-  const [dateTo,         setDateTo]        = useState("2026-03-31");
+  const [dateTo,         setDateTo]        = useState(new Date().toISOString().slice(0, 10));
   const [followerSnaps,  setFollowerSnaps] = useState([]);
   const [followerLatest, setFollowerLatest] = useState({});
   const [weekFilter,     setWeekFilter]    = useState(null);

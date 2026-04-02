@@ -774,15 +774,25 @@ function PostsTable({ posts, activePlatform, selectedWeek }) {
                     {/* Content — link to post if permalink available */}
                     <td style={{ ...td, maxWidth: 0 }}>
                       {p.permalink && !isDailyAggregate ? (
-                        <a href={p.permalink} target="_blank" rel="noreferrer"
-                          style={{
-                            display: "block", overflow: "hidden",
-                            textOverflow: "ellipsis", whiteSpace: "nowrap",
-                            fontSize: F.xs, color: T.text, textDecoration: "none",
-                          }}
-                          onMouseEnter={e => { e.currentTarget.style.color = T.accent; e.currentTarget.style.textDecoration = "underline"; }}
-                          onMouseLeave={e => { e.currentTarget.style.color = T.text; e.currentTarget.style.textDecoration = "none"; }}
-                        >{p.content || "—"}</a>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                          <a href={p.permalink} target="_blank" rel="noreferrer"
+                            style={{
+                              flex: 1, minWidth: 0, overflow: "hidden",
+                              textOverflow: "ellipsis", whiteSpace: "nowrap",
+                              fontSize: F.xs, color: T.text, textDecoration: "none",
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.color = T.accent; e.currentTarget.style.textDecoration = "underline"; }}
+                            onMouseLeave={e => { e.currentTarget.style.color = T.text; e.currentTarget.style.textDecoration = "none"; }}
+                          >{p.content || p.permalink}</a>
+                          {p.source === "interactions" && (
+                            <span style={{
+                              flexShrink: 0, fontSize: 9, fontWeight: 600,
+                              color: T.dim, background: T.well,
+                              border: `1px solid ${T.border}`, borderRadius: 4,
+                              padding: "1px 5px", letterSpacing: "0.02em",
+                            }}>interactions only</span>
+                          )}
+                        </div>
                       ) : (
                         <div style={{
                           overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
