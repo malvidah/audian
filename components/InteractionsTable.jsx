@@ -35,12 +35,13 @@ const sans = "-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif
 const F = { xl: 28, lg: 20, md: 15, sm: 13, xs: 11 };
 
 const ZONE_CFG = {
-  ELITE:       { label: "ELITE", color: T.accent, bg: T.accentBg, border: T.accentBorder },
-  INFLUENTIAL: { label: "INFLUENTIAL", color: T.green, bg: T.greenBg, border: T.greenBorder },
-  SIGNAL:      { label: "SIGNAL", color: T.blue, bg: T.blueBg, border: T.blueBorder },
-  IGNORE:      { label: "IGNORE", color: T.dim, bg: T.well, border: T.border },
+  ELITE:       { label: "ELITE",       color: T.accent,  bg: T.accentBg, border: T.accentBorder },
+  INFLUENTIAL: { label: "INFLUENTIAL", color: T.green,   bg: T.greenBg,  border: T.greenBorder },
+  SIGNAL:      { label: "SIGNAL",      color: T.blue,    bg: T.blueBg,   border: T.blueBorder },
+  UNASSIGNED:  { label: "UNASSIGNED",  color: "#64748B", bg: "#F1F5F9",  border: "#CBD5E1" },
+  IGNORE:      { label: "IGNORE",      color: T.dim,     bg: T.well,     border: T.border },
 };
-const LIST_ORDER = ["ELITE", "INFLUENTIAL", "SIGNAL", "IGNORE"];
+const LIST_ORDER = ["ELITE", "INFLUENTIAL", "SIGNAL", "UNASSIGNED", "IGNORE"];
 
 const PLAT_OPTIONS = [
   { value: "x", label: "X" }, { value: "instagram", label: "IG" },
@@ -54,7 +55,8 @@ const TYPE_OPTIONS = [
 ];
 const ZONE_OPTIONS = [
   { value: "ELITE", label: "Elite" }, { value: "INFLUENTIAL", label: "Influential" },
-  { value: "SIGNAL", label: "Signal" },
+  { value: "SIGNAL", label: "Signal" }, { value: "UNASSIGNED", label: "Unassigned" },
+  { value: "IGNORE", label: "Ignore" },
 ];
 
 const EMPTY_ROW = {

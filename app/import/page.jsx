@@ -31,9 +31,10 @@ const PLATFORM_LABELS = {
 
 const ZONE_COLORS = {
   ELITE:        { bg: "#F5F3FF", color: "#7C3AED", border: "#DDD6FE" },
-  INFLUENTIAL: { bg: "#FFF3EE", color: "#FF6B35", border: "#FFD4C2" },
+  INFLUENTIAL:  { bg: "#FFF3EE", color: "#FF6B35", border: "#FFD4C2" },
   SIGNAL:       { bg: "#F3F2F0", color: "#6B6560", border: "#E8E6E1" },
-  IGNORE:       { bg: "#FFF1F1", color: "#999", border: "#FECACA" },
+  UNASSIGNED:   { bg: "#F1F5F9", color: "#64748B", border: "#CBD5E1" },
+  IGNORE:       { bg: "#FFF1F1", color: "#999",    border: "#FECACA" },
 };
 const INTERACTION_ICONS = {
   like: "♥", follow: "👤", comment: "💬", mention: "@",
@@ -45,7 +46,8 @@ const ZONE_CFG_REVIEW = {
   ELITE:       { label: "ELITE",       color: T.accent,  bg: T.accentBg, border: T.accentBorder },
   INFLUENTIAL: { label: "INFLUENTIAL", color: T.green,   bg: "#F0FDF4",  border: "#BBF7D0" },
   SIGNAL:      { label: "SIGNAL",      color: "#2563EB", bg: "#EFF6FF",  border: "#BFDBFE" },
-  IGNORE:      { label: "IGNORE",      color: T.dim,     bg: T.well,     border: T.border },
+  UNASSIGNED:  { label: "UNASSIGNED",  color: "#64748B", bg: "#F1F5F9",  border: "#CBD5E1" },
+  IGNORE:      { label: "IGNORE",      color: T.dim,     bg: T.well,     border: T.border  },
 };
 
 const TYPE_BADGE_CFG = {
@@ -210,7 +212,7 @@ function HandlesCsvImport({ platform }) {
                 border: `1px solid ${T.border}`, borderRadius: 8, padding: "8px 10px",
               }}
             >
-              {["ELITE", "INFLUENTIAL", "SIGNAL", "IGNORE"].map(zone => (
+              {["ELITE", "INFLUENTIAL", "SIGNAL", "UNASSIGNED", "IGNORE"].map(zone => (
                 <option key={zone} value={zone}>{zone} default</option>
               ))}
             </select>
@@ -1042,6 +1044,7 @@ function ReviewDetailPanel({ item, onClose, onChange }) {
               { value: "ELITE", label: "Elite" },
               { value: "INFLUENTIAL", label: "Influential" },
               { value: "SIGNAL", label: "Signal" },
+              { value: "UNASSIGNED", label: "Unassigned" },
               { value: "IGNORE", label: "Ignore" },
             ]}
             onChange={v => onChange("zone", v)} />
@@ -1398,17 +1401,11 @@ function ScreenshotCard({ result, onRemoveScreenshot }) {
 // ── Manual add row ────────────────────────────────────────────────────────────
 function ManualAddRow({ onAdd }) {
   const [form, setForm] = useState({
-    handle: "", name: "", bio: "", followers: "", verified: false,
-    interaction_type: "follow", zone: "IGNORE", content: "", platform: "instagram",
+    handle: "", name: "", bio: "", followers: "",
+    interaction_type: "comment", zone: "UNASSIGNED", content: "", platform: "instagram",
+    interacted_at: new Date().toISOString().slice(0, 10),
   });
-  const set = (k, v) => setForm(f => {
-    const next = { ...f, [k]: v };
-    // Recompute zone live as user types (unless they clicked Elite)
-    if (["name","bio","followers","verified"].includes(k) && next.zone !== "ELITE") {
-      next.zone = computeZone({ ...next, followers: k === "followers" ? (parseInt(v)||0) : (parseInt(next.followers)||0) });
-    }
-    return next;
-  });
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   const handleSubmit = () => {
     if (!form.handle.trim()) return;
@@ -1416,58 +1413,95 @@ function ManualAddRow({ onAdd }) {
       ...form,
       handle: form.handle.replace(/^@/, "").trim(),
       followers: form.followers ? parseInt(form.followers) : null,
+      _id: `manual_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+      _source: "manual",
     };
-    onAdd({ ...base, zone: computeZone(base) });
-    setForm({ handle: "", name: "", bio: "", followers: "", verified: false,
-      interaction_type: "follow", zone: "IGNORE", content: "", platform: "instagram" });
+    onAdd(base);
+    setForm({
+      handle: "", name: "", bio: "", followers: "",
+      interaction_type: "comment", zone: "UNASSIGNED", content: "", platform: "instagram",
+      interacted_at: new Date().toISOString().slice(0, 10),
+    });
   };
 
-  const inp = (key, placeholder, type = "text", width = 110) => (
-    type === "checkbox" ? (
-      <input type="checkbox" checked={form[key]}
-        onChange={e => set(key, e.target.checked)}
-        style={{ width: 16, height: 16 }} />
-    ) : (
-      <input
-        type={type} placeholder={placeholder} value={form[key]}
-        onChange={e => set(key, e.target.value)}
-        style={{ fontFamily: sans, fontSize: F.sm, padding: "6px 10px",
-          border: `1px solid ${T.border2}`, borderRadius: 8,
-          background: T.well, color: T.text, width }} />
-    )
-  );
+  const cellStyle = { padding: "8px 8px" };
+  const inpStyle = {
+    fontFamily: sans, fontSize: F.sm, padding: "5px 8px",
+    border: `1px solid ${T.border2}`, borderRadius: 7,
+    background: T.well, color: T.text, width: "100%", boxSizing: "border-box",
+  };
+  const selStyle = { ...inpStyle, cursor: "pointer" };
 
   return (
     <tr style={{ borderBottom: `1px solid ${T.border}`, background: T.accentBg }}>
       <td style={{ width: 4, background: T.accentBorder, padding: 0 }} />
-      {/* Handle */}
-      <td style={{ padding: "8px 12px" }}>
+
+      {/* Person */}
+      <td style={{ ...cellStyle, minWidth: 160 }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ color: T.dim, fontSize: F.xs }}>@</span>
-            {inp("handle", "handle", "text", 110)}
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <span style={{ color: T.dim, fontSize: F.xs, flexShrink: 0 }}>@</span>
+            <input placeholder="handle" value={form.handle}
+              onChange={e => set("handle", e.target.value)}
+              style={{ ...inpStyle, fontWeight: 600 }} />
           </div>
-          {inp("name", "Display name", "text", 150)}
-          {inp("bio", "Bio (optional)", "text", 220)}
+          <input placeholder="Display name" value={form.name}
+            onChange={e => set("name", e.target.value)}
+            style={{ ...inpStyle, fontSize: F.xs }} />
         </div>
       </td>
-      {/* Category — auto-computed, shown as badge */}
-      <td style={{ padding: "8px 12px" }}>
-        <ZoneBadge zone={form.zone} />
-      </td>
-      {/* Followers */}
-      <td style={{ padding: "8px 12px" }}>{inp("followers", "—", "number", 80)}</td>
-      {/* Type */}
-      <td style={{ padding: "8px 12px" }}>
-        <select value={form.interaction_type} onChange={e => set("interaction_type", e.target.value)}
-          style={{ fontFamily: sans, fontSize: F.sm, padding: "6px 8px", borderRadius: 8,
-            border: `1px solid ${T.border2}`, background: T.card, color: T.text }}>
-          {["follow","like","mention","comment","tag","view"].map(o => <option key={o} value={o}>{o}</option>)}
+
+      {/* Platform */}
+      <td style={cellStyle}>
+        <select value={form.platform} onChange={e => set("platform", e.target.value)} style={selStyle}>
+          {Object.entries(PLATFORM_LABELS).map(([k, v]) => (
+            <option key={k} value={k}>{PLATFORM_ICONS[k]} {k}</option>
+          ))}
         </select>
       </td>
+
+      {/* Type */}
+      <td style={cellStyle}>
+        <select value={form.interaction_type} onChange={e => set("interaction_type", e.target.value)} style={selStyle}>
+          {["comment","like","follow","mention","tag","view","reply","repost"].map(o => (
+            <option key={o} value={o}>{o}</option>
+          ))}
+        </select>
+      </td>
+
+      {/* Content */}
+      <td style={{ ...cellStyle, minWidth: 120 }}>
+        <input placeholder="Comment text…" value={form.content}
+          onChange={e => set("content", e.target.value)}
+          style={inpStyle} />
+      </td>
+
+      {/* Followers */}
+      <td style={cellStyle}>
+        <input type="number" placeholder="0" value={form.followers}
+          onChange={e => set("followers", e.target.value)}
+          style={{ ...inpStyle, width: 80 }} />
+      </td>
+
+      {/* Zone */}
+      <td style={cellStyle}>
+        <select value={form.zone} onChange={e => set("zone", e.target.value)} style={selStyle}>
+          {["ELITE","INFLUENTIAL","SIGNAL","UNASSIGNED","IGNORE"].map(z => (
+            <option key={z} value={z}>{z}</option>
+          ))}
+        </select>
+      </td>
+
+      {/* Date */}
+      <td style={cellStyle}>
+        <input type="date" value={form.interacted_at}
+          onChange={e => set("interacted_at", e.target.value)}
+          style={{ ...inpStyle, width: 130 }} />
+      </td>
+
       {/* Add */}
-      <td style={{ padding: "8px 12px" }}>
-        <Btn onClick={handleSubmit} style={{ padding: "6px 12px" }}>+ Add</Btn>
+      <td style={cellStyle}>
+        <Btn onClick={handleSubmit} disabled={!form.handle.trim()} style={{ padding: "6px 12px" }}>+ Add</Btn>
       </td>
     </tr>
   );
@@ -1958,6 +1992,7 @@ export default function ImportPage() {
     ELITE:       allInteractions.filter(i => i.zone === "ELITE").length,
     INFLUENTIAL: allInteractions.filter(i => i.zone === "INFLUENTIAL").length,
     SIGNAL:      allInteractions.filter(i => i.zone === "SIGNAL").length,
+    UNASSIGNED:  allInteractions.filter(i => i.zone === "UNASSIGNED").length,
     IGNORE:      allInteractions.filter(i => i.zone === "IGNORE").length,
   };
   const saveableCount = includeIgnore
@@ -2055,6 +2090,7 @@ export default function ImportPage() {
                     border: `1px solid ${T.border}`, borderRadius: 8, padding: "6px 10px",
                     cursor: "pointer" }}>
                   <option value="IGNORE">IGNORE</option>
+                  <option value="UNASSIGNED">UNASSIGNED</option>
                   <option value="SIGNAL">SIGNAL</option>
                   <option value="INFLUENTIAL">INFLUENTIAL</option>
                 </select>
@@ -2154,7 +2190,7 @@ export default function ImportPage() {
 
               {/* Zone filter */}
               <div style={{ display: "flex", gap: 6, marginLeft: 8, flexWrap: "wrap" }}>
-                {["ALL", "ELITE", "INFLUENTIAL", "SIGNAL", "IGNORE"].map(z => {
+                {["ALL", "ELITE", "INFLUENTIAL", "SIGNAL", "UNASSIGNED", "IGNORE"].map(z => {
                   const active = filterZone === z;
                   const c = z === "ALL" ? null : ZONE_COLORS[z];
                   return (
