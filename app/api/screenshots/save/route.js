@@ -17,7 +17,7 @@ async function upsertHandle(item, platform, cleanHandle, now) {
 
   if (existing) {
     await supabase.from('handles').update({
-      zone:          existing.zone === 'ELITE' ? 'ELITE' : zone,
+      zone:           existing.zone === 'ELITE' ? 'ELITE' : zone,
       [followersCol]: item.followers || null,
       [verifiedCol]:  item.verified  || false,
       ...(item.name && !existing.name ? { name: item.name } : {}),
@@ -45,57 +45,131 @@ async function upsertHandle(item, platform, cleanHandle, now) {
 
 export async function POST(req) {
   try {
-    const { interactions } = await req.json();
+    const { interactions, includeIgnore } = await req.json();
     if (!interactions?.length) return NextResponse.json({ saved: 0 });
 
     const now = new Date().toISOString();
-    let saved = 0;
+    const toSave = interactions.filter(i =>
+      i.handle && (includeIgnore || i.zone !== 'IGNORE')
+    );
+
+    if (!toSave.length) {
+      const ignoreCount = interactions.filter(i => i.zone === 'IGNORE').length;
+      return NextResponse.json({
+        saved: 0,
+        skipped: interactions.length,
+        ignoreSkipped: ignoreCount,
+        message: `Nothing saved — ${ignoreCount} IGNORE zone entries are excluded by default`,
+      });
+    }
+
+    // ── Phase 1: upsert handles in parallel batches of 20 ───────────────────
+    const BATCH = 20;
+    const resolved = [];
     const errors = [];
-    const toSave = interactions.filter(i => i.handle && i.zone !== 'IGNORE');
 
-    for (const item of toSave) {
-      const platform    = (item.platform || 'instagram').toLowerCase();
-      const cleanHandle = item.handle.toLowerCase().replace(/^@/, '');
+    for (let i = 0; i < toSave.length; i += BATCH) {
+      const chunk = toSave.slice(i, i + BATCH);
+      const results = await Promise.all(chunk.map(async (item) => {
+        const platform    = (item.platform || 'instagram').toLowerCase();
+        const cleanHandle = item.handle.toLowerCase().replace(/^@/, '');
+        const handleId    = await upsertHandle(item, platform, cleanHandle, now);
+        return { item, platform, cleanHandle, handleId };
+      }));
+      resolved.push(...results);
+    }
 
-      // 1. Upsert handle (person/org identity)
-      const handleId = await upsertHandle(item, platform, cleanHandle, now);
+    // ── Phase 2: collect interaction rows ────────────────────────────────────
+    let saved = 0;
+    const interactionRows = [];
+
+    for (const { item, platform, cleanHandle, handleId } of resolved) {
       if (!handleId) { errors.push(`${cleanHandle}: could not upsert handle`); continue; }
-
-      // 2. Insert interaction event(s) — count handle save regardless
       saved++;
       const types = (item.interaction_type || 'unknown').split(',').map(t => t.trim()).filter(Boolean);
       for (const type of types) {
-        const interactedAt = item.interacted_at || item.interaction_date || now;
-        const { error } = await supabase.from('interactions').insert({
+        interactionRows.push({
           handle_id:        handleId,
           platform,
           interaction_type: type,
           content:          item.content?.slice(0, 2000) || null,
           screenshot_id:    item.screenshot_id || null,
-          interacted_at:    interactedAt,
+          post_url:         item.post_url || null,
+          interacted_at:    item.interacted_at || item.interaction_date || now,
           synced_at:        now,
         });
-        if (error) {
-          // Table missing = schema not set up yet — log but don't fail the save
-          const isSchemaError = error.message?.includes('schema cache') || error.message?.includes('does not exist');
-          if (!isSchemaError) errors.push(`${cleanHandle}/${type}: ${error.message}`);
-          console.error('[save] interactions insert error:', error.message, '— handle saved OK');
-        }
       }
     }
 
+    // ── Phase 3: dedup-aware interactions save ───────────────────────────────
+    // Fetch existing interactions for these handle IDs so we can patch instead of dupe
+    const handleIds = [...new Set(interactionRows.map(r => r.handle_id).filter(Boolean))];
+    let existingRows = [];
+    if (handleIds.length) {
+      const { data } = await supabase
+        .from('interactions')
+        .select('id, handle_id, interaction_type, interacted_at, post_url, content')
+        .in('handle_id', handleIds);
+      existingRows = data || [];
+    }
+
+    // Build a lookup: "handle_id:type:YYYY-MM-DD" → existing row
+    const existingMap = new Map();
+    for (const row of existingRows) {
+      const dateKey = row.interacted_at ? row.interacted_at.slice(0, 10) : 'nodate';
+      existingMap.set(`${row.handle_id}:${row.interaction_type}:${dateKey}`, row);
+    }
+
+    const toInsert = [];
+    const toUpdate = []; // { id, patch }
+
+    for (const row of interactionRows) {
+      const dateKey = row.interacted_at ? row.interacted_at.slice(0, 10) : 'nodate';
+      const key = `${row.handle_id}:${row.interaction_type}:${dateKey}`;
+      const existing = existingMap.get(key);
+
+      if (!existing) {
+        toInsert.push(row);
+      } else {
+        // Only patch fields that were missing on the existing record
+        const patch = {};
+        if (!existing.post_url && row.post_url) patch.post_url = row.post_url;
+        if (!existing.content  && row.content)  patch.content  = row.content;
+        if (Object.keys(patch).length) toUpdate.push({ id: existing.id, patch });
+      }
+    }
+
+    // Bulk insert new rows
+    for (let i = 0; i < toInsert.length; i += 200) {
+      const chunk = toInsert.slice(i, i + 200);
+      const { error } = await supabase.from('interactions').insert(chunk);
+      if (error) {
+        const isSchemaError = error.message?.includes('schema cache') || error.message?.includes('does not exist');
+        if (!isSchemaError) errors.push(`interactions insert: ${error.message}`);
+        console.error('[save] interactions bulk insert error:', error.message);
+      }
+    }
+
+    // Patch existing rows with newly available fields (e.g. post_url added on re-import)
+    await Promise.all(toUpdate.map(({ id, patch }) =>
+      supabase.from('interactions').update(patch).eq('id', id)
+    ));
+
     return NextResponse.json({
       saved,
+      patched: toUpdate.length,
       skipped: interactions.length - toSave.length,
+      ignoreSkipped: interactions.filter(i => i.zone === 'IGNORE').length,
       errors: errors.length,
       errorDetails: errors.slice(0, 5),
-      message: saved > 0
-        ? `Saved ${saved} interaction${saved !== 1 ? 's' : ''}`
+      message: saved > 0 || toUpdate.length > 0
+        ? `Saved ${saved} new${toUpdate.length > 0 ? `, patched ${toUpdate.length} existing` : ''}`
         : errors.length > 0
           ? `Save failed: ${errors[0]}`
-          : `Nothing to save (${interactions.length - toSave.length} IGNORE)`,
+          : `Nothing to save`,
     });
   } catch (err) {
+    console.error('Save route error:', err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

@@ -1112,6 +1112,7 @@ export default function ImportPage() {
   const [saving, setSaving] = useState(false);
   const [saveResult, setSaveResult] = useState(null);
   const [filterZone, setFilterZone] = useState("ALL");
+  const [includeIgnore, setIncludeIgnore] = useState(false);
   const [autoEnrichStatus, setAutoEnrichStatus] = useState(null);
   const [showManualAdd, setShowManualAdd] = useState(false);
   const [knownProfiles, setKnownProfiles] = useState({}); // handle → all previously seen accounts
@@ -1527,7 +1528,6 @@ export default function ImportPage() {
   };
 
     const handleSave = async () => {
-    // Save ALL interactions — not just filtered view
     const toSave = allInteractions.filter(i => i.handle);
     if (!toSave.length) return;
     setSaving(true);
@@ -1536,13 +1536,15 @@ export default function ImportPage() {
       const res = await fetch("/api/screenshots/save", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ interactions: toSave }),
+        body: JSON.stringify({ interactions: toSave, includeIgnore }),
       });
       const data = await res.json();
       setSaveResult(data);
       if (data.saved > 0) {
-        // Clear saved non-IGNORE items from the list
-        setAllInteractions(prev => prev.filter(i => i.zone === 'IGNORE'));
+        // Remove saved items from the list; keep IGNORE if they weren't included
+        setAllInteractions(prev =>
+          includeIgnore ? [] : prev.filter(i => i.zone === 'IGNORE')
+        );
       }
     } catch (e) {
       setSaveResult({ error: e.message });
@@ -1555,11 +1557,14 @@ export default function ImportPage() {
     : allInteractions.filter(i => i.zone === filterZone);
 
   const zoneCounts = {
-    ELITE:        allInteractions.filter(i => i.zone === "ELITE").length,
+    ELITE:       allInteractions.filter(i => i.zone === "ELITE").length,
     INFLUENTIAL: allInteractions.filter(i => i.zone === "INFLUENTIAL").length,
-    SIGNAL:       allInteractions.filter(i => i.zone === "SIGNAL").length,
-    IGNORE:       allInteractions.filter(i => i.zone === "IGNORE").length,
+    SIGNAL:      allInteractions.filter(i => i.zone === "SIGNAL").length,
+    IGNORE:      allInteractions.filter(i => i.zone === "IGNORE").length,
   };
+  const saveableCount = includeIgnore
+    ? allInteractions.filter(i => i.handle).length
+    : allInteractions.filter(i => i.handle && i.zone !== "IGNORE").length;
 
   return (
     <div style={{ minHeight: "100vh", background: T.bg, fontFamily: sans }}>
@@ -1750,8 +1755,8 @@ export default function ImportPage() {
               </div>
 
               {/* Zone filter */}
-              <div style={{ display: "flex", gap: 6, marginLeft: 8 }}>
-                {["ALL", "ELITE", "INFLUENTIAL", "SIGNAL"].map(z => {
+              <div style={{ display: "flex", gap: 6, marginLeft: 8, flexWrap: "wrap" }}>
+                {["ALL", "ELITE", "INFLUENTIAL", "SIGNAL", "IGNORE"].map(z => {
                   const active = filterZone === z;
                   const c = z === "ALL" ? null : ZONE_COLORS[z];
                   return (
@@ -1769,7 +1774,7 @@ export default function ImportPage() {
                 })}
               </div>
 
-              <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
+              <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                 <Btn variant="ghost" onClick={() => setShowManualAdd(!showManualAdd)}
                   style={{ fontSize: F.xs }}>
                   {showManualAdd ? "− Manual entry" : "+ Manual entry"}
@@ -1782,9 +1787,13 @@ export default function ImportPage() {
                     {autoEnrichStatus}
                   </span>
                 )}
-                {saveResult?.saved > 0 && (
+                {(saveResult?.saved > 0 || saveResult?.patched > 0) && (
                   <span style={{ fontFamily: sans, fontSize: F.sm, color: T.green, fontWeight: 600 }}>
-                    ✓ {saveResult.saved} saved to Audian
+                    ✓ {saveResult.saved > 0 ? `${saveResult.saved} saved` : ""}
+                    {saveResult.patched > 0 ? `${saveResult.saved > 0 ? " · " : ""}${saveResult.patched} updated` : ""}
+                    {saveResult.ignoreSkipped > 0 && !includeIgnore
+                      ? ` · ${saveResult.ignoreSkipped} IGNORE skipped`
+                      : ""}
                   </span>
                 )}
                 {saveResult?.error && (
@@ -1792,8 +1801,18 @@ export default function ImportPage() {
                     ✗ {saveResult.error}
                   </span>
                 )}
-                <Btn onClick={handleSave} disabled={saving || filtered.length === 0}>
-                  {saving ? "Saving…" : `💾 Save ${filtered.length} to Audian`}
+                {/* Include IGNORE toggle */}
+                {zoneCounts.IGNORE > 0 && (
+                  <label style={{ display: "flex", alignItems: "center", gap: 5, cursor: "pointer",
+                    fontFamily: sans, fontSize: F.xs, color: T.sub, userSelect: "none" }}>
+                    <input type="checkbox" checked={includeIgnore}
+                      onChange={e => setIncludeIgnore(e.target.checked)}
+                      style={{ accentColor: T.accent, cursor: "pointer" }} />
+                    incl. {zoneCounts.IGNORE} IGNORE
+                  </label>
+                )}
+                <Btn onClick={handleSave} disabled={saving || saveableCount === 0}>
+                  {saving ? "Saving…" : `💾 Save ${saveableCount}`}
                 </Btn>
               </div>
             </div>
@@ -1831,12 +1850,12 @@ export default function ImportPage() {
 
             {/* Footer */}
             <div style={{ padding: "12px 20px", borderTop: `1px solid ${T.border}`,
-              display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
               <div style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>
-                Click any row's Edit button to modify. Remove rows with ×. Add manually with + Manual entry.
+                IGNORE zone entries are not saved by default — tick "incl. IGNORE" above to include them.
               </div>
-              <Btn onClick={handleSave} disabled={saving || filtered.length === 0}>
-                {saving ? "Saving…" : `💾 Save ${filtered.length} interactions`}
+              <Btn onClick={handleSave} disabled={saving || saveableCount === 0}>
+                {saving ? "Saving…" : `💾 Save ${saveableCount}`}
               </Btn>
             </div>
               </div>
