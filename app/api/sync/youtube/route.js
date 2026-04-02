@@ -54,13 +54,23 @@ export async function POST() {
     const token = await getAccessToken(conn);
 
     // ── 1. Channel info + uploads playlist ID ────────────────────────────────
+    // Prefer the explicitly-stored channel_id (set via Settings → Connections)
+    // so Brand Accounts (e.g. @bigthink) work correctly. Fall back to mine=true
+    // for freshly-connected accounts that haven't chosen a channel yet.
+    const channelParam = conn.channel_id
+      ? `id=${encodeURIComponent(conn.channel_id)}`
+      : 'mine=true';
     const channelData = await ytGet(
-      '/channels?part=snippet,statistics,contentDetails&mine=true',
+      `/channels?part=snippet,statistics,contentDetails&${channelParam}`,
       token
     );
     const channel = channelData.items?.[0];
     if (!channel) {
-      return NextResponse.json({ error: 'No YouTube channel found on this account' }, { status: 400 });
+      return NextResponse.json({
+        error: conn.channel_id
+          ? `Channel "${conn.channel_id}" not found — try updating the channel in Settings`
+          : 'No YouTube channel found on this account',
+      }, { status: 400 });
     }
     const uploadsId = channel.contentDetails?.relatedPlaylists?.uploads;
 

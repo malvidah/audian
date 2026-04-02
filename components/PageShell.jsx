@@ -531,6 +531,10 @@ function ProfileMenu({ session, avatarUrl, connections = [], onDisconnect, posts
   const [disconnecting, setDisconnecting] = useState(null);
   const [syncing, setSyncing] = useState(null);           // platform id currently syncing
   const [syncResult, setSyncResult] = useState({});       // { [platformId]: { ok, msg } }
+  const [editingChannel, setEditingChannel] = useState(false);  // youtube channel edit mode
+  const [channelInput, setChannelInput]     = useState("");
+  const [channelSaving, setChannelSaving]   = useState(false);
+  const [channelResult, setChannelResult]   = useState(null);
   const menuRef = useRef(null);
   const email = session?.user?.email || "";
   const initial = email[0]?.toUpperCase() || "?";
@@ -564,8 +568,33 @@ function ProfileMenu({ session, avatarUrl, connections = [], onDisconnect, posts
       setSyncResult(r => ({ ...r, [platformId]: { ok: false, msg: e.message } }));
     } finally {
       setSyncing(null);
-      // auto-clear result after 4 s
       setTimeout(() => setSyncResult(r => ({ ...r, [platformId]: null })), 4000);
+    }
+  }
+
+  async function saveChannel() {
+    if (!channelInput.trim() || channelSaving) return;
+    setChannelSaving(true);
+    setChannelResult(null);
+    try {
+      const res  = await fetch("/api/auth/youtube/channel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ handle: channelInput.trim() }),
+      });
+      const data = await res.json();
+      if (data.error) {
+        setChannelResult({ ok: false, msg: data.error });
+      } else {
+        setChannelResult({ ok: true, msg: `Connected to ${data.channel_name}` });
+        setEditingChannel(false);
+        setChannelInput("");
+        onImported?.();   // refresh connections list in parent
+      }
+    } catch (e) {
+      setChannelResult({ ok: false, msg: e.message });
+    } finally {
+      setChannelSaving(false);
     }
   }
 
@@ -638,7 +667,17 @@ function ProfileMenu({ session, avatarUrl, connections = [], onDisconnect, posts
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 500, color: T.text }}>{p.label}</div>
                       {conn?.channel_name && (
-                        <div style={{ fontFamily: sans, fontSize: F.xs, color: T.dim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{conn.channel_name}</div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                          <div style={{ fontFamily: sans, fontSize: F.xs, color: T.dim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{conn.channel_name}</div>
+                          {/* YouTube: pencil to switch channel */}
+                          {p.id === "youtube" && (
+                            <button title="Switch channel" onClick={() => { setEditingChannel(e => !e); setChannelInput(""); setChannelResult(null); }} style={{ background: "none", border: "none", cursor: "pointer", color: T.dim, fontSize: 10, padding: "0 2px", lineHeight: 1 }}>✎</button>
+                          )}
+                        </div>
+                      )}
+                      {/* YouTube: not yet connected or no channel_name — show edit prompt */}
+                      {p.id === "youtube" && isConnected && !conn?.channel_name && (
+                        <button onClick={() => setEditingChannel(true)} style={{ background: "none", border: "none", cursor: "pointer", fontFamily: sans, fontSize: F.xs, color: T.accent, padding: 0 }}>Set channel →</button>
                       )}
                     </div>
                     {/* Sync button — only shown when connected and a sync route exists */}
@@ -675,6 +714,48 @@ function ProfileMenu({ session, avatarUrl, connections = [], onDisconnect, posts
                       border:     `1px solid ${result.ok ? T.greenBorder : T.redBorder}`,
                     }}>
                       {result.ok ? "✓ " : "✗ "}{result.msg}
+                    </div>
+                  )}
+                  {/* YouTube channel switcher */}
+                  {p.id === "youtube" && editingChannel && (
+                    <div style={{ margin: "0 18px 10px", display: "flex", flexDirection: "column", gap: 6 }}>
+                      <div style={{ fontFamily: sans, fontSize: F.xs, color: T.dim, lineHeight: 1.4 }}>
+                        Enter your channel handle or ID (e.g. <span style={{ color: T.text }}>@bigthink</span> or a YouTube URL)
+                      </div>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <input
+                          autoFocus
+                          value={channelInput}
+                          onChange={e => setChannelInput(e.target.value)}
+                          onKeyDown={e => e.key === "Enter" && saveChannel()}
+                          placeholder="@bigthink"
+                          style={{
+                            flex: 1, padding: "5px 8px", borderRadius: 6, border: `1px solid ${T.border}`,
+                            fontFamily: sans, fontSize: F.xs, background: T.well, color: T.text, outline: "none",
+                          }}
+                        />
+                        <button
+                          disabled={channelSaving || !channelInput.trim()}
+                          onClick={saveChannel}
+                          style={{
+                            padding: "5px 10px", borderRadius: 6, border: "none", cursor: "pointer",
+                            background: "#FF000018", color: "#FF0000", fontFamily: sans,
+                            fontSize: F.xs, fontWeight: 600,
+                          }}>
+                          {channelSaving ? "…" : "Save"}
+                        </button>
+                        <button onClick={() => { setEditingChannel(false); setChannelResult(null); }} style={{ padding: "5px 8px", borderRadius: 6, border: "none", cursor: "pointer", background: T.well, color: T.dim, fontFamily: sans, fontSize: F.xs }}>✕</button>
+                      </div>
+                      {channelResult && (
+                        <div style={{
+                          padding: "5px 8px", borderRadius: 6, fontFamily: sans, fontSize: F.xs, fontWeight: 500,
+                          background: channelResult.ok ? T.greenBg : T.redBg,
+                          color:      channelResult.ok ? T.green   : T.red,
+                          border:     `1px solid ${channelResult.ok ? T.greenBorder : T.redBorder}`,
+                        }}>
+                          {channelResult.ok ? "✓ " : "✗ "}{channelResult.msg}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
