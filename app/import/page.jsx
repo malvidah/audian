@@ -367,7 +367,7 @@ function PasteTextImport({ onImport, platform, postUrl }) {
     try {
       const items = parseBufferPaste(text, platform);
       if (!items.length) {
-        setError("No comments detected. Ensure each line starts with a number like "1. username16 hours ago".");
+        setError('No comments detected. Ensure each line starts with a number like "1. username16 hours ago".');
         return;
       }
       setParsed(items);
