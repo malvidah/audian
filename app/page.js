@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import PageShell, { T, sans, F } from "../components/PageShell";
 
 const PLAT_COLORS = { youtube: "#FF0000", x: "#000000", instagram: "#E1306C", linkedin: "#0077B5" };
@@ -467,7 +467,7 @@ function Outliers({ posts, activePlatform, selectedWeek }) {
   );
 }
 
-// ─── Post interactions panel ──────────────────────────────────────────────────
+// ─── Inline post interactions expansion ──────────────────────────────────────
 const ZONE_CFG_PANEL = {
   ELITE:       { color: "#FF6B35", bg: "#FFF3EE", border: "#FFD4C2" },
   INFLUENTIAL: { color: "#16A34A", bg: "#F0FDF4", border: "#BBF7D0" },
@@ -476,20 +476,24 @@ const ZONE_CFG_PANEL = {
   IGNORE:      { color: "#A8A39C", bg: "#F3F2F0", border: "#E8E6E1" },
 };
 const TYPE_CFG_PANEL = {
-  like:    { label: "Like",    icon: "♥", color: "#DC2626" },
+  like:    { label: "Like",    icon: "♥",  color: "#DC2626" },
   follow:  { label: "Follow",  icon: "👤", color: "#2563EB" },
   comment: { label: "Comment", icon: "💬", color: "#CA8A04" },
   mention: { label: "Mention", icon: "@",  color: "#FF6B35" },
   tag:     { label: "Tag",     icon: "🏷", color: "#7C3AED" },
   view:    { label: "View",    icon: "👁", color: "#64748B" },
-  reply:   { label: "Reply",   icon: "↩", color: "#CA8A04" },
-  repost:  { label: "Repost",  icon: "↗", color: "#16A34A" },
+  reply:   { label: "Reply",   icon: "↩",  color: "#CA8A04" },
+  repost:  { label: "Repost",  icon: "↗",  color: "#16A34A" },
 };
 const ZONE_ORDER = ["ELITE", "INFLUENTIAL", "SIGNAL", "UNASSIGNED", "IGNORE"];
 
-function PostInteractionsPanel({ post, onClose }) {
+function ExpandedInteractions({ post, typeFilter, onClose, colSpan }) {
   const [interactions, setInteractions] = useState([]);
   const [loading, setLoading]           = useState(true);
+  const [activeType, setActiveType]     = useState(typeFilter || null);
+
+  // Sync when parent switches stat button
+  useEffect(() => { setActiveType(typeFilter || null); }, [typeFilter]);
 
   useEffect(() => {
     if (!post?.permalink) { setLoading(false); return; }
@@ -501,223 +505,167 @@ function PostInteractionsPanel({ post, onClose }) {
       .finally(() => setLoading(false));
   }, [post?.permalink]);
 
-  if (!post) return null;
+  const allTypes = [...new Set(
+    interactions.map(i => (i.interaction_type || "").split(",")[0].trim()).filter(Boolean)
+  )];
 
-  // Sort by zone rank, then newest first
-  const sorted = [...interactions].sort((a, b) => {
-    const zi = z => ZONE_ORDER.indexOf(z) === -1 ? 4 : ZONE_ORDER.indexOf(z);
+  const filtered = activeType
+    ? interactions.filter(i => (i.interaction_type || "").split(",")[0].trim() === activeType)
+    : interactions;
+
+  const sorted = [...filtered].sort((a, b) => {
+    const zi = z => { const idx = ZONE_ORDER.indexOf(z); return idx === -1 ? 4 : idx; };
     const zd = zi(a.zone) - zi(b.zone);
     if (zd !== 0) return zd;
     return new Date(b.interacted_at || 0) - new Date(a.interacted_at || 0);
   });
 
   const importHref = `/import?mode=interactions${post.permalink ? `&post_url=${encodeURIComponent(post.permalink)}` : ""}`;
+  const fmtFol = n => n >= 1_000_000 ? (n/1_000_000).toFixed(1)+"M"
+                    : n >= 1_000     ? (n/1_000).toFixed(1)+"K"
+                    : n.toLocaleString();
+
+  const tabBtn = (label, isActive, color, onClick) => ({
+    onClick,
+    style: {
+      padding: "3px 11px", borderRadius: 20, cursor: "pointer", fontFamily: sans,
+      fontSize: F.xs, fontWeight: 600, border: "1px solid",
+      borderColor: isActive ? (color || T.accent) : T.border,
+      background: isActive ? (color ? color + "18" : T.accent) : "transparent",
+      color: isActive ? (color || "#fff") : T.sub,
+      transition: "all 0.1s",
+    },
+  });
 
   return (
-    <>
-      {/* Backdrop */}
-      <div onClick={onClose} style={{
-        position: "fixed", inset: 0, zIndex: 998,
-        background: "rgba(0,0,0,0.2)",
-      }} />
-
-      {/* Panel */}
-      <div style={{
-        position: "fixed", top: 0, right: 0, bottom: 0, width: 460, zIndex: 999,
-        background: "#F8F7F5", borderLeft: "1px solid #E8E6E1",
-        boxShadow: "-4px 0 32px rgba(0,0,0,0.10)",
-        display: "flex", flexDirection: "column", overflow: "hidden",
-        fontFamily: sans,
+    <tr>
+      <td colSpan={colSpan} style={{
+        padding: 0,
+        background: "#F5F3F0",
+        borderBottom: `2px solid ${T.accent}`,
+        borderTop: "none",
       }}>
-        {/* Panel header */}
-        <div style={{
-          padding: "18px 24px 14px", borderBottom: "1px solid #E8E6E1",
-          background: "#fff", flexShrink: 0,
-        }}>
-          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              {/* Platform + date */}
-              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-                <PlatDot platform={post.platform} size={9} />
-                <span style={{ fontSize: F.xs, color: "#A8A39C" }}>
-                  {post.published_at ? new Date(post.published_at).toLocaleDateString("en-US", {
-                    month: "short", day: "numeric", year: "numeric" }) : ""}
-                </span>
-                {post.permalink && (
-                  <a href={post.permalink} target="_blank" rel="noreferrer"
-                    style={{ marginLeft: "auto", fontSize: F.xs, color: "#FF6B35",
-                      textDecoration: "none", fontWeight: 600, flexShrink: 0 }}>
-                    Open post ↗
-                  </a>
+        <div style={{ padding: "14px 20px 16px", fontFamily: sans }}>
+
+          {/* Controls: type filter tabs + import + close */}
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
+            <button {...tabBtn(`All${!loading ? ` (${interactions.length})` : ""}`, !activeType, null, () => setActiveType(null))}>
+              All {!loading && `(${interactions.length})`}
+            </button>
+            {allTypes.map(t => {
+              const tc    = TYPE_CFG_PANEL[t] || { label: t, icon: "·", color: T.sub };
+              const count = interactions.filter(i => (i.interaction_type || "").split(",")[0].trim() === t).length;
+              return (
+                <button key={t} {...tabBtn(`${tc.icon} ${tc.label} (${count})`, activeType === t, tc.color, () => setActiveType(t))}>
+                  {tc.icon} {tc.label} ({count})
+                </button>
+              );
+            })}
+            <div style={{ flex: 1 }} />
+            <a href={importHref} style={{
+              fontSize: F.xs, fontWeight: 600, color: T.accent, textDecoration: "none",
+              background: "#FFF3EE", border: "1px solid #FFD4C2",
+              borderRadius: 6, padding: "3px 10px", flexShrink: 0,
+            }}>+ Import</a>
+            <button onClick={onClose} style={{
+              background: "none", border: "none", color: T.dim,
+              cursor: "pointer", fontSize: 16, padding: "2px 5px", lineHeight: 1, flexShrink: 0,
+            }}>✕</button>
+          </div>
+
+          {/* Interactions list */}
+          <div style={{
+            maxHeight: 300, overflowY: "auto",
+            borderRadius: 10, border: `1px solid ${T.border}`,
+            background: T.card,
+          }}>
+            {loading && [1,2,3].map(i => (
+              <div key={i} style={{
+                height: 50, margin: "6px 10px", borderRadius: 8,
+                background: T.well, opacity: 1 - i * 0.25,
+              }} />
+            ))}
+
+            {!loading && sorted.length === 0 && (
+              <div style={{ padding: "28px 20px", textAlign: "center" }}>
+                <div style={{ fontSize: F.sm, color: T.dim, marginBottom: interactions.length === 0 ? 12 : 0 }}>
+                  {interactions.length === 0
+                    ? "No interactions imported for this post yet."
+                    : `No ${activeType} interactions found.`}
+                </div>
+                {interactions.length === 0 && (
+                  <a href={importHref} style={{
+                    display: "inline-block", fontSize: F.xs, fontWeight: 600,
+                    color: "#fff", background: T.accent, textDecoration: "none",
+                    borderRadius: 8, padding: "6px 14px",
+                  }}>Import interactions →</a>
                 )}
               </div>
-              {/* Post content */}
-              <div style={{
-                fontSize: F.sm, color: "#1A1816", lineHeight: 1.5,
-                overflow: "hidden", display: "-webkit-box",
-                WebkitLineClamp: 3, WebkitBoxOrient: "vertical",
-              }}>
-                {post.content || "—"}
-              </div>
-              {/* Stats row */}
-              <div style={{ display: "flex", gap: 16, marginTop: 10 }}>
-                {[
-                  { label: "likes", val: fmt(post.likes) },
-                  { label: "impressions", val: fmt(post.impressions) },
-                  { label: "comments", val: fmt(post.comments) },
-                ].map(s => s.val !== "—" && (
-                  <span key={s.label} style={{ fontSize: F.xs, color: "#6B6560" }}>
-                    <span style={{ fontWeight: 700, color: "#1A1816" }}>{s.val}</span> {s.label}
-                  </span>
-                ))}
-              </div>
-            </div>
-            <button onClick={onClose}
-              style={{ background: "none", border: "none", color: "#A8A39C",
-                cursor: "pointer", fontSize: 20, padding: "0 2px", lineHeight: 1,
-                flexShrink: 0, marginTop: -2 }}>✕</button>
-          </div>
-        </div>
+            )}
 
-        {/* Interactions count + import link */}
-        <div style={{
-          padding: "10px 24px", background: "#fff",
-          borderBottom: "1px solid #E8E6E1", flexShrink: 0,
-          display: "flex", alignItems: "center", gap: 10,
-        }}>
-          <span style={{ fontSize: F.xs, fontWeight: 700, color: "#1A1816" }}>
-            {loading ? "Loading…" : `${sorted.length} interaction${sorted.length !== 1 ? "s" : ""}`}
-          </span>
-          <a href={importHref} style={{
-            marginLeft: "auto", fontSize: F.xs, fontWeight: 600,
-            color: "#FF6B35", textDecoration: "none",
-            background: "#FFF3EE", border: "1px solid #FFD4C2",
-            borderRadius: 6, padding: "3px 10px",
-          }}>
-            + Import
-          </a>
-        </div>
-
-        {/* Interactions list */}
-        <div style={{ flex: 1, overflowY: "auto" }}>
-          {loading && (
-            <div style={{ padding: "40px 24px", textAlign: "center" }}>
-              {[1,2,3,4,5].map(i => (
-                <div key={i} style={{
-                  height: 52, marginBottom: 8, borderRadius: 10,
-                  background: "#E8E6E1",
-                  opacity: 1 - i * 0.15,
-                }} />
-              ))}
-            </div>
-          )}
-
-          {!loading && sorted.length === 0 && (
-            <div style={{ padding: "48px 24px", textAlign: "center" }}>
-              <div style={{ fontSize: 32, marginBottom: 12, opacity: 0.3 }}>💬</div>
-              <div style={{ fontSize: F.sm, fontWeight: 600, color: "#1A1816", marginBottom: 6 }}>
-                No interactions yet
-              </div>
-              <div style={{ fontSize: F.xs, color: "#6B6560", marginBottom: 18, lineHeight: 1.6 }}>
-                Import comments from Buffer or paste them directly.
-              </div>
-              <a href={importHref} style={{
-                fontSize: F.sm, fontWeight: 600, color: "#fff",
-                background: "#FF6B35", textDecoration: "none",
-                borderRadius: 8, padding: "8px 18px",
-              }}>
-                Import interactions →
-              </a>
-            </div>
-          )}
-
-          {!loading && sorted.map((ix, i) => {
-            const zone = ix.zone || "IGNORE";
-            const zc   = ZONE_CFG_PANEL[zone] || ZONE_CFG_PANEL.IGNORE;
-            const type = (ix.interaction_type || "comment").split(",")[0].trim();
-            const tc   = TYPE_CFG_PANEL[type] || { label: type, icon: "·", color: "#6B6560" };
-            const d    = ix.interacted_at
-              ? new Date(ix.interacted_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })
-              : "";
-
-            return (
-              <div key={ix.id || i} style={{
-                display: "flex", alignItems: "flex-start", gap: 0,
-                borderBottom: "1px solid #E8E6E1",
-                background: i % 2 === 0 ? "#fff" : "#F8F7F5",
-                transition: "background 0.1s",
-              }}
-                onMouseEnter={e => e.currentTarget.style.background = "#F3F2F0"}
-                onMouseLeave={e => e.currentTarget.style.background = i % 2 === 0 ? "#fff" : "#F8F7F5"}
-              >
-                {/* Zone stripe */}
-                <div style={{ width: 3, alignSelf: "stretch", flexShrink: 0,
-                  background: zc.color }} />
-
-                <div style={{ flex: 1, padding: "12px 16px", minWidth: 0 }}>
-                  {/* Top row: handle + badges + date */}
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
-                    <span style={{ fontSize: F.sm, fontWeight: 600, color: "#1A1816",
-                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, minWidth: 0 }}>
-                      @{ix.handle}
-                    </span>
-                    {/* Type */}
-                    <span style={{ fontSize: F.xs, fontWeight: 600, color: tc.color,
-                      flexShrink: 0, whiteSpace: "nowrap" }}>
-                      {tc.icon} {tc.label}
-                    </span>
-                    {/* Zone */}
-                    <span style={{
-                      fontSize: 9, fontWeight: 700, letterSpacing: "0.04em",
-                      color: zc.color, background: zc.bg, border: `1px solid ${zc.border}`,
-                      borderRadius: 4, padding: "1px 5px", flexShrink: 0,
-                    }}>{zone}</span>
-                    {d && <span style={{ fontSize: F.xs, color: "#A8A39C", flexShrink: 0 }}>{d}</span>}
+            {!loading && sorted.map((ix, i) => {
+              const zone = ix.zone || "IGNORE";
+              const zc   = ZONE_CFG_PANEL[zone] || ZONE_CFG_PANEL.IGNORE;
+              const type = (ix.interaction_type || "comment").split(",")[0].trim();
+              const tc   = TYPE_CFG_PANEL[type] || { label: type, icon: "·", color: T.sub };
+              const d    = ix.interacted_at
+                ? new Date(ix.interacted_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+                : "";
+              return (
+                <div key={ix.id || i} style={{
+                  display: "flex", alignItems: "flex-start",
+                  borderBottom: i < sorted.length - 1 ? `1px solid ${T.border}` : "none",
+                  background: i % 2 === 0 ? T.card : "#FAFAF8",
+                  transition: "background 0.1s",
+                }}
+                  onMouseEnter={e => e.currentTarget.style.background = "#F0EDE8"}
+                  onMouseLeave={e => e.currentTarget.style.background = i % 2 === 0 ? T.card : "#FAFAF8"}
+                >
+                  <div style={{ width: 3, alignSelf: "stretch", flexShrink: 0, background: zc.color }} />
+                  <div style={{ flex: 1, padding: "9px 14px", minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{
+                        fontSize: F.sm, fontWeight: 600, color: T.text,
+                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1,
+                      }}>@{ix.handle}</span>
+                      <span style={{ fontSize: F.xs, fontWeight: 600, color: tc.color, flexShrink: 0 }}>
+                        {tc.icon} {tc.label}
+                      </span>
+                      <span style={{
+                        fontSize: 9, fontWeight: 700, letterSpacing: "0.04em",
+                        color: zc.color, background: zc.bg, border: `1px solid ${zc.border}`,
+                        borderRadius: 4, padding: "1px 5px", flexShrink: 0,
+                      }}>{zone}</span>
+                      {d && <span style={{ fontSize: F.xs, color: T.dim, flexShrink: 0 }}>{d}</span>}
+                      {ix.followers > 0 && (
+                        <span style={{ fontSize: F.xs, color: T.dim, flexShrink: 0 }}>{fmtFol(ix.followers)}</span>
+                      )}
+                    </div>
+                    {ix.content && (
+                      <div style={{
+                        fontSize: F.xs, color: T.sub, lineHeight: 1.5, marginTop: 2,
+                        overflow: "hidden", display: "-webkit-box",
+                        WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
+                      }}>{ix.content}</div>
+                    )}
                   </div>
-
-                  {/* Name + bio */}
-                  {(ix.name || ix.bio) && (
-                    <div style={{ fontSize: F.xs, color: "#6B6560", marginBottom: 4,
-                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {ix.name && <span style={{ fontWeight: 600 }}>{ix.name}</span>}
-                      {ix.name && ix.bio && <span style={{ margin: "0 4px", color: "#D6D3CC" }}>·</span>}
-                      {ix.bio && <span>{ix.bio}</span>}
-                    </div>
-                  )}
-
-                  {/* Comment content */}
-                  {ix.content && (
-                    <div style={{
-                      fontSize: F.xs, color: "#1A1816", lineHeight: 1.5,
-                      overflow: "hidden", display: "-webkit-box",
-                      WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
-                    }}>
-                      {ix.content}
-                    </div>
-                  )}
-
-                  {/* Followers */}
-                  {ix.followers > 0 && (
-                    <div style={{ fontSize: F.xs, color: "#A8A39C", marginTop: 3 }}>
-                      {ix.followers >= 1_000_000 ? (ix.followers/1_000_000).toFixed(1)+"M"
-                       : ix.followers >= 1_000 ? (ix.followers/1_000).toFixed(1)+"K"
-                       : ix.followers.toLocaleString()} followers
-                    </div>
-                  )}
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
+
         </div>
-      </div>
-    </>
+      </td>
+    </tr>
   );
 }
 
 // ─── Posts table ──────────────────────────────────────────────────────────────
-function PostsTable({ posts, activePlatform, selectedWeek, onSelectPost }) {
+function PostsTable({ posts, activePlatform, selectedWeek }) {
   const [sortBy,   setSortBy]   = useState("published_at");
   const [sortDesc, setSortDesc] = useState(true);
+  const [expanded, setExpanded] = useState(null); // { post, typeFilter }
+
   const visible = posts.filter(p => {
     if (activePlatform !== "all" && p.platform !== activePlatform) return false;
     if (p.post_type === "daily_aggregate") return false;
@@ -734,6 +682,14 @@ function PostsTable({ posts, activePlatform, selectedWeek, onSelectPost }) {
   function toggleSort(col) {
     if (sortBy === col) setSortDesc(d => !d);
     else { setSortBy(col); setSortDesc(true); }
+  }
+
+  function handleStatClick(post, typeFilter) {
+    if (expanded?.post?.id === post.id && expanded?.typeFilter === typeFilter) {
+      setExpanded(null);
+    } else {
+      setExpanded({ post, typeFilter });
+    }
   }
 
   const thStyle = (col) => ({
@@ -793,42 +749,100 @@ function PostsTable({ posts, activePlatform, selectedWeek, onSelectPost }) {
               </td></tr>
             )}
             {sorted.map((p, i) => {
-              const likes   = parseInt(p.likes || 0);
-              const isHot   = likes >= LIKES_GOAL;
+              const likes            = parseInt(p.likes || 0);
+              const isHot            = likes >= LIKES_GOAL;
               const isDailyAggregate = p.post_type === "daily_aggregate";
-              const clickable = !isDailyAggregate;
+              const isExpanded       = expanded?.post?.id === p.id;
+
+              const statBtn = (typeFilter, label, isActive) => ({
+                onClick: (e) => { e.stopPropagation(); handleStatClick(p, typeFilter); },
+                style: {
+                  background: isActive ? T.accent + "15" : "transparent",
+                  border: `1px solid ${isActive ? T.accent : "transparent"}`,
+                  borderRadius: 6, padding: "3px 8px", cursor: "pointer",
+                  fontFamily: sans, fontSize: F.sm, color: isActive ? T.accent : T.sub,
+                  fontWeight: 400, transition: "all 0.1s",
+                },
+              });
+
               return (
-                <tr
-                  key={p.id || i}
-                  onClick={clickable ? () => onSelectPost(p) : undefined}
-                  style={{
+                <React.Fragment key={p.id || i}>
+                  <tr style={{
                     background: i % 2 === 0 ? T.card : T.well + "88",
-                    cursor: clickable ? "pointer" : "default",
                     transition: "background 0.1s",
-                  }}
-                  onMouseEnter={e => { if (clickable) e.currentTarget.style.background = "#EDE9E3"; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = i % 2 === 0 ? T.card : T.well + "88"; }}
-                >
-                  <td style={{ ...td, maxWidth: 0 }}>
-                    <div style={{
-                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                      fontSize: F.xs,
-                      color: isDailyAggregate ? T.dim : T.text,
-                      fontStyle: isDailyAggregate ? "italic" : "normal",
-                    }}>
-                      {p.content || "—"}
-                    </div>
-                  </td>
-                  <td style={td}><PlatDot platform={p.platform} size={12} /></td>
-                  <td style={{ ...td, fontWeight: isHot ? 700 : 400, color: isHot ? T.green : T.text }}>
-                    {isHot && "🔥 "}{fmt(likes)}
-                  </td>
-                  <td style={{ ...td, color: T.sub }}>{fmt(p.impressions)}</td>
-                  <td style={{ ...td, color: T.sub }}>{fmt(p.comments)}</td>
-                  <td style={{ ...td, whiteSpace: "nowrap", color: T.sub, fontSize: F.xs }}>
-                    {fmtDate(p.published_at)}
-                  </td>
-                </tr>
+                  }}>
+                    {/* Content — link to post if permalink available */}
+                    <td style={{ ...td, maxWidth: 0 }}>
+                      {p.permalink && !isDailyAggregate ? (
+                        <a href={p.permalink} target="_blank" rel="noreferrer"
+                          style={{
+                            display: "block", overflow: "hidden",
+                            textOverflow: "ellipsis", whiteSpace: "nowrap",
+                            fontSize: F.xs, color: T.text, textDecoration: "none",
+                          }}
+                          onMouseEnter={e => { e.currentTarget.style.color = T.accent; e.currentTarget.style.textDecoration = "underline"; }}
+                          onMouseLeave={e => { e.currentTarget.style.color = T.text; e.currentTarget.style.textDecoration = "none"; }}
+                        >{p.content || "—"}</a>
+                      ) : (
+                        <div style={{
+                          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                          fontSize: F.xs, color: isDailyAggregate ? T.dim : T.text,
+                          fontStyle: isDailyAggregate ? "italic" : "normal",
+                        }}>{p.content || "—"}</div>
+                      )}
+                    </td>
+
+                    <td style={td}><PlatDot platform={p.platform} size={12} /></td>
+
+                    {/* Likes — clickable stat */}
+                    <td style={{ ...td, padding: "11px 6px" }}>
+                      {isDailyAggregate ? (
+                        <span style={{ padding: "3px 8px", fontWeight: isHot ? 700 : 400,
+                          color: isHot ? T.green : T.text }}>
+                          {isHot && "🔥 "}{fmt(likes)}
+                        </span>
+                      ) : (
+                        <button {...statBtn("like", fmt(likes), isExpanded && expanded.typeFilter === "like")}
+                          style={{
+                            ...statBtn("like", fmt(likes), isExpanded && expanded.typeFilter === "like").style,
+                            fontWeight: isHot ? 700 : 400,
+                            color: isExpanded && expanded.typeFilter === "like"
+                              ? T.accent
+                              : isHot ? T.green : T.text,
+                          }}>
+                          {isHot && "🔥 "}{fmt(likes)}
+                        </button>
+                      )}
+                    </td>
+
+                    <td style={{ ...td, color: T.sub }}>{fmt(p.impressions)}</td>
+
+                    {/* Comments — clickable stat */}
+                    <td style={{ ...td, padding: "11px 6px" }}>
+                      {isDailyAggregate ? (
+                        <span style={{ padding: "3px 8px", color: T.sub }}>{fmt(p.comments)}</span>
+                      ) : (
+                        <button {...statBtn("comment", fmt(p.comments), isExpanded && expanded.typeFilter === "comment")}>
+                          {fmt(p.comments)}
+                        </button>
+                      )}
+                    </td>
+
+                    <td style={{ ...td, whiteSpace: "nowrap", color: T.sub, fontSize: F.xs }}>
+                      {fmtDate(p.published_at)}
+                    </td>
+                  </tr>
+
+                  {/* Inline expansion row */}
+                  {isExpanded && (
+                    <ExpandedInteractions
+                      post={p}
+                      typeFilter={expanded.typeFilter}
+                      onClose={() => setExpanded(null)}
+                      colSpan={6}
+                    />
+                  )}
+                </React.Fragment>
               );
             })}
           </tbody>
@@ -840,8 +854,6 @@ function PostsTable({ posts, activePlatform, selectedWeek, onSelectPost }) {
 
 // ─── Main page — Engagement tab ──────────────────────────────────────────────
 export default function EngagementPage() {
-  const [selectedPost, setSelectedPost] = useState(null);
-
   return (
     <PageShell activeTab="engagement">
       {({ posts, activePlatform, selectedWeek, setSelectedWeek, dateFrom, dateTo, followerSnaps }) => (
@@ -867,15 +879,7 @@ export default function EngagementPage() {
             posts={posts}
             activePlatform={activePlatform}
             selectedWeek={selectedWeek}
-            onSelectPost={setSelectedPost}
           />
-
-          {selectedPost && (
-            <PostInteractionsPanel
-              post={selectedPost}
-              onClose={() => setSelectedPost(null)}
-            />
-          )}
         </>
       )}
     </PageShell>
