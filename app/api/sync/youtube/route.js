@@ -119,17 +119,34 @@ export async function POST() {
       synced_at:     now,
     }));
 
-    // Count genuinely new rows by checking what already exists
+    // Split into new inserts vs stat updates — avoids relying on DB constraint
     let newVideos = 0;
     if (postRows.length > 0) {
-      const existingIds = new Set(
-        ((await supabase.from('posts').select('post_id').eq('platform', 'youtube')).data || [])
-          .map(r => r.post_id)
-      );
-      newVideos = postRows.filter(r => !existingIds.has(r.post_id)).length;
-      await supabase
-        .from('posts')
-        .upsert(postRows, { onConflict: 'platform,post_id', ignoreDuplicates: false });
+      const { data: existingRows, error: fetchErr } = await supabase
+        .from('posts').select('post_id').eq('platform', 'youtube');
+      if (fetchErr) throw new Error('Fetch existing posts failed: ' + fetchErr.message);
+
+      const existingIds = new Set((existingRows || []).map(r => r.post_id));
+      const toInsert = postRows.filter(r => !existingIds.has(r.post_id));
+      const toUpdate = postRows.filter(r =>  existingIds.has(r.post_id));
+      newVideos = toInsert.length;
+
+      if (toInsert.length > 0) {
+        const { error: insertErr } = await supabase.from('posts').insert(toInsert);
+        if (insertErr) throw new Error('Insert videos failed: ' + insertErr.message);
+      }
+
+      // Refresh stats on existing rows in batches of 50
+      for (let i = 0; i < toUpdate.length; i += 50) {
+        const batch = toUpdate.slice(i, i + 50);
+        await Promise.all(batch.map(row =>
+          supabase.from('posts')
+            .update({ likes: row.likes, comments: row.comments, views: row.views,
+                      impressions: row.impressions, synced_at: row.synced_at })
+            .eq('platform', 'youtube')
+            .eq('post_id', row.post_id)
+        ));
+      }
     }
 
     // ── 5. Metrics snapshot ───────────────────────────────────────────────────
