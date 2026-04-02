@@ -149,7 +149,70 @@ export async function POST() {
       }
     }
 
-    // ── 5. Metrics snapshot ───────────────────────────────────────────────────
+    // ── 5. Subscriber history backfill via YouTube Analytics API ─────────────
+    // Uses yt-analytics.readonly scope (already requested during OAuth).
+    // Fetches daily subscribersGained + subscribersLost from channel creation
+    // to today, then reconstructs absolute counts by working backwards from the
+    // current subscriber count. Replaces all existing youtube platform_metrics
+    // with biweekly snapshots + a current full snapshot (with video data).
+    let backfillSnapshots = 0;
+    try {
+      const today      = now.slice(0, 10);
+      const channelId  = channel.id;
+      const currentSubs = parseInt(channel.statistics?.subscriberCount || 0);
+
+      const analyticsUrl = new URL('https://youtubeanalytics.googleapis.com/v2/reports');
+      analyticsUrl.searchParams.set('ids',        `channel==${channelId}`);
+      analyticsUrl.searchParams.set('metrics',    'subscribersGained,subscribersLost');
+      analyticsUrl.searchParams.set('dimensions', 'day');
+      analyticsUrl.searchParams.set('startDate',  '2005-01-01'); // before YouTube existed; API clips to channel creation
+      analyticsUrl.searchParams.set('endDate',    today);
+      analyticsUrl.searchParams.set('sort',       'day');
+
+      const analyticsRes  = await fetch(analyticsUrl.toString(), {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const analyticsData = await analyticsRes.json();
+
+      if (analyticsData.rows?.length > 0) {
+        const rows = analyticsData.rows; // [[date, gained, lost], ...]
+
+        // Reconstruct absolute counts backwards from today's known total
+        const daily = new Array(rows.length);
+        let running = currentSubs;
+        for (let i = rows.length - 1; i >= 0; i--) {
+          const [date, gained, lost] = rows[i];
+          daily[i] = { date, count: Math.max(0, Math.round(running)) };
+          running = running - gained + lost;
+        }
+
+        // Sample every 14 days (biweekly) for chart performance; always keep first + last
+        const snapshots = daily
+          .filter((_, i) => i % 14 === 0 || i === daily.length - 1)
+          .map(({ date, count }) => ({
+            platform:    'youtube',
+            snapshot_at: `${date}T00:00:00Z`,
+            followers:   count,
+          }));
+
+        // Wipe existing youtube metrics and replace with full history
+        await supabase.from('platform_metrics').delete().eq('platform', 'youtube');
+
+        for (let i = 0; i < snapshots.length; i += 200) {
+          const { error: snapErr } = await supabase
+            .from('platform_metrics')
+            .insert(snapshots.slice(i, i + 200));
+          if (snapErr) throw snapErr;
+        }
+        backfillSnapshots = snapshots.length;
+      }
+    } catch (analyticsErr) {
+      // Analytics backfill is best-effort; don't abort the whole sync
+      console.warn('Analytics subscriber backfill skipped:', analyticsErr.message);
+    }
+
+    // Always write the current full snapshot (with video data) — either as a
+    // fresh insert (if Analytics succeeded) or as the sole snapshot (if not).
     await supabase.from('platform_metrics').insert({
       platform:    'youtube',
       snapshot_at: now,
@@ -270,21 +333,23 @@ export async function POST() {
 
     const updatedVideos = postRows.length - newVideos;
     const parts = [];
-    if (newVideos > 0)      parts.push(`${newVideos} new video${newVideos !== 1 ? 's' : ''}`);
-    if (updatedVideos > 0)  parts.push(`${updatedVideos} updated`);
-    if (commentsSaved > 0)  parts.push(`${commentsSaved} new comment${commentsSaved !== 1 ? 's' : ''}`);
-    if (parts.length === 0) parts.push(`${postRows.length} video${postRows.length !== 1 ? 's' : ''} already up to date`);
+    if (newVideos > 0)          parts.push(`${newVideos} new video${newVideos !== 1 ? 's' : ''}`);
+    if (updatedVideos > 0)      parts.push(`${updatedVideos} refreshed`);
+    if (commentsSaved > 0)      parts.push(`${commentsSaved} new comment${commentsSaved !== 1 ? 's' : ''}`);
+    if (backfillSnapshots > 0)  parts.push(`${backfillSnapshots} subscriber history points`);
+    if (parts.length === 0)     parts.push(`${postRows.length} video${postRows.length !== 1 ? 's' : ''} already up to date`);
     const msg = parts.join(' · ');
 
     return NextResponse.json({
-      success:         true,
-      channel:         channel.snippet?.title,
-      subscribers:     channel.statistics?.subscriberCount,
-      playlist_items:  videoIds.length,
-      videos_synced:   postRows.length,
-      new_videos:      newVideos,
-      comments_synced: commentsSaved,
-      message:         msg,
+      success:            true,
+      channel:            channel.snippet?.title,
+      subscribers:        channel.statistics?.subscriberCount,
+      playlist_items:     videoIds.length,
+      videos_synced:      postRows.length,
+      new_videos:         newVideos,
+      comments_synced:    commentsSaved,
+      backfill_snapshots: backfillSnapshots,
+      message:            msg,
     });
 
   } catch (err) {
