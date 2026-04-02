@@ -1235,10 +1235,8 @@ function PostsTable({ posts, activePlatform, selectedWeek, onImported }) {
 export default function EngagementPage() {
   return (
     <PageShell activeTab="engagement">
-      {({ posts, activePlatform, selectedWeek, setSelectedWeek, dateFrom, dateTo, followerSnaps, loadPosts }) => (
+      {({ posts, activePlatform, selectedWeek, setSelectedWeek, dateFrom, dateTo, loadPosts }) => (
         <>
-          <FollowersChart snapshots={followerSnaps} activePlatform={activePlatform} />
-
           <WeeklyOKR
             posts={posts}
             activePlatform={activePlatform}
