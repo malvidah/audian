@@ -498,10 +498,10 @@ function SignIn() {
 
 // ─── Profile Menu ────────────────────────────────────────────────────────────
 const PLAT_META = [
-  { id: "youtube",   label: "YouTube",    icon: "▶",  color: "#FF0000", authUrl: "/api/auth/youtube" },
-  { id: "instagram", label: "Instagram",  icon: "◉",  color: "#E1306C", authUrl: "/api/auth/instagram" },
-  { id: "x",         label: "X / Twitter", icon: "𝕏", color: "#000000", authUrl: "/api/auth/x" },
-  { id: "linkedin",  label: "LinkedIn",   icon: "in", color: "#0077B5", authUrl: "/api/auth/linkedin" },
+  { id: "youtube",   label: "YouTube",    icon: "▶",  color: "#FF0000", authUrl: "/api/auth/youtube",   syncUrl: "/api/sync/youtube" },
+  { id: "instagram", label: "Instagram",  icon: "◉",  color: "#E1306C", authUrl: "/api/auth/instagram", syncUrl: "/api/posts/sync-instagram" },
+  { id: "x",         label: "X / Twitter", icon: "𝕏", color: "#000000", authUrl: "/api/auth/x",         syncUrl: "/api/sync/x" },
+  { id: "linkedin",  label: "LinkedIn",   icon: "in", color: "#0077B5", authUrl: "/api/auth/linkedin",  syncUrl: null },
 ];
 
 function Toggle({ on, onClick }) {
@@ -529,6 +529,8 @@ function ProfileMenu({ session, avatarUrl, connections = [], onDisconnect, posts
   const [open, setOpen] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [disconnecting, setDisconnecting] = useState(null);
+  const [syncing, setSyncing] = useState(null);           // platform id currently syncing
+  const [syncResult, setSyncResult] = useState({});       // { [platformId]: { ok, msg } }
   const menuRef = useRef(null);
   const email = session?.user?.email || "";
   const initial = email[0]?.toUpperCase() || "?";
@@ -546,6 +548,25 @@ function ProfileMenu({ session, avatarUrl, connections = [], onDisconnect, posts
     setDisconnecting(platformId);
     try { await onDisconnect?.(platformId); } catch(e) { console.error(e); }
     setDisconnecting(null);
+  }
+
+  async function syncPlatform(platformId, syncUrl) {
+    if (!syncUrl || syncing) return;
+    setSyncing(platformId);
+    setSyncResult(r => ({ ...r, [platformId]: null }));
+    try {
+      const res  = await fetch(syncUrl, { method: "POST" });
+      const data = await res.json();
+      const ok   = !data.error;
+      setSyncResult(r => ({ ...r, [platformId]: { ok, msg: ok ? (data.message || "Synced") : data.error } }));
+      if (ok) onImported?.();
+    } catch (e) {
+      setSyncResult(r => ({ ...r, [platformId]: { ok: false, msg: e.message } }));
+    } finally {
+      setSyncing(null);
+      // auto-clear result after 4 s
+      setTimeout(() => setSyncResult(r => ({ ...r, [platformId]: null })), 4000);
+    }
   }
 
   return (
@@ -600,29 +621,61 @@ function ProfileMenu({ session, avatarUrl, connections = [], onDisconnect, posts
           <div style={{ padding: "10px 0" }}>
             <div style={{ padding: "4px 18px 8px", fontFamily: sans, fontSize: 10, fontWeight: 600, color: T.dim, letterSpacing: "0.06em", textTransform: "uppercase" }}>Connections</div>
             {PLAT_META.map(p => {
-              const conn = connections.find(c => c.platform === p.id);
+              const conn        = connections.find(c => c.platform === p.id);
               const isConnected = !!conn;
-              const isLoading = disconnecting === p.id;
+              const isDisc      = disconnecting === p.id;
+              const isSyncing   = syncing === p.id;
+              const result      = syncResult[p.id];
               return (
-                <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 18px" }}>
-                  <div style={{
-                    width: 28, height: 28, borderRadius: 7, flexShrink: 0,
-                    background: p.color + "14",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: 12, color: p.color, fontWeight: 700,
-                  }}>{p.icon}</div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 500, color: T.text }}>{p.label}</div>
-                    {conn?.channel_name && (
-                      <div style={{ fontFamily: sans, fontSize: F.xs, color: T.dim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{conn.channel_name}</div>
+                <div key={p.id}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 18px" }}>
+                    <div style={{
+                      width: 28, height: 28, borderRadius: 7, flexShrink: 0,
+                      background: p.color + "14",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: 12, color: p.color, fontWeight: 700,
+                    }}>{p.icon}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 500, color: T.text }}>{p.label}</div>
+                      {conn?.channel_name && (
+                        <div style={{ fontFamily: sans, fontSize: F.xs, color: T.dim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{conn.channel_name}</div>
+                      )}
+                    </div>
+                    {/* Sync button — only shown when connected and a sync route exists */}
+                    {isConnected && p.syncUrl && (
+                      <button
+                        title={`Sync ${p.label}`}
+                        disabled={!!syncing}
+                        onClick={() => syncPlatform(p.id, p.syncUrl)}
+                        style={{
+                          width: 28, height: 28, borderRadius: 7, border: "none", cursor: syncing ? "default" : "pointer",
+                          background: isSyncing ? p.color + "20" : T.well,
+                          color: isSyncing ? p.color : T.dim,
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          fontSize: 13, flexShrink: 0, transition: "background 0.15s, color 0.15s",
+                        }}>
+                        {isSyncing ? "…" : "↻"}
+                      </button>
+                    )}
+                    {isDisc ? (
+                      <span style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>...</span>
+                    ) : isConnected ? (
+                      <Toggle on={true} onClick={() => disconnect(p.id)} />
+                    ) : (
+                      <Toggle on={false} onClick={() => { window.location.href = p.authUrl; }} />
                     )}
                   </div>
-                  {isLoading ? (
-                    <span style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>...</span>
-                  ) : isConnected ? (
-                    <Toggle on={true} onClick={() => disconnect(p.id)} />
-                  ) : (
-                    <Toggle on={false} onClick={() => { window.location.href = p.authUrl; }} />
+                  {/* Inline result pill */}
+                  {result && (
+                    <div style={{
+                      margin: "0 18px 8px", padding: "5px 10px", borderRadius: 6,
+                      fontFamily: sans, fontSize: F.xs, fontWeight: 500,
+                      background: result.ok ? T.greenBg  : T.redBg,
+                      color:      result.ok ? T.green    : T.red,
+                      border:     `1px solid ${result.ok ? T.greenBorder : T.redBorder}`,
+                    }}>
+                      {result.ok ? "✓ " : "✗ "}{result.msg}
+                    </div>
                   )}
                 </div>
               );
