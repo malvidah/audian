@@ -162,7 +162,7 @@ function HandleDrawer({ open, mode, handle, onClose, onSaved }) {
     setSaving(false);
   }
 
-  const title = mode === "create" ? "New handle" : "Edit handle";
+  const title = mode === "create" ? "New person / org" : "Edit person / org";
 
   return (
     <>
@@ -316,7 +316,7 @@ function HandleDrawer({ open, mode, handle, onClose, onSaved }) {
                 opacity: saving ? 0.7 : 1, transition: "opacity 0.15s",
               }}
             >
-              {saving ? "Saving…" : mode === "create" ? "Add handle" : "Save changes"}
+              {saving ? "Saving…" : mode === "create" ? "Add person / org" : "Save changes"}
             </button>
           </div>
         </div>
@@ -481,7 +481,7 @@ function SummaryStats({ handles, selectedZones, onToggleZone }) {
 
   return (
     <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
-      <StatCard label="Total handles" value={handles.length} />
+      <StatCard label="Total" value={handles.length} />
       <StatCard label="With bio" value={handles.filter(h => h.bio).length} />
       {["ELITE", "INFLUENTIAL", "SIGNAL"].map((zone) => (
         <StatCard
@@ -649,7 +649,7 @@ export default function HandlesTable({ platform, refreshKey }) {
   if (loading) {
     return (
       <div style={{ fontFamily: sans, fontSize: F.md, color: T.sub, textAlign: "center", padding: "60px 20px" }}>
-        Loading handles...
+        Loading...
       </div>
     );
   }
@@ -715,7 +715,7 @@ export default function HandlesTable({ platform, refreshKey }) {
           onMouseLeave={e => { e.currentTarget.style.opacity = "1"; e.currentTarget.style.transform = "translateY(0)"; }}
         >
           <span style={{ fontSize: 18, lineHeight: 1, fontWeight: 300 }}>+</span>
-          Add handle
+          Add person / org
         </button>
       </div>
 
@@ -758,10 +758,10 @@ export default function HandlesTable({ platform, refreshKey }) {
                   ...tdStyle, textAlign: "center", color: T.dim, padding: "40px 12px",
                 }}>
                   {search
-                    ? `No handles matching "${search}"`
+                    ? `No people matching "${search}"`
                     : selectedZones.size
-                      ? "No handles match the selected label filters."
-                      : "No handles yet. Click \"Add handle\" or import a CSV to get started."}
+                      ? "No people match the selected label filters."
+                      : "No people yet. Click \"Add person / org\" or import a CSV to get started."}
                 </td>
               </tr>
             )}

@@ -11,7 +11,7 @@ const supabase = createClient(
 
 const InteractionsTable = dynamic(() => import("../../components/InteractionsTable"), {
   ssr: false,
-  loading: () => <div style={{padding:"2rem",textAlign:"center",color:"#6B6560"}}>Loading interactions...</div>
+  loading: () => null
 });
 
 const CreatePanelDynamic = dynamic(() => import("../../components/InteractionsTable").then(m => ({ default: m.CreatePanel })), {

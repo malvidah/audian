@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
@@ -67,7 +68,7 @@ const TAB_STYLE = (active) => ({
 const TABS = [
   { key: "engagement",   label: "Posts",        emoji: "\uD83D\uDCCA", href: "/" },
   { key: "interactions", label: "Interactions", emoji: "\uD83E\uDD1D", href: "/interactions" },
-  { key: "handles",      label: "Handles",      emoji: "\uD83D\uDC64", href: "/handles" },
+  { key: "handles",      label: "People & Orgs", emoji: "\uD83D\uDC64", href: "/handles" },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -948,7 +949,7 @@ function ProfileMenu({ session, avatarUrl, connections = [], onDisconnect, posts
               style={{ display: "flex", alignItems: "center", gap: 8, padding: "11px 18px", textDecoration: "none" }}
               onMouseEnter={e => e.currentTarget.style.background = T.well}
               onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-              <span style={{ fontFamily: sans, fontSize: F.sm, color: T.text, fontWeight: 500 }}>Manage handles</span>
+              <span style={{ fontFamily: sans, fontSize: F.sm, color: T.text, fontWeight: 500 }}>Manage people & orgs</span>
               <span style={{ color: T.dim, fontSize: F.xs, marginLeft: "auto" }}>&#8599;</span>
             </a>
           </div>
@@ -1387,8 +1388,8 @@ export default function PageShell({ activeTab, children }) {
         setActionMessage({
           tone: "muted",
           text: activeTab === "handles"
-            ? "No handles in this view still need bio or follower enrichment."
-            : "No handles found to enrich for this view.",
+            ? "No people in this view still need bio or follower enrichment."
+            : "No people found to enrich for this view.",
         });
         return;
       }
@@ -1405,7 +1406,7 @@ export default function PageShell({ activeTab, children }) {
         const batchNum = Math.floor(i / batchSize) + 1;
         setActionMessage({
           tone: "muted",
-          text: `Batch ${batchNum} of ${totalBatches} · pulling bios and follower counts for ${checked + 1}-${Math.min(checked + batch.length, handleIds.length)} of ${handleIds.length} handles…`,
+          text: `Batch ${batchNum} of ${totalBatches} · pulling bios and follower counts for ${checked + 1}-${Math.min(checked + batch.length, handleIds.length)} of ${handleIds.length} people…`,
         });
         const enrichRes = await fetch("/api/enrich/handles", {
           method: "POST",
@@ -1426,7 +1427,7 @@ export default function PageShell({ activeTab, children }) {
       setActionMessage({
         tone: enriched > 0 ? "success" : "muted",
         text: enriched > 0
-          ? `Updated ${enriched} handle${enriched === 1 ? "" : "s"} · ${bioUpdates} bio${bioUpdates === 1 ? "" : "s"} and ${followerUpdates} follower count${followerUpdates === 1 ? "" : "s"} filled in.`
+          ? `Updated ${enriched} person${enriched === 1 ? "" : "s"} · ${bioUpdates} bio${bioUpdates === 1 ? "" : "s"} and ${followerUpdates} follower count${followerUpdates === 1 ? "" : "s"} filled in.`
           : `Checked ${checked} profile${checked === 1 ? "" : "s"} and everything already looked filled in.`,
       });
     } catch (e) {
@@ -1562,12 +1563,12 @@ export default function PageShell({ activeTab, children }) {
             <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 16, borderBottom: `1px solid ${T.border}`, marginBottom: 16, flexWrap: "wrap" }}>
               <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
                 {TABS.map(tab => (
-                  <a key={tab.key} href={tab.href} style={TAB_STYLE(activeTab === tab.key)}
+                  <Link key={tab.key} href={tab.href} style={TAB_STYLE(activeTab === tab.key)}
                     onMouseEnter={e => { if (activeTab !== tab.key) e.currentTarget.style.color = T.sub; }}
                     onMouseLeave={e => { if (activeTab !== tab.key) e.currentTarget.style.color = T.dim; }}>
                     <span>{tab.emoji}</span>
                     {tab.label}
-                  </a>
+                  </Link>
                 ))}
               </div>
               <div style={{ display: "flex", gap: 8, paddingBottom: 8, flexWrap: "wrap" }}>
