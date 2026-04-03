@@ -113,19 +113,30 @@ function ActiveInNetwork({ activePlatform, dateFrom, dateTo }) {
           return true;
         });
 
-        // Deduplicate by handle_id — keep most recent interaction per person
-        const seen = new Set();
-        const deduped = [];
+        // Group all interactions by handle — collect every type per person
+        const groups = {};
         for (const row of filtered) {
           const key = row.handle_id || row.handles?.id;
-          if (!key || seen.has(key)) continue;
-          seen.add(key);
-          deduped.push(row);
+          if (!key) continue;
+          if (!groups[key]) {
+            groups[key] = { latestRow: row, types: new Set(), count: 0 };
+          }
+          // Track most recent row for sorting + handle data
+          if ((row.interacted_at || "") > (groups[key].latestRow.interacted_at || "")) {
+            groups[key].latestRow = row;
+          }
+          groups[key].types.add(normalizeType(row.interaction_type));
+          groups[key].count++;
         }
 
+        // Sort by most recent interaction date
+        const sorted = Object.values(groups).sort(
+          (a, b) => (b.latestRow.interacted_at || "").localeCompare(a.latestRow.interacted_at || "")
+        );
+
         // Map to card data
-        const cards = deduped.map(row => {
-          const h   = row.handles || {};
+        const cards = sorted.map(({ latestRow: row, types, count }) => {
+          const h    = row.handles || {};
           const plat = row.platform || "x";
           const followers =
             plat === "instagram" ? (h.followers_instagram || 0) :
@@ -138,18 +149,21 @@ function ActiveInNetwork({ activePlatform, dateFrom, dateTo }) {
             plat === "youtube"   ? h.handle_youtube :
                                    h.handle_linkedin;
           const gradIdx = Math.abs((h.name || "").split("").reduce((a, c) => a + c.charCodeAt(0), 0)) % AVATAR_GRADIENTS.length;
+          const typeList = [...types]; // all unique interaction types
           return {
-            id:       row.id,
-            handleId: row.handle_id || h.id,
-            name:     h.name || "Unknown",
-            bio:      h.bio  || null,
-            zone:     h.zone || "SIGNAL",
+            id:          row.id,
+            handleId:    row.handle_id || h.id,
+            name:        h.name || "Unknown",
+            bio:         h.bio  || null,
+            zone:        h.zone || "SIGNAL",
             entity_type: h.entity_type || "person",
-            platform: plat,
+            platform:    plat,
             handle,
             followers,
-            type:     normalizeType(row.interaction_type),
-            date:     row.interacted_at,
+            types:       typeList,
+            follows:     typeList.includes("follow"),
+            count,
+            date:        row.interacted_at,
             gradIdx,
           };
         });
@@ -210,7 +224,6 @@ function ActiveInNetwork({ activePlatform, dateFrom, dateTo }) {
         }}>
           {people.map(p => {
             const isHovered = hoveredId === p.id;
-            const typeCfg   = TYPE_BADGE[p.type] || { label: p.type, bg: T.well, color: T.sub, border: T.border };
             const avatarLetter = p.name !== "Unknown" ? p.name.charAt(0).toUpperCase() : null;
 
             return (
@@ -296,17 +309,37 @@ function ActiveInNetwork({ activePlatform, dateFrom, dateTo }) {
                   </span>
                 </div>
 
-                {/* Last interaction */}
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
-                  <span style={{
-                    display: "inline-flex", alignItems: "center",
-                    fontFamily: sans, fontSize: F.xs, fontWeight: 600,
-                    background: typeCfg.bg, color: typeCfg.color,
-                    border: `1px solid ${typeCfg.border}`,
-                    borderRadius: 12, padding: "2px 9px",
-                  }}>
-                    {typeCfg.label}
-                  </span>
+                {/* Interaction type pills */}
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: p.follows ? 8 : 0 }}>
+                  {(p.types || []).filter(t => t !== "follow").map(t => {
+                    const cfg = TYPE_BADGE[t] || { label: t, bg: T.well, color: T.sub, border: T.border };
+                    return (
+                      <span key={t} style={{
+                        display: "inline-flex", alignItems: "center",
+                        fontFamily: sans, fontSize: F.xs, fontWeight: 600,
+                        background: cfg.bg, color: cfg.color,
+                        border: `1px solid ${cfg.border}`,
+                        borderRadius: 12, padding: "2px 8px",
+                      }}>
+                        {cfg.label}
+                      </span>
+                    );
+                  })}
+                </div>
+
+                {/* Follows you + last seen */}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6, marginTop: 6 }}>
+                  {p.follows ? (
+                    <span style={{
+                      display: "inline-flex", alignItems: "center", gap: 4,
+                      fontFamily: sans, fontSize: F.xs, fontWeight: 700,
+                      background: "#F0FDF4", color: "#16A34A",
+                      border: "1px solid #BBF7D0",
+                      borderRadius: 12, padding: "2px 9px",
+                    }}>
+                      ✓ Follows you
+                    </span>
+                  ) : <span />}
                   <span style={{ fontFamily: sans, fontSize: F.xs, color: T.dim }}>
                     {fmtDate(p.date)}
                   </span>
