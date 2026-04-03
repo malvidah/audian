@@ -123,7 +123,17 @@ export async function POST() {
     }
 
     if (merges.length === 0) {
-      return NextResponse.json({ merged: 0, message: 'No matching duplicate pairs found.' });
+      return NextResponse.json({
+        merged: 0,
+        message: 'No matching duplicate pairs found.',
+        debug: {
+          total: posts?.length,
+          apiCount: apiPosts.length,
+          bufferCount: bufferPosts.length,
+          sampleApi: apiPosts[0] ? { post_id: apiPosts[0].post_id, source: apiPosts[0].source, date: apiPosts[0].published_at?.slice(0,10), prefix: normalisePrefix(apiPosts[0].content) } : null,
+          sampleBuf: bufferPosts[0] ? { post_id: bufferPosts[0].post_id, source: bufferPosts[0].source, date: bufferPosts[0].published_at?.slice(0,10), prefix: normalisePrefix(bufferPosts[0].content) } : null,
+        }
+      });
     }
 
     // Apply updates to api rows and delete buffer rows
