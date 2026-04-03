@@ -347,22 +347,17 @@ function ActiveInNetwork({ activePlatform, dateFrom, dateTo }) {
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: p.follows ? 8 : 0 }}>
                   {(p.types || []).filter(([t]) => t !== "follow").map(([t, n]) => {
                     const cfg = TYPE_BADGE[t] || { label: t, bg: T.well, color: T.sub, border: T.border };
+                    const base = cfg.label.toLowerCase();
+                    const label = n === 1 ? `1 ${base}` : `${n} ${base}s`;
                     return (
                       <span key={t} style={{
-                        display: "inline-flex", alignItems: "center", gap: 5,
+                        display: "inline-flex", alignItems: "center",
                         fontFamily: sans, fontSize: F.xs, fontWeight: 600,
                         background: cfg.bg, color: cfg.color,
                         border: `1px solid ${cfg.border}`,
-                        borderRadius: 12, padding: "2px 8px",
+                        borderRadius: 12, padding: "2px 9px",
                       }}>
-                        {cfg.label}
-                        <span style={{
-                          fontSize: "0.82em", fontWeight: 700, opacity: 0.75,
-                          background: "rgba(0,0,0,0.08)", borderRadius: 8,
-                          padding: "0 5px",
-                        }}>
-                          {n}
-                        </span>
+                        {label}
                       </span>
                     );
                   })}
