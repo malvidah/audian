@@ -195,14 +195,100 @@ function TagInput({ value = [], onChange, allTags = [] }) {
   );
 }
 
+// ─── Avatar ──────────────────────────────────────────────────────────────────
+// Displays a profile photo, or a gradient+initials fallback.
+// If onUpload is provided, hovering shows a camera icon and clicking opens the
+// file picker. onUpload(file) is called with the selected File object.
+function Avatar({ name, avatarUrl, size = 36, onUpload }) {
+  const [hover, setHover] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState(null);
+  const fileRef = useRef(null);
+
+  // Pick a consistent gradient based on name string
+  const gradIdx = (name || "?").split("").reduce((s, c) => s + c.charCodeAt(0), 0) % AVATAR_GRADIENTS.length;
+  const gradient = AVATAR_GRADIENTS[gradIdx];
+  const initials = (name || "?").split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
+
+  const src = previewUrl || avatarUrl;
+
+  function handleFileChange(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // Optimistic preview
+    setPreviewUrl(URL.createObjectURL(file));
+    onUpload?.(file);
+    e.target.value = "";
+  }
+
+  return (
+    <div
+      style={{
+        position: "relative", width: size, height: size, borderRadius: "50%",
+        flexShrink: 0, cursor: onUpload ? "pointer" : "default",
+        overflow: "hidden",
+      }}
+      onMouseEnter={() => onUpload && setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      onClick={() => onUpload && fileRef.current?.click()}
+      title={onUpload ? "Click to upload photo" : undefined}
+    >
+      {/* Photo or gradient */}
+      {src ? (
+        <img src={src} alt={name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+      ) : (
+        <div style={{
+          width: "100%", height: "100%",
+          background: gradient,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontFamily: sans, fontWeight: 700,
+          fontSize: size * 0.36, color: "#fff",
+          letterSpacing: "0.02em",
+        }}>
+          {initials}
+        </div>
+      )}
+
+      {/* Camera overlay on hover */}
+      {onUpload && hover && (
+        <div style={{
+          position: "absolute", inset: 0,
+          background: "rgba(0,0,0,0.45)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          borderRadius: "50%",
+        }}>
+          <svg width={size * 0.42} height={size * 0.42} viewBox="0 0 24 24" fill="none"
+            stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+            <circle cx="12" cy="13" r="4"/>
+          </svg>
+        </div>
+      )}
+
+      {/* Hidden file input */}
+      {onUpload && (
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/gif"
+          style={{ display: "none" }}
+          onChange={handleFileChange}
+        />
+      )}
+    </div>
+  );
+}
+
 function HandleDrawer({ open, mode, handle, onClose, onSaved, allTags = [] }) {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+  const [avatarUrl, setAvatarUrl] = useState(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
 
   // Populate form when editing
   useEffect(() => {
     if (mode === "edit" && handle) {
+      setAvatarUrl(handle.avatar_url || null);
       setForm({
         name:               handle.name               || "",
         bio:                handle.bio                || "",
@@ -219,10 +305,30 @@ function HandleDrawer({ open, mode, handle, onClose, onSaved, allTags = [] }) {
         followers_linkedin:  handle.followers_linkedin != null ? String(handle.followers_linkedin) : "",
       });
     } else if (mode === "create") {
+      setAvatarUrl(null);
       setForm(EMPTY_FORM);
     }
     setError(null);
   }, [mode, handle, open]);
+
+  async function handleAvatarUpload(file) {
+    if (!handle?.id) return; // can't upload for unsaved handle
+    setAvatarUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("handle_id", handle.id);
+      const res = await fetch("/api/handles/avatar", { method: "POST", body: fd });
+      const d = await res.json();
+      if (d.error) { setError(d.error); return; }
+      setAvatarUrl(d.url);
+      onSaved({ ...handle, avatar_url: d.url }, "edit");
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setAvatarUploading(false);
+    }
+  }
 
   if (!open) return null;
 
@@ -306,15 +412,28 @@ function HandleDrawer({ open, mode, handle, onClose, onSaved, allTags = [] }) {
           padding: "20px 24px 16px", borderBottom: `1px solid ${T.border}`,
           flexShrink: 0,
         }}>
-          <div>
-            <div style={{ fontSize: F.lg, fontWeight: 700, color: T.text, lineHeight: 1.2 }}>
-              {title}
-            </div>
-            {mode === "edit" && handle?.name && (
-              <div style={{ fontSize: F.xs, color: T.dim, marginTop: 3 }}>
-                {handle.name}
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            <Avatar
+              name={form.name || handle?.name}
+              avatarUrl={avatarUrl}
+              size={48}
+              onUpload={mode === "edit" ? handleAvatarUpload : undefined}
+            />
+            <div>
+              <div style={{ fontSize: F.lg, fontWeight: 700, color: T.text, lineHeight: 1.2 }}>
+                {title}
               </div>
-            )}
+              {mode === "edit" && handle?.name && (
+                <div style={{ fontSize: F.xs, color: T.dim, marginTop: 3 }}>
+                  {avatarUploading ? "Uploading…" : "Click photo to change"}
+                </div>
+              )}
+              {mode === "create" && (
+                <div style={{ fontSize: F.xs, color: T.dim, marginTop: 3 }}>
+                  Save first, then add a photo
+                </div>
+              )}
+            </div>
           </div>
           <button
             onClick={onClose}
@@ -708,8 +827,20 @@ export default function HandlesTable({ platform, refreshKey }) {
     } else {
       setHandles(prev => prev.map(h => h.id === savedHandle.id ? { ...h, ...savedHandle } : h));
     }
-    // Refresh tag list in case new tags were added
     loadTags();
+  }
+
+  async function uploadAvatarForRow(handleId, file) {
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("handle_id", handleId);
+    try {
+      const res = await fetch("/api/handles/avatar", { method: "POST", body: fd });
+      const d = await res.json();
+      if (d.url) {
+        setHandles(prev => prev.map(h => h.id === handleId ? { ...h, avatar_url: d.url } : h));
+      }
+    } catch {}
   }
 
   function primaryHandle(h) {
@@ -949,25 +1080,39 @@ export default function HandlesTable({ platform, refreshKey }) {
                     if (editBtn) editBtn.style.opacity = "0";
                   }}>
                   {/* Name */}
-                  <td style={{ ...tdStyle, maxWidth: 180, cursor: "text" }}
-                    onClick={() => { if (!editCell) startEdit(h, "name"); }}>
-                    {editCell?.id === h.id && editCell?.field === "name" ? (
-                      <input
-                        autoFocus
-                        value={editVal}
-                        onChange={e => setEditVal(e.target.value)}
-                        onBlur={() => commitEdit()}
-                        onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") cancelEdit(); }}
-                        style={ghostInput({ fontSize: F.sm, fontWeight: 600 })}
-                      />
-                    ) : (
-                      <div style={{
-                        fontWeight: 600, fontSize: F.sm, color: T.text, lineHeight: 1.3,
-                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                      }}>
-                        {h.name || pri?.handle || "\u2014"}
+                  <td style={{ ...tdStyle, maxWidth: 220 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      {/* Avatar — click to upload, stops propagation so it doesn't trigger name edit */}
+                      <div onClick={e => e.stopPropagation()}>
+                        <Avatar
+                          name={h.name || pri?.handle}
+                          avatarUrl={h.avatar_url}
+                          size={32}
+                          onUpload={file => uploadAvatarForRow(h.id, file)}
+                        />
                       </div>
-                    )}
+                      {/* Name text — click to inline-edit */}
+                      <div style={{ flex: 1, minWidth: 0, cursor: "text" }}
+                        onClick={() => { if (!editCell) startEdit(h, "name"); }}>
+                        {editCell?.id === h.id && editCell?.field === "name" ? (
+                          <input
+                            autoFocus
+                            value={editVal}
+                            onChange={e => setEditVal(e.target.value)}
+                            onBlur={() => commitEdit()}
+                            onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") cancelEdit(); }}
+                            style={ghostInput({ fontSize: F.sm, fontWeight: 600 })}
+                          />
+                        ) : (
+                          <div style={{
+                            fontWeight: 600, fontSize: F.sm, color: T.text, lineHeight: 1.3,
+                            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                          }}>
+                            {h.name || pri?.handle || "\u2014"}
+                          </div>
+                        )}
+                      </div>
+                    </div>
                     {h.entity_type && h.entity_type !== "person" && (
                       <span style={{
                         display: "inline-block", marginTop: 2,
