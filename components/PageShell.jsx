@@ -17,6 +17,166 @@ function daysAgo(n) {
 }
 const TODAY = new Date().toISOString().slice(0, 10);
 
+// ─── MiniCalendar ─────────────────────────────────────────────────────────────
+const CAL_DAYS  = ["S", "M", "T", "W", "T", "F", "S"];
+const CAL_MONTHS = ["January","February","March","April","May","June",
+                    "July","August","September","October","November","December"];
+
+function MiniCalendar({ value, onChange, onClose, anchorRef }) {
+  const today     = new Date();
+  const initDate  = value ? new Date(value + "T12:00:00") : today;
+  const [view, setView] = useState({ year: initDate.getFullYear(), month: initDate.getMonth() });
+  const ref = useRef(null);
+
+  // Close on outside click
+  useEffect(() => {
+    function handler(e) {
+      if (ref.current && !ref.current.contains(e.target) &&
+          anchorRef?.current && !anchorRef.current.contains(e.target)) {
+        onClose();
+      }
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [onClose, anchorRef]);
+
+  const { year, month } = view;
+  const firstDow = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const cells = Array(firstDow).fill(null).concat(
+    Array.from({ length: daysInMonth }, (_, i) => i + 1)
+  );
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  const pad = n => String(n).padStart(2, "0");
+  const cellToIso = d => `${year}-${pad(month + 1)}-${pad(d)}`;
+  const todayIso  = today.toISOString().slice(0, 10);
+
+  const nav = (delta) => setView(v => {
+    let m = v.month + delta, y = v.year;
+    if (m < 0)  { m = 11; y--; }
+    if (m > 11) { m = 0;  y++; }
+    return { year: y, month: m };
+  });
+
+  return (
+    <div ref={ref} style={{
+      position: "absolute", zIndex: 9999, marginTop: 6,
+      background: "#fff", borderRadius: 14,
+      boxShadow: "0 8px 32px rgba(0,0,0,0.13), 0 1px 4px rgba(0,0,0,0.06)",
+      padding: "16px 16px 12px",
+      width: 252,
+      fontFamily: sans,
+    }}>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+        <button onClick={() => nav(-1)} style={{
+          background: "none", border: "none", cursor: "pointer",
+          width: 28, height: 28, borderRadius: 8, display: "flex",
+          alignItems: "center", justifyContent: "center",
+          color: T.sub, fontSize: 14, transition: "background 0.1s",
+        }}
+          onMouseEnter={e => e.currentTarget.style.background = T.well}
+          onMouseLeave={e => e.currentTarget.style.background = "none"}
+        >‹</button>
+
+        <button onClick={() => {
+          const now = new Date();
+          setView({ year: now.getFullYear(), month: now.getMonth() });
+        }} style={{
+          background: "none", border: "none", cursor: "pointer",
+          fontSize: F.sm, fontWeight: 600, color: T.text, letterSpacing: "-0.01em",
+          padding: "2px 8px", borderRadius: 6, transition: "background 0.1s",
+        }}
+          onMouseEnter={e => e.currentTarget.style.background = T.well}
+          onMouseLeave={e => e.currentTarget.style.background = "none"}
+        >
+          {CAL_MONTHS[month]} {year}
+        </button>
+
+        <button onClick={() => nav(1)} style={{
+          background: "none", border: "none", cursor: "pointer",
+          width: 28, height: 28, borderRadius: 8, display: "flex",
+          alignItems: "center", justifyContent: "center",
+          color: T.sub, fontSize: 14, transition: "background 0.1s",
+        }}
+          onMouseEnter={e => e.currentTarget.style.background = T.well}
+          onMouseLeave={e => e.currentTarget.style.background = "none"}
+        >›</button>
+      </div>
+
+      {/* Weekday labels */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", marginBottom: 4 }}>
+        {CAL_DAYS.map((d, i) => (
+          <div key={i} style={{
+            textAlign: "center", fontSize: 10, fontWeight: 600,
+            color: T.dim, letterSpacing: "0.06em", padding: "2px 0",
+          }}>{d}</div>
+        ))}
+      </div>
+
+      {/* Day grid */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "2px 0" }}>
+        {cells.map((d, i) => {
+          if (!d) return <div key={i} />;
+          const iso = cellToIso(d);
+          const isSelected = iso === value;
+          const isToday    = iso === todayIso;
+          return (
+            <button key={i} onClick={() => { onChange(iso); onClose(); }}
+              style={{
+                background: isSelected ? T.accent : "none",
+                border: "none", borderRadius: 8, cursor: "pointer",
+                fontFamily: sans, fontSize: F.xs, fontWeight: isSelected ? 700 : isToday ? 600 : 400,
+                color: isSelected ? "#fff" : isToday ? T.accent : T.text,
+                height: 32, width: "100%",
+                position: "relative",
+                transition: "background 0.1s",
+              }}
+              onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = T.well; }}
+              onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = "none"; }}
+            >
+              {d}
+              {isToday && !isSelected && (
+                <span style={{
+                  position: "absolute", bottom: 4, left: "50%", transform: "translateX(-50%)",
+                  width: 3, height: 3, borderRadius: "50%", background: T.accent,
+                }} />
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Footer */}
+      <div style={{
+        display: "flex", justifyContent: "space-between", alignItems: "center",
+        marginTop: 10, paddingTop: 10, borderTop: `1px solid ${T.border}`,
+      }}>
+        <button onClick={() => { onChange(""); onClose(); }} style={{
+          background: "none", border: "none", cursor: "pointer",
+          fontFamily: sans, fontSize: F.xs, fontWeight: 500, color: T.dim,
+          padding: "4px 6px", borderRadius: 6, transition: "color 0.1s",
+        }}
+          onMouseEnter={e => e.currentTarget.style.color = T.text}
+          onMouseLeave={e => e.currentTarget.style.color = T.dim}
+        >Clear</button>
+        <button onClick={() => {
+          onChange(todayIso);
+          onClose();
+        }} style={{
+          background: "none", border: "none", cursor: "pointer",
+          fontFamily: sans, fontSize: F.xs, fontWeight: 600, color: T.accent,
+          padding: "4px 6px", borderRadius: 6, transition: "opacity 0.1s",
+        }}
+          onMouseEnter={e => e.currentTarget.style.opacity = "0.7"}
+          onMouseLeave={e => e.currentTarget.style.opacity = "1"}
+        >Today</button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Quarter helpers ──────────────────────────────────────────────────────────
 // Q0=Winter(Jan-Mar), Q1=Spring(Apr-Jun), Q2=Summer(Jul-Sep), Q3=Fall(Oct-Dec)
 const QUARTER_NAMES = ["Winter", "Spring", "Summer", "Fall"];
@@ -1233,6 +1393,9 @@ export default function PageShell({ activeTab, children }) {
   const [dateFrom,       setDateFrom]      = useState(daysAgo(90));
   const [dateTo,         setDateTo]        = useState(TODAY);
   const [showCustom,     setShowCustom]    = useState(false);
+  const [calOpen,        setCalOpen]       = useState(null); // "from" | "to" | null
+  const calFromRef = useRef(null);
+  const calToRef   = useRef(null);
   const [followerSnaps,  setFollowerSnaps] = useState([]);
   const [followerLatest, setFollowerLatest] = useState({});
   const [weekFilter,     setWeekFilter]    = useState(null);
@@ -1482,17 +1645,51 @@ export default function PageShell({ activeTab, children }) {
               })}
             </div>
 
-            {/* Date range — always visible, editable for custom */}
-            <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 8px", background: T.card, border: `1px solid ${T.border}`, borderRadius: 8 }}>
-              <input type="date" value={dateFrom}
-                onChange={e => { setDateFrom(e.target.value); setDateRange("custom"); setShowCustom(true); setSelectedWeek(null); }}
-                style={{ fontFamily: sans, fontSize: F.xs, color: T.text, background: "transparent", border: "none", outline: "none", cursor: "pointer" }}
-              />
+            {/* Date range — always visible, custom calendar pickers */}
+            <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 8px", background: T.card, border: `1px solid ${T.border}`, borderRadius: 8, position: "relative" }}>
+              {/* From date */}
+              <div style={{ position: "relative" }}>
+                <button ref={calFromRef}
+                  onClick={() => setCalOpen(v => v === "from" ? null : "from")}
+                  style={{
+                    fontFamily: sans, fontSize: F.xs, color: calOpen === "from" ? T.accent : T.text,
+                    background: "transparent", border: "none", cursor: "pointer",
+                    padding: "2px 4px", borderRadius: 4,
+                  }}>
+                  {dateFrom ? new Date(dateFrom + "T12:00:00").toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" }) : "Start"}
+                </button>
+                {calOpen === "from" && (
+                  <MiniCalendar
+                    value={dateFrom}
+                    onChange={v => { setDateFrom(v); setDateRange("custom"); setShowCustom(true); setSelectedWeek(null); }}
+                    onClose={() => setCalOpen(null)}
+                    anchorRef={calFromRef}
+                  />
+                )}
+              </div>
+
               <span style={{ color: T.dim, fontSize: F.xs }}>→</span>
-              <input type="date" value={dateTo}
-                onChange={e => { setDateTo(e.target.value); setDateRange("custom"); setShowCustom(true); setSelectedWeek(null); }}
-                style={{ fontFamily: sans, fontSize: F.xs, color: T.text, background: "transparent", border: "none", outline: "none", cursor: "pointer" }}
-              />
+
+              {/* To date */}
+              <div style={{ position: "relative" }}>
+                <button ref={calToRef}
+                  onClick={() => setCalOpen(v => v === "to" ? null : "to")}
+                  style={{
+                    fontFamily: sans, fontSize: F.xs, color: calOpen === "to" ? T.accent : T.text,
+                    background: "transparent", border: "none", cursor: "pointer",
+                    padding: "2px 4px", borderRadius: 4,
+                  }}>
+                  {dateTo ? new Date(dateTo + "T12:00:00").toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" }) : "End"}
+                </button>
+                {calOpen === "to" && (
+                  <MiniCalendar
+                    value={dateTo}
+                    onChange={v => { setDateTo(v); setDateRange("custom"); setShowCustom(true); setSelectedWeek(null); }}
+                    onClose={() => setCalOpen(null)}
+                    anchorRef={calToRef}
+                  />
+                )}
+              </div>
             </div>
           </div>
         </div>
