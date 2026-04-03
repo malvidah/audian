@@ -423,6 +423,8 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
   const [selectedZones, setSelectedZones] = useState(new Set());
   const [fetchKey, setFetchKey] = useState(0);
   const [selected, setSelected] = useState(new Set());
+  const [search, setSearch] = useState("");
+  const [showCreate, setShowCreate] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [detailRow, setDetailRow] = useState(null);
 
@@ -562,8 +564,17 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
       we.setDate(we.getDate() + 7);
       data = data.filter(d => { const dd = new Date(d.date); return dd >= ws && dd < we; });
     }
+    if (search) {
+      const q = search.toLowerCase();
+      data = data.filter(d =>
+        d.name?.toLowerCase().includes(q) ||
+        d.content?.toLowerCase().includes(q) ||
+        d.handle?.toLowerCase().includes(q) ||
+        d.type?.toLowerCase().includes(q)
+      );
+    }
     return data;
-  }, [commentsOnly, liveData, platform, weekFilter]);
+  }, [commentsOnly, liveData, platform, weekFilter, search]);
 
   const filtered = useMemo(() => {
     if (!selectedZones.size) return baseFiltered;
@@ -615,6 +626,10 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
 
   return (
     <div>
+      {showCreate && (
+        <CreatePanel onClose={() => setShowCreate(false)} onCreated={() => { setShowCreate(false); setFetchKey(k => k + 1); }} />
+      )}
+
       <SummaryStats data={baseFiltered} selectedZones={selectedZones} onToggleZone={toggleZone} commentsOnly={commentsOnly} />
 
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
@@ -626,6 +641,34 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
             border: `1px solid ${T.border}`, borderRadius: 999, padding: "4px 10px",
             fontFamily: sans, fontSize: F.xs, fontWeight: 600, cursor: "pointer" }}>Clear filters</button>
         )}
+        <input
+          value={search}
+          placeholder="Search..."
+          onChange={e => setSearch(e.target.value)}
+          style={{
+            marginLeft: "auto", background: T.card, border: `1px solid ${T.border}`,
+            color: T.text, borderRadius: 8, padding: "6px 12px", fontFamily: sans,
+            fontSize: F.sm, outline: "none", width: 200,
+          }}
+        />
+        <button
+          onClick={() => setShowCreate(true)}
+          title="Add new interaction"
+          style={{
+            display: "inline-flex", alignItems: "center", gap: 6,
+            padding: "6px 14px", borderRadius: 8, cursor: "pointer",
+            background: T.accent, border: "none",
+            color: "#fff", fontFamily: sans, fontSize: F.sm, fontWeight: 700,
+            boxShadow: "0 1px 4px rgba(255,107,53,0.3)",
+            transition: "opacity 0.15s, transform 0.1s",
+            flexShrink: 0,
+          }}
+          onMouseEnter={e => { e.currentTarget.style.opacity = "0.88"; e.currentTarget.style.transform = "translateY(-1px)"; }}
+          onMouseLeave={e => { e.currentTarget.style.opacity = "1"; e.currentTarget.style.transform = "translateY(0)"; }}
+        >
+          <span style={{ fontSize: 18, lineHeight: 1, fontWeight: 300 }}>+</span>
+          Add interaction
+        </button>
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>

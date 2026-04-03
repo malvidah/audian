@@ -108,3 +108,21 @@ export async function GET(request) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
+
+export async function POST(req) {
+  try {
+    const body = await req.json();
+    const allowed = ['platform','content','permalink','published_at','likes','comments',
+      'impressions','shares','saves','views','post_type','thumbnail_url'];
+    const safe = Object.fromEntries(Object.entries(body).filter(([k]) => allowed.includes(k)));
+    if (!safe.platform) return NextResponse.json({ error: 'platform required' }, { status: 400 });
+    safe.source = 'manual';
+    safe.synced_at = new Date().toISOString();
+    if (!safe.post_type) safe.post_type = 'post';
+    const { data, error } = await supabaseAdmin.from('posts').insert(safe).select().single();
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ post: data });
+  } catch (err) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}

@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import PageShell, { T, sans, F } from "../components/PageShell";
 
 const PLAT_COLORS = { youtube: "#FF0000", x: "#000000", instagram: "#E1306C", linkedin: "#0077B5" };
@@ -1008,17 +1008,197 @@ function ExpandedInteractions({ post, typeFilter, onClose, colSpan }) {
   );
 }
 
+// ─── Add Post Drawer ──────────────────────────────────────────────────────────
+const PLAT_OPTIONS_POSTS = ["instagram", "x", "youtube", "linkedin"];
+const POST_TYPE_OPTIONS  = ["post", "reel", "video", "story"];
+
+function AddPostDrawer({ open, onClose, onSaved }) {
+  const [form, setForm] = useState({
+    platform: "instagram", post_type: "post", content: "", permalink: "",
+    published_at: new Date().toISOString().slice(0, 10),
+    likes: "", comments: "", impressions: "", shares: "", saves: "", views: "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError]   = useState(null);
+
+  useEffect(() => {
+    if (open) { setForm({ platform: "instagram", post_type: "post", content: "", permalink: "",
+      published_at: new Date().toISOString().slice(0, 10),
+      likes: "", comments: "", impressions: "", shares: "", saves: "", views: "" }); setError(null); }
+  }, [open]);
+
+  if (!open) return null;
+
+  function set(k, v) { setForm(f => ({ ...f, [k]: v })); }
+
+  async function handleSave() {
+    setSaving(true); setError(null);
+    try {
+      const payload = { ...form };
+      ["likes","comments","impressions","shares","saves","views"].forEach(k => {
+        payload[k] = payload[k] !== "" ? parseInt(payload[k]) || 0 : 0;
+      });
+      if (payload.published_at) payload.published_at = new Date(payload.published_at).toISOString();
+      const res  = await fetch("/api/posts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      onSaved(data.post);
+      onClose();
+    } catch (e) { setError(e.message); }
+    setSaving(false);
+  }
+
+  const inputStyle = {
+    width: "100%", boxSizing: "border-box", padding: "8px 12px", borderRadius: 8,
+    border: `1px solid ${T.border}`, background: T.surface, color: T.text,
+    fontFamily: sans, fontSize: F.sm, outline: "none",
+  };
+  const labelStyle = {
+    display: "block", fontSize: F.xs, fontWeight: 700, color: T.sub,
+    textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 6, fontFamily: sans,
+  };
+
+  return (
+    <>
+      <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(26,24,22,0.35)",
+        zIndex: 999, backdropFilter: "blur(2px)", animation: "fadeIn 0.15s ease" }} />
+      <div style={{ position: "fixed", top: 0, right: 0, bottom: 0, width: 460, background: T.surface,
+        zIndex: 1000, boxShadow: "-4px 0 32px rgba(0,0,0,0.14)", display: "flex", flexDirection: "column",
+        animation: "slideInRight 0.2s cubic-bezier(0.16,1,0.3,1)", fontFamily: sans }}>
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "20px 24px 16px", borderBottom: `1px solid ${T.border}`, flexShrink: 0 }}>
+          <div style={{ fontSize: F.lg, fontWeight: 700, color: T.text }}>New post</div>
+          <button onClick={onClose} style={{ background: T.well, border: `1px solid ${T.border}`,
+            borderRadius: 8, width: 32, height: 32, cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            color: T.sub, fontSize: 18, lineHeight: 1 }}>×</button>
+        </div>
+        {/* Body */}
+        <div style={{ flex: 1, overflowY: "auto", padding: 24 }}>
+          {/* Platform */}
+          <div style={{ marginBottom: 16 }}>
+            <label style={labelStyle}>Platform</label>
+            <div style={{ display: "flex", gap: 6 }}>
+              {PLAT_OPTIONS_POSTS.map(p => (
+                <button key={p} onClick={() => set("platform", p)} style={{
+                  padding: "5px 12px", borderRadius: 6, cursor: "pointer", fontFamily: sans,
+                  fontSize: F.xs, fontWeight: 700, letterSpacing: "0.04em",
+                  border: `1px solid ${form.platform === p ? (PLAT_COLORS[p] + "88") : T.border}`,
+                  background: form.platform === p ? (PLAT_COLORS[p] + "14") : T.surface,
+                  color: form.platform === p ? PLAT_COLORS[p] : T.sub,
+                  transition: "all 0.12s",
+                }}>{PLAT_LABEL[p]}</button>
+              ))}
+            </div>
+          </div>
+          {/* Post type */}
+          <div style={{ marginBottom: 16 }}>
+            <label style={labelStyle}>Post type</label>
+            <div style={{ display: "flex", gap: 6 }}>
+              {POST_TYPE_OPTIONS.map(t => (
+                <button key={t} onClick={() => set("post_type", t)} style={{
+                  padding: "5px 12px", borderRadius: 6, cursor: "pointer", fontFamily: sans,
+                  fontSize: F.xs, fontWeight: 700, letterSpacing: "0.04em",
+                  border: `1px solid ${form.post_type === t ? T.accentBorder : T.border}`,
+                  background: form.post_type === t ? T.accentBg : T.surface,
+                  color: form.post_type === t ? T.accent : T.sub,
+                  transition: "all 0.12s",
+                }}>{t.charAt(0).toUpperCase() + t.slice(1)}</button>
+              ))}
+            </div>
+          </div>
+          {/* Content */}
+          <div style={{ marginBottom: 16 }}>
+            <label style={labelStyle}>Content / caption</label>
+            <textarea value={form.content} onChange={e => set("content", e.target.value)}
+              placeholder="Post caption or description..." rows={3}
+              style={{ ...inputStyle, resize: "vertical" }}
+              onFocus={e => e.target.style.borderColor = T.accent}
+              onBlur={e => e.target.style.borderColor = T.border} />
+          </div>
+          {/* Permalink */}
+          <div style={{ marginBottom: 16 }}>
+            <label style={labelStyle}>URL / permalink</label>
+            <input value={form.permalink} onChange={e => set("permalink", e.target.value)}
+              placeholder="https://..." style={inputStyle}
+              onFocus={e => e.target.style.borderColor = T.accent}
+              onBlur={e => e.target.style.borderColor = T.border} />
+          </div>
+          {/* Date */}
+          <div style={{ marginBottom: 20 }}>
+            <label style={labelStyle}>Published date</label>
+            <input type="date" value={form.published_at} onChange={e => set("published_at", e.target.value)}
+              style={inputStyle}
+              onFocus={e => e.target.style.borderColor = T.accent}
+              onBlur={e => e.target.style.borderColor = T.border} />
+          </div>
+          {/* Stats */}
+          <div style={{ fontSize: F.xs, fontWeight: 700, color: T.sub, textTransform: "uppercase",
+            letterSpacing: "0.07em", marginBottom: 12 }}>Stats (optional)</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 12px" }}>
+            {["likes","comments","impressions","shares","saves","views"].map(k => (
+              <div key={k}>
+                <label style={{ ...labelStyle, textTransform: "capitalize", marginBottom: 4 }}>{k}</label>
+                <input type="number" value={form[k]} onChange={e => set(k, e.target.value)}
+                  placeholder="0" style={inputStyle}
+                  onFocus={e => e.target.style.borderColor = T.accent}
+                  onBlur={e => e.target.style.borderColor = T.border} />
+              </div>
+            ))}
+          </div>
+        </div>
+        {/* Footer */}
+        <div style={{ padding: "16px 24px", borderTop: `1px solid ${T.border}`, flexShrink: 0, display: "flex", flexDirection: "column", gap: 8 }}>
+          {error && <div style={{ background: T.redBg, border: `1px solid ${T.redBorder}`, borderRadius: 8,
+            padding: "8px 12px", fontSize: F.xs, color: T.red }}>{error}</div>}
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={onClose} style={{ flex: 1, padding: "10px 0", borderRadius: 9, cursor: "pointer",
+              background: T.well, border: `1px solid ${T.border}`, color: T.sub,
+              fontFamily: sans, fontSize: F.sm, fontWeight: 600 }}>Cancel</button>
+            <button onClick={handleSave} disabled={saving} style={{
+              flex: 2, padding: "10px 0", borderRadius: 9, cursor: saving ? "default" : "pointer",
+              background: saving ? T.dim : T.accent, border: "none", color: "#fff",
+              fontFamily: sans, fontSize: F.sm, fontWeight: 700, opacity: saving ? 0.7 : 1 }}>
+              {saving ? "Saving…" : "Add post"}
+            </button>
+          </div>
+        </div>
+      </div>
+      <style>{`
+        @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
+        @keyframes slideInRight { from { transform: translateX(100%) } to { transform: translateX(0) } }
+      `}</style>
+    </>
+  );
+}
+
 // ─── Posts table ──────────────────────────────────────────────────────────────
 function PostsTable({ posts, activePlatform, selectedWeek, onImported }) {
   const [sortBy,      setSortBy]      = useState("published_at");
   const [sortDesc,    setSortDesc]    = useState(true);
   const [expanded,    setExpanded]    = useState(null); // { post, typeFilter }
   const [showImport,  setShowImport]  = useState(false);
+  const [search,      setSearch]      = useState("");
+  const [showAdd,     setShowAdd]     = useState(false);
+  const [localPosts,  setLocalPosts]  = useState([]);
 
-  const visible = posts.filter(p => {
+  // Merge server posts with any locally added ones
+  const allPosts = useMemo(() => {
+    const ids = new Set(posts.map(p => p.id));
+    return [...localPosts.filter(p => !ids.has(p.id)), ...posts];
+  }, [posts, localPosts]);
+
+  const visible = allPosts.filter(p => {
     if (activePlatform !== "all" && p.platform !== activePlatform) return false;
     if (p.post_type === "daily_aggregate") return false;
     if (selectedWeek && weekKey(p.published_at) !== selectedWeek) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      return (p.content || "").toLowerCase().includes(q) ||
+             (p.permalink || "").toLowerCase().includes(q) ||
+             (p.platform || "").toLowerCase().includes(q);
+    }
     return true;
   });
 
@@ -1054,8 +1234,12 @@ function PostsTable({ posts, activePlatform, selectedWeek, onImported }) {
   return (
     <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14,
       padding: "20px 24px", marginBottom: 24, boxShadow: T.shadowSm }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: showImport ? 12 : 14 }}>
-        <div style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text }}>
+
+      <AddPostDrawer open={showAdd} onClose={() => setShowAdd(false)}
+        onSaved={post => setLocalPosts(prev => [post, ...prev])} />
+
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: showImport ? 12 : 14, flexWrap: "wrap" }}>
+        <div style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text, flexShrink: 0 }}>
           All Posts
           <span style={{
             display: "inline-flex", alignItems: "center", justifyContent: "center",
@@ -1063,23 +1247,49 @@ function PostsTable({ posts, activePlatform, selectedWeek, onImported }) {
             borderRadius: 10, background: T.well, border: `1px solid ${T.border}`,
             fontFamily: sans, fontSize: F.xs, fontWeight: 600, color: T.sub,
           }}>{sorted.length}</span>
+          {selectedWeek && (
+            <span style={{ fontFamily: sans, fontSize: F.xs, fontWeight: 400, color: T.sub, marginLeft: 8 }}>
+              week of {weekLabel(selectedWeek)}
+            </span>
+          )}
         </div>
-        {selectedWeek && (
-          <div style={{ fontFamily: sans, fontSize: F.xs, color: T.sub }}>
-            week of {weekLabel(selectedWeek)}
-          </div>
-        )}
+        <input
+          value={search}
+          placeholder="Search..."
+          onChange={e => setSearch(e.target.value)}
+          style={{
+            marginLeft: "auto", background: T.card, border: `1px solid ${T.border}`,
+            color: T.text, borderRadius: 8, padding: "6px 12px", fontFamily: sans,
+            fontSize: F.sm, outline: "none", width: 200,
+          }}
+        />
         <button
           onClick={() => setShowImport(s => !s)}
           style={{
-            marginLeft: "auto", padding: "5px 14px", borderRadius: 8, cursor: "pointer",
+            padding: "6px 14px", borderRadius: 8, cursor: "pointer",
             fontFamily: sans, fontSize: F.xs, fontWeight: 600, border: "1px solid",
             borderColor: showImport ? T.accent : T.border,
             background:  showImport ? T.accent : T.well,
             color:       showImport ? "#fff"   : T.text,
-            transition: "all 0.15s",
+            transition: "all 0.15s", flexShrink: 0,
           }}>
-          {showImport ? "✕ Close" : "↑ Import Posts"}
+          {showImport ? "✕ Close" : "↑ Import"}
+        </button>
+        <button
+          onClick={() => setShowAdd(true)}
+          style={{
+            display: "inline-flex", alignItems: "center", gap: 6,
+            padding: "6px 14px", borderRadius: 8, cursor: "pointer",
+            background: T.accent, border: "none", color: "#fff",
+            fontFamily: sans, fontSize: F.sm, fontWeight: 700,
+            boxShadow: "0 1px 4px rgba(255,107,53,0.3)",
+            transition: "opacity 0.15s, transform 0.1s", flexShrink: 0,
+          }}
+          onMouseEnter={e => { e.currentTarget.style.opacity = "0.88"; e.currentTarget.style.transform = "translateY(-1px)"; }}
+          onMouseLeave={e => { e.currentTarget.style.opacity = "1"; e.currentTarget.style.transform = "translateY(0)"; }}
+        >
+          <span style={{ fontSize: 18, lineHeight: 1, fontWeight: 300 }}>+</span>
+          Add post
         </button>
       </div>
 

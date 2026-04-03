@@ -782,20 +782,8 @@ export default function HandlesTable({ platform, refreshKey }) {
                   }}>
                   {/* Name */}
                   <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>
-                    <div>
-                      <div style={{ fontWeight: 600, fontSize: F.sm, color: T.text, lineHeight: 1.3 }}>
-                        {h.name || pri?.handle || "\u2014"}
-                      </div>
-                      {pri && (
-                        <a href={PLAT_URL[pri.p]?.(pri.handle)} target="_blank" rel="noreferrer"
-                          style={{ fontSize: F.xs, color: T.dim, textDecoration: "none",
-                            display: "inline-flex", alignItems: "center", gap: 3 }}
-                          onMouseEnter={e => e.currentTarget.style.color = T.accent}
-                          onMouseLeave={e => e.currentTarget.style.color = T.dim}>
-                          <span style={{ color: PLAT_COLOR[pri.p], fontSize: 10 }}>{PLAT_ICON[pri.p]}</span>
-                          @{pri.handle}
-                        </a>
-                      )}
+                    <div style={{ fontWeight: 600, fontSize: F.sm, color: T.text, lineHeight: 1.3 }}>
+                      {h.name || pri?.handle || "\u2014"}
                     </div>
                   </td>
                   {/* Platforms */}
