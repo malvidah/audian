@@ -42,6 +42,10 @@ const ZONE_CFG = {
 
 const LIST_ORDER = ["ELITE", "INFLUENTIAL", "SIGNAL", "IGNORE"];
 
+const PLATFORMS = ["instagram", "x", "youtube", "linkedin"];
+
+const PLAT_LABEL = { instagram: "Instagram", x: "X (Twitter)", youtube: "YouTube", linkedin: "LinkedIn" };
+
 function normalizeZone(zone) {
   return LIST_ORDER.includes(zone) ? zone : "UNASSIGNED";
 }
@@ -67,6 +71,349 @@ function timeAgo(ts) {
 function truncate(str, max) {
   if (!str) return "\u2014";
   return str.length > max ? str.slice(0, max) + "..." : str;
+}
+
+// ─── HandleDrawer ────────────────────────────────────────────────────────────
+
+const EMPTY_FORM = {
+  name: "", bio: "", zone: "SIGNAL",
+  handle_instagram: "", handle_x: "", handle_youtube: "", handle_linkedin: "",
+  followers_instagram: "", followers_x: "", followers_youtube: "", followers_linkedin: "",
+};
+
+function HandleDrawer({ open, mode, handle, onClose, onSaved }) {
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  // Populate form when editing
+  useEffect(() => {
+    if (mode === "edit" && handle) {
+      setForm({
+        name:               handle.name               || "",
+        bio:                handle.bio                || "",
+        zone:               handle.zone               || "SIGNAL",
+        handle_instagram:   handle.handle_instagram   || "",
+        handle_x:           handle.handle_x           || "",
+        handle_youtube:     handle.handle_youtube     || "",
+        handle_linkedin:    handle.handle_linkedin    || "",
+        followers_instagram: handle.followers_instagram != null ? String(handle.followers_instagram) : "",
+        followers_x:         handle.followers_x        != null ? String(handle.followers_x)        : "",
+        followers_youtube:   handle.followers_youtube  != null ? String(handle.followers_youtube)  : "",
+        followers_linkedin:  handle.followers_linkedin != null ? String(handle.followers_linkedin) : "",
+      });
+    } else if (mode === "create") {
+      setForm(EMPTY_FORM);
+    }
+    setError(null);
+  }, [mode, handle, open]);
+
+  if (!open) return null;
+
+  function set(key, val) {
+    setForm(f => ({ ...f, [key]: val }));
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    setError(null);
+    try {
+      // Build payload – omit empty follower counts (keep null, not "")
+      const payload = { ...form };
+      for (const p of PLATFORMS) {
+        const fk = `followers_${p}`;
+        payload[fk] = payload[fk] !== "" ? parseInt(payload[fk]) || null : null;
+      }
+      for (const p of PLATFORMS) {
+        const hk = `handle_${p}`;
+        // strip leading @
+        if (payload[hk]) payload[hk] = payload[hk].replace(/^@/, "");
+        if (!payload[hk]) payload[hk] = null;
+      }
+      if (!payload.name && !PLATFORMS.some(p => payload[`handle_${p}`])) {
+        setError("Please enter a name or at least one platform handle.");
+        setSaving(false);
+        return;
+      }
+
+      if (mode === "create") {
+        const res = await fetch("/api/handles", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const d = await res.json();
+        if (d.error) throw new Error(d.error);
+        onSaved(d.handle, "create");
+      } else {
+        const res = await fetch("/api/handles", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: handle.id, updates: payload }),
+        });
+        const d = await res.json();
+        if (d.error) throw new Error(d.error);
+        onSaved(d.handle, "edit");
+      }
+      onClose();
+    } catch (e) {
+      setError(e.message || "Save failed");
+    }
+    setSaving(false);
+  }
+
+  const title = mode === "create" ? "New handle" : "Edit handle";
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div
+        onClick={onClose}
+        style={{
+          position: "fixed", inset: 0, background: "rgba(26,24,22,0.35)",
+          zIndex: 999, backdropFilter: "blur(2px)",
+          animation: "fadeIn 0.15s ease",
+        }}
+      />
+      {/* Drawer panel */}
+      <div style={{
+        position: "fixed", top: 0, right: 0, bottom: 0, width: 460,
+        background: T.surface, zIndex: 1000,
+        boxShadow: "-4px 0 32px rgba(0,0,0,0.14)",
+        display: "flex", flexDirection: "column",
+        animation: "slideInRight 0.2s cubic-bezier(0.16,1,0.3,1)",
+        fontFamily: sans,
+      }}>
+        {/* Header */}
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "20px 24px 16px", borderBottom: `1px solid ${T.border}`,
+          flexShrink: 0,
+        }}>
+          <div>
+            <div style={{ fontSize: F.lg, fontWeight: 700, color: T.text, lineHeight: 1.2 }}>
+              {title}
+            </div>
+            {mode === "edit" && handle?.name && (
+              <div style={{ fontSize: F.xs, color: T.dim, marginTop: 3 }}>
+                {handle.name}
+              </div>
+            )}
+          </div>
+          <button
+            onClick={onClose}
+            style={{
+              background: T.well, border: `1px solid ${T.border}`, borderRadius: 8,
+              width: 32, height: 32, cursor: "pointer", display: "flex",
+              alignItems: "center", justifyContent: "center",
+              color: T.sub, fontSize: 18, lineHeight: 1,
+            }}
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Body */}
+        <div style={{ flex: 1, overflowY: "auto", padding: "24px" }}>
+          {/* Name */}
+          <Field label="Display name">
+            <Input
+              value={form.name}
+              onChange={v => set("name", v)}
+              placeholder="e.g. Jane Doe"
+            />
+          </Field>
+
+          {/* Bio */}
+          <Field label="Bio">
+            <Textarea
+              value={form.bio}
+              onChange={v => set("bio", v)}
+              placeholder="Short bio or description..."
+            />
+          </Field>
+
+          {/* Zone */}
+          <Field label="Label">
+            <ZoneSelect value={form.zone} onChange={v => set("zone", v)} />
+          </Field>
+
+          {/* Platform handles */}
+          <div style={{ marginTop: 24, marginBottom: 6 }}>
+            <div style={{
+              fontSize: F.xs, fontWeight: 700, color: T.sub, textTransform: "uppercase",
+              letterSpacing: "0.07em", marginBottom: 14,
+            }}>
+              Platform handles
+            </div>
+            {PLATFORMS.map(p => (
+              <div key={p} style={{ marginBottom: 14 }}>
+                <div style={{
+                  display: "flex", alignItems: "center", gap: 10,
+                  marginBottom: 6,
+                }}>
+                  <span style={{
+                    display: "inline-flex", alignItems: "center", justifyContent: "center",
+                    width: 24, height: 24, borderRadius: 6,
+                    background: PLAT_COLOR[p] + "14", color: PLAT_COLOR[p],
+                    fontSize: 11, fontWeight: 700,
+                  }}>
+                    {PLAT_ICON[p]}
+                  </span>
+                  <span style={{ fontSize: F.sm, fontWeight: 600, color: T.text }}>
+                    {PLAT_LABEL[p]}
+                  </span>
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <Input
+                    value={form[`handle_${p}`]}
+                    onChange={v => set(`handle_${p}`, v)}
+                    placeholder={`@username`}
+                    style={{ flex: 2 }}
+                  />
+                  <Input
+                    value={form[`followers_${p}`]}
+                    onChange={v => set(`followers_${p}`, v)}
+                    placeholder="Followers"
+                    type="number"
+                    style={{ flex: 1, minWidth: 0 }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{
+          padding: "16px 24px", borderTop: `1px solid ${T.border}`,
+          flexShrink: 0, display: "flex", flexDirection: "column", gap: 8,
+        }}>
+          {error && (
+            <div style={{
+              background: T.redBg, border: `1px solid ${T.redBorder}`,
+              borderRadius: 8, padding: "8px 12px",
+              fontSize: F.xs, color: T.red, fontFamily: sans,
+            }}>
+              {error}
+            </div>
+          )}
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={onClose} style={{
+              flex: 1, padding: "10px 0", borderRadius: 9, cursor: "pointer",
+              background: T.well, border: `1px solid ${T.border}`,
+              color: T.sub, fontFamily: sans, fontSize: F.sm, fontWeight: 600,
+            }}>
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              style={{
+                flex: 2, padding: "10px 0", borderRadius: 9, cursor: saving ? "default" : "pointer",
+                background: saving ? T.dim : T.accent, border: "none",
+                color: "#fff", fontFamily: sans, fontSize: F.sm, fontWeight: 700,
+                opacity: saving ? 0.7 : 1, transition: "opacity 0.15s",
+              }}
+            >
+              {saving ? "Saving…" : mode === "create" ? "Add handle" : "Save changes"}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <style>{`
+        @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
+        @keyframes slideInRight { from { transform: translateX(100%) } to { transform: translateX(0) } }
+      `}</style>
+    </>
+  );
+}
+
+// ─── Small form primitives ────────────────────────────────────────────────────
+
+function Field({ label, children }) {
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <label style={{
+        display: "block", fontSize: F.xs, fontWeight: 700, color: T.sub,
+        textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 6,
+        fontFamily: sans,
+      }}>
+        {label}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+function Input({ value, onChange, placeholder, type = "text", style = {} }) {
+  return (
+    <input
+      type={type}
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      placeholder={placeholder}
+      style={{
+        width: "100%", boxSizing: "border-box",
+        padding: "8px 12px", borderRadius: 8,
+        border: `1px solid ${T.border}`, background: T.surface,
+        color: T.text, fontFamily: sans, fontSize: F.sm,
+        outline: "none", transition: "border-color 0.15s",
+        ...style,
+      }}
+      onFocus={e => e.target.style.borderColor = T.accent}
+      onBlur={e => e.target.style.borderColor = T.border}
+    />
+  );
+}
+
+function Textarea({ value, onChange, placeholder }) {
+  return (
+    <textarea
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      placeholder={placeholder}
+      rows={3}
+      style={{
+        width: "100%", boxSizing: "border-box",
+        padding: "8px 12px", borderRadius: 8,
+        border: `1px solid ${T.border}`, background: T.surface,
+        color: T.text, fontFamily: sans, fontSize: F.sm,
+        outline: "none", resize: "vertical", transition: "border-color 0.15s",
+      }}
+      onFocus={e => e.target.style.borderColor = T.accent}
+      onBlur={e => e.target.style.borderColor = T.border}
+    />
+  );
+}
+
+function ZoneSelect({ value, onChange }) {
+  return (
+    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+      {LIST_ORDER.map(zone => {
+        const cfg = ZONE_CFG[zone];
+        const active = value === zone;
+        return (
+          <button
+            key={zone}
+            onClick={() => onChange(zone)}
+            style={{
+              padding: "5px 12px", borderRadius: 6,
+              border: `1px solid ${active ? cfg.border : T.border}`,
+              background: active ? cfg.bg : T.surface,
+              color: active ? cfg.color : T.sub,
+              fontFamily: sans, fontSize: F.xs, fontWeight: 700,
+              letterSpacing: "0.04em", cursor: "pointer",
+              transition: "all 0.12s",
+            }}
+          >
+            {zone}
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 // ─── Sub-components ─────────────────────────────────────────────────────────
@@ -160,6 +507,11 @@ export default function HandlesTable({ platform, refreshKey }) {
   const [sortBy, setSortBy] = useState("name");
   const [sortDesc, setSortDesc] = useState(false);
 
+  // Drawer state
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerMode, setDrawerMode] = useState("create"); // "create" | "edit"
+  const [drawerHandle, setDrawerHandle] = useState(null);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -181,6 +533,26 @@ export default function HandlesTable({ platform, refreshKey }) {
       setHandles(prev => prev.map(h => h.id === id ? { ...h, ...updates } : h));
     } catch (e) { alert("Save failed: " + e.message); }
   };
+
+  function openCreate() {
+    setDrawerMode("create");
+    setDrawerHandle(null);
+    setDrawerOpen(true);
+  }
+
+  function openEdit(handle) {
+    setDrawerMode("edit");
+    setDrawerHandle(handle);
+    setDrawerOpen(true);
+  }
+
+  function handleDrawerSaved(savedHandle, mode) {
+    if (mode === "create") {
+      setHandles(prev => [savedHandle, ...prev]);
+    } else {
+      setHandles(prev => prev.map(h => h.id === savedHandle.id ? { ...h, ...savedHandle } : h));
+    }
+  }
 
   function primaryHandle(h) {
     for (const p of ["instagram", "x", "youtube", "linkedin"]) {
@@ -284,9 +656,18 @@ export default function HandlesTable({ platform, refreshKey }) {
 
   return (
     <div>
+      {/* Drawer */}
+      <HandleDrawer
+        open={drawerOpen}
+        mode={drawerMode}
+        handle={drawerHandle}
+        onClose={() => setDrawerOpen(false)}
+        onSaved={handleDrawerSaved}
+      />
+
       <SummaryStats handles={baseFiltered} selectedZones={selectedZones} onToggleZone={toggleZone} />
 
-      {/* Filters row */}
+      {/* Filters row + Add button */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
         <div style={{ fontFamily: sans, fontSize: F.xs, color: T.sub, fontWeight: 600 }}>
           {selectedZones.size
@@ -316,6 +697,26 @@ export default function HandlesTable({ platform, refreshKey }) {
             color: T.text, borderRadius: 8, padding: "6px 12px", fontFamily: sans,
             fontSize: F.sm, outline: "none", width: 200,
           }} />
+
+        {/* Add new handle button */}
+        <button
+          onClick={openCreate}
+          title="Add new handle"
+          style={{
+            display: "inline-flex", alignItems: "center", gap: 6,
+            padding: "6px 14px", borderRadius: 8, cursor: "pointer",
+            background: T.accent, border: "none",
+            color: "#fff", fontFamily: sans, fontSize: F.sm, fontWeight: 700,
+            boxShadow: "0 1px 4px rgba(255,107,53,0.3)",
+            transition: "opacity 0.15s, transform 0.1s",
+            flexShrink: 0,
+          }}
+          onMouseEnter={e => { e.currentTarget.style.opacity = "0.88"; e.currentTarget.style.transform = "translateY(-1px)"; }}
+          onMouseLeave={e => { e.currentTarget.style.opacity = "1"; e.currentTarget.style.transform = "translateY(0)"; }}
+        >
+          <span style={{ fontSize: 18, lineHeight: 1, fontWeight: 300 }}>+</span>
+          Add handle
+        </button>
       </div>
 
       {/* Count */}
@@ -346,29 +747,39 @@ export default function HandlesTable({ platform, refreshKey }) {
               <th style={thStyle("last_seen")} onClick={() => toggleSort("last_seen")}>
                 Last seen{arrow("last_seen")}
               </th>
+              {/* Edit column */}
+              <th style={{ ...thStyle("_edit"), cursor: "default", width: 40 }} />
             </tr>
           </thead>
           <tbody>
             {sorted.length === 0 && (
               <tr>
-                <td colSpan={6} style={{
+                <td colSpan={7} style={{
                   ...tdStyle, textAlign: "center", color: T.dim, padding: "40px 12px",
                 }}>
                   {search
                     ? `No handles matching "${search}"`
                     : selectedZones.size
                       ? "No handles match the selected label filters."
-                      : "No handles yet. Import a CSV to get started."}
+                      : "No handles yet. Click \"Add handle\" or import a CSV to get started."}
                 </td>
               </tr>
             )}
-            {sorted.map((h, i) => {
+            {sorted.map((h) => {
               const pri = primaryHandle(h);
               return (
                 <tr key={h.id}
                   style={{ transition: "background 0.1s" }}
-                  onMouseEnter={e => { e.currentTarget.style.background = T.well + "88"; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}>
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = T.well + "88";
+                    const editBtn = e.currentTarget.querySelector("[data-edit-btn]");
+                    if (editBtn) editBtn.style.opacity = "1";
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = "transparent";
+                    const editBtn = e.currentTarget.querySelector("[data-edit-btn]");
+                    if (editBtn) editBtn.style.opacity = "0";
+                  }}>
                   {/* Name */}
                   <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>
                     <div>
@@ -435,6 +846,26 @@ export default function HandlesTable({ platform, refreshKey }) {
                   {/* Last seen */}
                   <td style={{ ...tdStyle, whiteSpace: "nowrap", color: T.dim, fontSize: F.xs }}>
                     {timeAgo(h.last_interaction) || timeAgo(h.updated_at) || "\u2014"}
+                  </td>
+                  {/* Edit button */}
+                  <td style={{ ...tdStyle, padding: "10px 8px", width: 40 }}>
+                    <button
+                      data-edit-btn
+                      onClick={() => openEdit(h)}
+                      title="Edit handle"
+                      style={{
+                        display: "inline-flex", alignItems: "center", justifyContent: "center",
+                        width: 28, height: 28, borderRadius: 7,
+                        background: T.well, border: `1px solid ${T.border}`,
+                        cursor: "pointer", color: T.sub,
+                        opacity: 0, transition: "opacity 0.15s, background 0.1s",
+                        fontSize: 13,
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.background = T.accentBg; e.currentTarget.style.color = T.accent; e.currentTarget.style.borderColor = T.accentBorder; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = T.well; e.currentTarget.style.color = T.sub; e.currentTarget.style.borderColor = T.border; }}
+                    >
+                      ✎
+                    </button>
                   </td>
                 </tr>
               );

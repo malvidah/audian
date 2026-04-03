@@ -67,6 +67,25 @@ export async function GET() {
   }
 }
 
+export async function POST(req) {
+  try {
+    const body = await req.json();
+    const allowed = ['name','bio','zone','followed_by','avatar_url',
+      'handle_instagram','handle_x','handle_youtube','handle_linkedin',
+      'followers_instagram','followers_x','followers_youtube','followers_linkedin'];
+    const safe = Object.fromEntries(Object.entries(body).filter(([k]) => allowed.includes(k)));
+    safe.id = crypto.randomUUID();
+    safe.added_at = new Date().toISOString();
+    safe.updated_at = new Date().toISOString();
+    if (!safe.zone) safe.zone = 'SIGNAL';
+    const { data, error } = await supabase.from('handles').insert(safe).select().single();
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ handle: data });
+  } catch (err) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}
+
 export async function PATCH(req) {
   try {
     const { id, updates } = await req.json();
