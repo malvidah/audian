@@ -60,12 +60,15 @@ function SummaryStats({ data, selectedZones, onToggleZone, commentsOnly }) {
   const counts = data.reduce((acc, row) => { acc[normalizeZone(row.zone)] = (acc[normalizeZone(row.zone)] || 0) + 1; return acc; }, {});
   const total = data.length;
   const uniquePeople = new Set(data.map(d => `${d.platform}:${d.handle}`)).size;
-  const avgFollowers = total > 0 ? Math.round(data.reduce((s, d) => s + (d.followers || 0), 0) / total) : 0;
+  // Unique Elite: distinct handles in ELITE zone (each person counted once regardless of interaction count)
+  const uniqueElite = new Set(
+    data.filter(d => normalizeZone(d.zone) === "ELITE").map(d => `${d.platform}:${d.handle}`)
+  ).size;
   return (
     <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
       <StatCard label={commentsOnly ? "Total comments" : "Total interactions"} value={total} />
       <StatCard label="Unique people" value={uniquePeople} />
-      <StatCard label="Avg followers" value={fmt(avgFollowers)} />
+      <StatCard label="Unique elite" value={uniqueElite} color={ZONE_CFG.ELITE.color} />
       {["ELITE", "INFLUENTIAL", "SIGNAL"].map(zone => (
         <StatCard key={zone} label={zone} value={counts[zone] || 0} color={ZONE_CFG[zone].color}
           active={selectedZones.has(zone)} clickable onClick={() => onToggleZone(zone)} />
