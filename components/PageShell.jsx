@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
+import { PlatDot, PLAT_COLORS } from "./PlatIcon";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -36,7 +37,6 @@ export const T = {
   shadowMd:     "0 4px 24px rgba(0,0,0,0.08)",
 };
 
-const PLAT_COLORS = { youtube: "#FF0000", x: "#000000", instagram: "#E1306C", linkedin: "#0077B5" };
 const PLAT_LABEL  = { youtube: "YouTube", x: "X", instagram: "Instagram", linkedin: "LinkedIn" };
 
 export const sans = "-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif";
@@ -133,33 +133,6 @@ function parseCSVLine(line) {
 }
 
 // ─── Platform SVG icons ───────────────────────────────────────────────────────
-function IgIcon({ size = 16, color = "#E1306C" }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/>
-      <circle cx="12" cy="12" r="4.5"/>
-      <circle cx="17.5" cy="6.5" r="1" fill={color} stroke="none"/>
-    </svg>
-  );
-}
-
-function PlatDot({ platform, size = 8 }) {
-  const boxSize  = size + 8;
-  const color    = PLAT_COLORS[platform] || T.dim;
-  const bgCircle = { display: "inline-flex", alignItems: "center", justifyContent: "center",
-    width: boxSize, height: boxSize, borderRadius: "50%",
-    background: color + "18", flexShrink: 0 };
-
-  if (platform === "instagram") {
-    return <span style={bgCircle}><IgIcon size={size + 2} color={color} /></span>;
-  }
-  const icons = { youtube: "▶", x: "𝕏", linkedin: "in" };
-  return (
-    <span style={{ ...bgCircle, fontSize: size * 0.85, color }}>
-      {icons[platform] || "·"}
-    </span>
-  );
-}
 
 // ─── Import panel ─────────────────────────────────────────────────────────────
 function ImportPanel({ posts, onImported }) {

@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useMemo, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
+import { PlatDot, PLAT_COLORS } from "./PlatIcon";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -34,8 +35,6 @@ const T = {
   shadowSm:     "0 1px 2px rgba(0,0,0,0.05)",
 };
 
-const PLAT_COLORS = { youtube: "#FF0000", x: "#000000", instagram: "#E1306C", linkedin: "#0077B5" };
-const PLAT_ICON   = { youtube: "\u25B6", x: "\uD835\uDD4F", instagram: "\u25C9", linkedin: "in" };
 const PLAT_LABEL  = { youtube: "YouTube", x: "X", instagram: "Instagram", linkedin: "LinkedIn" };
 
 const sans = "-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif";
@@ -207,19 +206,6 @@ const SAMPLE_COMMENTS = [
 ];
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
-function PlatDot({ platform, size = 8 }) {
-  return (
-    <span style={{
-      display: "inline-flex", alignItems: "center", justifyContent: "center",
-      width: size + 8, height: size + 8, borderRadius: "50%",
-      background: (PLAT_COLORS[platform] || T.dim) + "18",
-      fontSize: size * 0.8, flexShrink: 0,
-      color: PLAT_COLORS[platform] || T.dim,
-    }}>
-      {PLAT_ICON[platform] || "\u00B7"}
-    </span>
-  );
-}
 
 function Pill({ children, active, onClick, color }) {
   return (

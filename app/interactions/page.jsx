@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 import dynamic from "next/dynamic";
 import PageShell, { T, sans, F } from "../../components/PageShell";
+import { PlatChip, PLAT_COLORS } from "../../components/PlatIcon";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -34,16 +35,6 @@ function fmtDate(iso) {
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
-function IgIcon({ size = 16, color = "#E1306C" }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/>
-      <circle cx="12" cy="12" r="4.5"/>
-      <circle cx="17.5" cy="6.5" r="1" fill={color} stroke="none"/>
-    </svg>
-  );
-}
-
 // ─── Platform URL builders ───────────────────────────────────────────────────
 const PLAT_URL = {
   instagram: h => `https://instagram.com/${h}`,
@@ -52,7 +43,6 @@ const PLAT_URL = {
   linkedin: h => `https://linkedin.com/in/${h}`,
 };
 
-const PLAT_ICON = { youtube: "\u25B6", x: "\uD835\uDD4F", instagram: "\u25C9", linkedin: "in" };
 
 const ZONE_BADGE_CFG = {
   ELITE:       { label: "ELITE",       color: T.accent, bg: "#FFF3EE", border: "#FFD4C2" },
@@ -299,9 +289,7 @@ function NotableInteractions({ activePlatform, dateFrom, dateTo }) {
                   color: avatarLetter ? "#fff" : (PLAT_COLORS[m.platform] || T.dim),
                   fontFamily: sans, fontSize: 15, fontWeight: 700,
                 }}>
-                  {avatarLetter || (m.platform === "instagram"
-                    ? <IgIcon size={16} color={PLAT_COLORS.instagram} />
-                    : (PLAT_ICON[m.platform] || "\u00B7"))}
+                  {avatarLetter || <PlatChip platform={m.platform} size={16} radius={6} />}
                 </div>
 
                 {/* Name */}
@@ -319,17 +307,9 @@ function NotableInteractions({ activePlatform, dateFrom, dateTo }) {
                   href={PLAT_URL[m.platform]?.(m.handle) || "#"}
                   target="_blank"
                   rel="noreferrer"
-                  style={{
-                    display: "inline-flex", alignItems: "center", justifyContent: "center",
-                    width: 28, height: 28, borderRadius: 8, flexShrink: 0,
-                    background: (PLAT_COLORS[m.platform] || T.dim) + "14",
-                    color: PLAT_COLORS[m.platform] || T.dim,
-                    fontSize: 13, fontWeight: 700, textDecoration: "none",
-                  }}
+                  style={{ textDecoration: "none", display: "inline-flex" }}
                 >
-                  {m.platform === "instagram"
-                    ? <IgIcon size={14} color={PLAT_COLORS.instagram} />
-                    : (PLAT_ICON[m.platform] || "\u00B7")}
+                  <PlatChip platform={m.platform} size={14} radius={8} />
                 </a>
               </div>
 

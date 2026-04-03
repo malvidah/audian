@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
+import { PlatIcon, PlatChip, PLAT_COLORS as PLAT_COLOR } from "./PlatIcon";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -35,8 +36,6 @@ function ghostInput({ fontSize = F.sm, fontWeight = 400, color = T.text, italic 
   };
 }
 
-const PLAT_ICON  = { instagram: "\uD83D\uDCF8", x: "\uD835\uDD4F", youtube: "\u25B6", linkedin: "in" };
-const PLAT_COLOR = { instagram: "#E1306C", x: "#000", youtube: "#FF0000", linkedin: "#0A66C2" };
 const PLAT_URL   = {
   instagram: h => `https://instagram.com/${h}`,
   x:         h => `https://x.com/${h}`,
@@ -455,14 +454,7 @@ function HandleDrawer({ open, mode, handle, onClose, onSaved, allTags = [] }) {
                   display: "flex", alignItems: "center", gap: 10,
                   marginBottom: 6,
                 }}>
-                  <span style={{
-                    display: "inline-flex", alignItems: "center", justifyContent: "center",
-                    width: 24, height: 24, borderRadius: 6,
-                    background: PLAT_COLOR[p] + "14", color: PLAT_COLOR[p],
-                    fontSize: 11, fontWeight: 700,
-                  }}>
-                    {PLAT_ICON[p]}
-                  </span>
+                  <PlatChip platform={p} size={13} radius={6} />
                   <span style={{ fontSize: F.sm, fontWeight: 600, color: T.text }}>
                     {PLAT_LABEL[p]}
                   </span>
@@ -1086,16 +1078,10 @@ export default function HandlesTable({ platform, refreshKey }) {
                         return (
                           <a key={p} href={PLAT_URL[p]?.(hdl)} target="_blank" rel="noreferrer"
                             title={`@${hdl}`}
-                            style={{
-                              display: "inline-flex", alignItems: "center", justifyContent: "center",
-                              width: 26, height: 26, borderRadius: 6,
-                              background: PLAT_COLOR[p] + "14",
-                              color: PLAT_COLOR[p], fontSize: 11, fontWeight: 700,
-                              textDecoration: "none", transition: "opacity 0.15s",
-                            }}
+                            style={{ textDecoration: "none", transition: "opacity 0.15s", display: "inline-flex" }}
                             onMouseEnter={e => e.currentTarget.style.opacity = "0.7"}
                             onMouseLeave={e => e.currentTarget.style.opacity = "1"}>
-                            {PLAT_ICON[p]}
+                            <PlatChip platform={p} size={14} radius={6} />
                           </a>
                         );
                       })}

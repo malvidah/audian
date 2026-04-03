@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
+import { PlatIcon, PlatChip, PlatDot, PLAT_COLORS } from "./PlatIcon";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -21,9 +22,7 @@ const T = {
   shadowMd: "0 4px 24px rgba(0,0,0,0.08)",
 };
 
-const PLAT_COLORS = { youtube: "#FF0000", x: "#000000", instagram: "#E1306C", linkedin: "#0077B5" };
 const PLAT_LABEL = { youtube: "YouTube", x: "X", instagram: "Instagram", linkedin: "LinkedIn" };
-const PLAT_ICON = { youtube: "▶", x: "𝕏", instagram: "◉", linkedin: "in" };
 const PLAT_URL = {
   instagram: h => `https://instagram.com/${h}`,
   x: h => `https://x.com/${h}`,
@@ -107,16 +106,6 @@ function normalizeType(type) {
   if (raw === "liked") return "like"; if (raw === "followed") return "follow";
   if (raw === "commented") return "comment"; if (raw === "reposted") return "repost";
   if (raw === "mentioned") return "mention"; return raw || "unknown";
-}
-
-function IgIcon({ size = 16, color = "#E1306C" }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/>
-      <circle cx="12" cy="12" r="4.5"/>
-      <circle cx="17.5" cy="6.5" r="1" fill={color} stroke="none"/>
-    </svg>
-  );
 }
 
 function TrashIcon({ size = 16, color = T.red }) {
@@ -297,12 +286,7 @@ function DetailPanelBody({ draft, handle, onChange, isCreate }) {
         textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8, marginTop: 4 }}>Handles</div>
       {PLAT_HANDLES.map(({ key, label, plat }) => (
         <div key={key} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-          <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center",
-            width: 24, height: 24, borderRadius: 6, flexShrink: 0,
-            background: (PLAT_COLORS[plat] || T.dim) + "14",
-            color: PLAT_COLORS[plat] || T.dim, fontSize: 11, fontWeight: 700 }}>
-            {plat === "instagram" ? <IgIcon size={12} color="#E1306C" /> : (PLAT_ICON[plat] || "·")}
-          </span>
+          <PlatChip platform={plat} size={12} radius={6} />
           <DetailField label="" value={isCreate ? (draft[key] || "") : (handle[key] || "")} placeholder={`${label} handle`}
             onChange={v => set(key, v)} />
         </div>
@@ -757,12 +741,7 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
               <div key={row.id} style={{ background: T.card, border: `1px solid ${T.border}`,
                 borderRadius: 12, padding: "16px 20px", boxShadow: T.shadowSm }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
-                  <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center",
-                    width: 30, height: 30, borderRadius: "50%",
-                    background: (PLAT_COLORS[row.platform] || T.dim) + "18",
-                    color: PLAT_COLORS[row.platform] || T.dim, fontSize: 13, fontWeight: 700 }}>
-                    {row.platform === "instagram" ? <IgIcon size={16} color="#E1306C" /> : (PLAT_ICON[row.platform] || "·")}
-                  </span>
+                  <PlatDot platform={row.platform} size={13} />
                   <span style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text }}>{row.name}</span>
                   <span style={{ fontFamily: sans, fontSize: F.xs, color: T.dim, background: T.well, borderRadius: 4,
                     padding: "1px 6px", border: `1px solid ${T.border}` }}>{fmt(row.followers)} followers</span>
@@ -856,11 +835,10 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
                     {/* Platform */}
                     <td style={{ ...tdStyle, textAlign: "center" }}>
                       <a href={PLAT_URL[row.platform]?.(row.handle) || "#"} target="_blank" rel="noreferrer"
-                        style={{ display: "inline-flex", alignItems: "center", justifyContent: "center",
-                          width: 30, height: 30, borderRadius: 8,
-                          background: (PLAT_COLORS[row.platform] || T.dim) + "14",
-                          color: PLAT_COLORS[row.platform] || T.dim, fontSize: 14, fontWeight: 700, textDecoration: "none" }}>
-                        {row.platform === "instagram" ? <IgIcon size={16} color="#E1306C" /> : (PLAT_ICON[row.platform] || "·")}
+                        style={{ textDecoration: "none", display: "inline-flex", transition: "opacity 0.15s" }}
+                        onMouseEnter={e => e.currentTarget.style.opacity = "0.7"}
+                        onMouseLeave={e => e.currentTarget.style.opacity = "1"}>
+                        <PlatChip platform={row.platform} size={15} radius={8} />
                       </a>
                     </td>
                     <td style={tdStyle}><TypeBadge type={row.type} /></td>
