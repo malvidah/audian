@@ -139,6 +139,7 @@ function NotableInteractions({ activePlatform, dateFrom, dateTo }) {
             post_url: row.post_url || null,
             followers,
             zone: h.zone || "SIGNAL",
+            avatar_url: h.avatar_url || null,
             date: row.interacted_at || null,
           };
         });
@@ -282,15 +283,21 @@ function NotableInteractions({ activePlatform, dateFrom, dateTo }) {
               {/* Top row: avatar + name + platform */}
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
                 {/* Avatar */}
-                <div style={{
-                  width: 36, height: 36, borderRadius: "50%", flexShrink: 0,
-                  background: avatarLetter ? AVATAR_GRADIENTS[gradientIdx] : (PLAT_COLORS[m.platform] || T.dim) + "22",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  color: avatarLetter ? "#fff" : (PLAT_COLORS[m.platform] || T.dim),
-                  fontFamily: sans, fontSize: 15, fontWeight: 700,
-                }}>
-                  {avatarLetter || <PlatChip platform={m.platform} size={16} radius={6} />}
-                </div>
+                {m.avatar_url ? (
+                  <img src={m.avatar_url} alt={m.name} style={{
+                    width: 36, height: 36, borderRadius: "50%", objectFit: "cover", flexShrink: 0, display: "block",
+                  }} />
+                ) : (
+                  <div style={{
+                    width: 36, height: 36, borderRadius: "50%", flexShrink: 0,
+                    background: avatarLetter ? AVATAR_GRADIENTS[gradientIdx] : (PLAT_COLORS[m.platform] || T.dim) + "22",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    color: avatarLetter ? "#fff" : (PLAT_COLORS[m.platform] || T.dim),
+                    fontFamily: sans, fontSize: 15, fontWeight: 700,
+                  }}>
+                    {avatarLetter || <PlatChip platform={m.platform} size={16} radius={6} />}
+                  </div>
+                )}
 
                 {/* Name */}
                 <div style={{ flex: 1, minWidth: 0 }}>

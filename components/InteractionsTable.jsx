@@ -4,7 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import { PlatIcon, PlatChip, PlatDot, PLAT_COLORS } from "./PlatIcon";
 import {
   T, sans, F, fmt, fmtDate, truncate, normalizeType, ghostInputStyle,
-  ZONE_CFG, ZONE_ORDER, PLAT_URL, PLAT_LABEL, ENTITY_TYPES, TYPE_BADGE,
+  ZONE_CFG, ZONE_ORDER, PLAT_URL, PLAT_LABEL, ENTITY_TYPES, TYPE_BADGE, AVATAR_GRADIENTS,
 } from "../lib/design.js";
 
 const supabase = createClient(
@@ -13,6 +13,22 @@ const supabase = createClient(
 );
 
 const ghostInput = ghostInputStyle;
+
+// Photo if available, otherwise gradient + initials
+function InlineAvatar({ name, avatarUrl, size = 36 }) {
+  const gradIdx = (name || "?").split("").reduce((s, c) => s + c.charCodeAt(0), 0) % AVATAR_GRADIENTS.length;
+  const initials = (name || "?").split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
+  return avatarUrl ? (
+    <img src={avatarUrl} alt={name} style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", flexShrink: 0, display: "block" }} />
+  ) : (
+    <div style={{ width: size, height: size, borderRadius: "50%", flexShrink: 0,
+      background: AVATAR_GRADIENTS[gradIdx], display: "flex", alignItems: "center",
+      justifyContent: "center", fontFamily: sans, fontWeight: 700,
+      fontSize: size * 0.36, color: "#fff", letterSpacing: "0.02em" }}>
+      {initials}
+    </div>
+  );
+}
 
 const LIST_ORDER = [...ZONE_ORDER, "UNASSIGNED"];
 function normalizeZone(zone) { return LIST_ORDER.includes(zone) ? zone : "UNASSIGNED"; }
@@ -245,7 +261,13 @@ function DetailPanel({ row, rawData, onClose, onSave, onDelete }) {
       background: T.bg, borderLeft: `1px solid ${T.border}`, boxShadow: "-4px 0 24px rgba(0,0,0,0.08)",
       overflowY: "auto", padding: "24px 28px" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-        <div style={{ fontFamily: sans, fontSize: F.lg, fontWeight: 700, color: T.text }}>Detail</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <InlineAvatar name={row.name} avatarUrl={row.avatar_url} size={40} />
+          <div>
+            <div style={{ fontFamily: sans, fontSize: F.md, fontWeight: 700, color: T.text, lineHeight: 1.2 }}>{row.name}</div>
+            <div style={{ fontFamily: sans, fontSize: F.xs, color: T.dim, marginTop: 2 }}>Edit interaction</div>
+          </div>
+        </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {confirmDelete ? (
             <>
@@ -530,7 +552,7 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
             platform: plat, type: row.interaction_type || "like",
             content: row.content || null, mention_url: row.mention_url || null,
             post_url: row.post_url || null, followers, zone: h.zone || "SIGNAL",
-            entity_type: h.entity_type || "person",
+            entity_type: h.entity_type || "person", avatar_url: h.avatar_url || null,
             date: row.interacted_at || null,
           };
         });
