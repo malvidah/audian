@@ -162,7 +162,7 @@ function HandleDrawer({ open, mode, handle, onClose, onSaved }) {
     setSaving(false);
   }
 
-  const title = mode === "create" ? "Add people / orgs" : "Edit person / org";
+  const title = mode === "create" ? "Add person / org" : "Edit person / org";
 
   return (
     <>
@@ -316,7 +316,7 @@ function HandleDrawer({ open, mode, handle, onClose, onSaved }) {
                 opacity: saving ? 0.7 : 1, transition: "opacity 0.15s",
               }}
             >
-              {saving ? "Saving…" : mode === "create" ? "Add people / orgs" : "Save changes"}
+              {saving ? "Saving…" : mode === "create" ? "Add person / org" : "Save changes"}
             </button>
           </div>
         </div>
@@ -715,7 +715,7 @@ export default function HandlesTable({ platform, refreshKey }) {
           onMouseLeave={e => { e.currentTarget.style.opacity = "1"; e.currentTarget.style.transform = "translateY(0)"; }}
         >
           <span style={{ fontSize: 18, lineHeight: 1, fontWeight: 300 }}>+</span>
-          Add People / Orgs
+          Add person / org
         </button>
       </div>
 
@@ -761,7 +761,7 @@ export default function HandlesTable({ platform, refreshKey }) {
                     ? `No people matching "${search}"`
                     : selectedZones.size
                       ? "No people match the selected label filters."
-                      : "No people yet. Click \"Add People / Orgs\" or import a CSV to get started."}
+                      : "No people yet. Click \"Add person / org\" or import a CSV to get started."}
                 </td>
               </tr>
             )}
