@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 import dynamic from "next/dynamic";
 import PageShell, { T, sans, F } from "../../components/PageShell";
+import { ZONE_CFG } from "../../lib/design";
 import { PlatIcon, PlatChip, PLAT_COLORS } from "../../components/PlatIcon";
 
 const supabase = createClient(
@@ -302,13 +303,18 @@ function ActiveInNetwork({ activePlatform, dateFrom, dateTo }) {
                       {fmt(p.followers)} followers
                     </span>
                   )}
-                  <span style={{
-                    fontFamily: sans, fontSize: F.xs, fontWeight: 700, letterSpacing: "0.04em",
-                    color: T.accent, background: "#FFF3EE",
-                    border: "1px solid #FFD4C2", borderRadius: 6, padding: "2px 8px",
-                  }}>
-                    ELITE
-                  </span>
+                  {(() => {
+                    const zc = ZONE_CFG[p.zone] || ZONE_CFG.SIGNAL;
+                    return (
+                      <span style={{
+                        fontFamily: sans, fontSize: F.xs, fontWeight: 700, letterSpacing: "0.04em",
+                        color: zc.color, background: zc.bg,
+                        border: `1px solid ${zc.border}`, borderRadius: 6, padding: "2px 8px",
+                      }}>
+                        {zc.label}
+                      </span>
+                    );
+                  })()}
                 </div>
 
                 {/* Interaction type pills with counts */}
