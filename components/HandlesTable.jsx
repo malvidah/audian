@@ -76,10 +76,36 @@ function truncate(str, max) {
 // ─── HandleDrawer ────────────────────────────────────────────────────────────
 
 const EMPTY_FORM = {
-  name: "", bio: "", zone: "SIGNAL",
+  name: "", bio: "", zone: "SIGNAL", entity_type: "person",
   handle_instagram: "", handle_x: "", handle_youtube: "", handle_linkedin: "",
   followers_instagram: "", followers_x: "", followers_youtube: "", followers_linkedin: "",
 };
+
+const ENTITY_TYPES = [
+  { value: "person",       label: "Person" },
+  { value: "organization", label: "Organization" },
+  { value: "page",         label: "Page" },
+];
+
+function EntityTypeSelect({ value, onChange }) {
+  const active = value || "person";
+  return (
+    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+      {ENTITY_TYPES.map(t => (
+        <button key={t.value} onClick={() => onChange(t.value)} style={{
+          fontFamily: sans, fontSize: F.xs, fontWeight: 600,
+          padding: "5px 14px", borderRadius: 999, cursor: "pointer",
+          border: active === t.value ? "none" : `1px solid ${T.border}`,
+          background: active === t.value ? T.accent : T.well,
+          color: active === t.value ? "#fff" : T.sub,
+          transition: "all 0.12s",
+        }}>
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 function HandleDrawer({ open, mode, handle, onClose, onSaved }) {
   const [form, setForm] = useState(EMPTY_FORM);
@@ -93,6 +119,7 @@ function HandleDrawer({ open, mode, handle, onClose, onSaved }) {
         name:               handle.name               || "",
         bio:                handle.bio                || "",
         zone:               handle.zone               || "SIGNAL",
+        entity_type:        handle.entity_type        || "person",
         handle_instagram:   handle.handle_instagram   || "",
         handle_x:           handle.handle_x           || "",
         handle_youtube:     handle.handle_youtube     || "",
@@ -236,6 +263,11 @@ function HandleDrawer({ open, mode, handle, onClose, onSaved }) {
           {/* Zone */}
           <Field label="Label">
             <ZoneSelect value={form.zone} onChange={v => set("zone", v)} />
+          </Field>
+
+          {/* Entity type */}
+          <Field label="Type">
+            <EntityTypeSelect value={form.entity_type} onChange={v => set("entity_type", v)} />
           </Field>
 
           {/* Platform handles */}
@@ -512,6 +544,10 @@ export default function HandlesTable({ platform, refreshKey }) {
   const [drawerMode, setDrawerMode] = useState("create"); // "create" | "edit"
   const [drawerHandle, setDrawerHandle] = useState(null);
 
+  // Inline edit state
+  const [editCell, setEditCell] = useState(null); // { id, field }
+  const [editVal, setEditVal] = useState("");
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -533,6 +569,22 @@ export default function HandlesTable({ platform, refreshKey }) {
       setHandles(prev => prev.map(h => h.id === id ? { ...h, ...updates } : h));
     } catch (e) { alert("Save failed: " + e.message); }
   };
+
+  function startEdit(h, field) {
+    setEditCell({ id: h.id, field });
+    setEditVal(h[field] ?? "");
+  }
+
+  function commitEdit(overrideVal) {
+    if (!editCell) return;
+    const { id, field } = editCell;
+    const val = overrideVal !== undefined ? overrideVal : editVal;
+    setEditCell(null);
+    setHandles(prev => prev.map(h => h.id === id ? { ...h, [field]: val } : h));
+    saveField(id, { [field]: val });
+  }
+
+  function cancelEdit() { setEditCell(null); }
 
   function openCreate() {
     setDrawerMode("create");
@@ -721,12 +773,21 @@ export default function HandlesTable({ platform, refreshKey }) {
 
       {/* Count */}
       <div style={{ fontFamily: sans, fontSize: F.sm, color: T.sub, marginBottom: 10 }}>
-        {sorted.length} handle{sorted.length !== 1 ? "s" : ""}
+        {sorted.length} {sorted.length !== 1 ? "people" : "person"}
       </div>
 
       {/* Table */}
       <div style={{ overflowX: "auto", borderRadius: 12, border: `1px solid ${T.border}` }}>
         <table style={{ width: "100%", borderCollapse: "collapse", background: T.card, minWidth: 780 }}>
+          <colgroup>
+            <col style={{ width: 180 }} />
+            <col style={{ width: 130 }} />
+            <col />
+            <col style={{ width: 88 }} />
+            <col style={{ width: 96 }} />
+            <col style={{ width: 86 }} />
+            <col style={{ width: 44 }} />
+          </colgroup>
           <thead>
             <tr style={{ background: T.well }}>
               <th style={thStyle("name")} onClick={() => toggleSort("name")}>
@@ -735,7 +796,7 @@ export default function HandlesTable({ platform, refreshKey }) {
               <th style={{ ...thStyle("platforms"), cursor: "default" }}>
                 Platforms
               </th>
-              <th style={{ ...thStyle("bio"), cursor: "default", width: "25%" }}>
+              <th style={{ ...thStyle("bio"), cursor: "default" }}>
                 Bio
               </th>
               <th style={thStyle("followers")} onClick={() => toggleSort("followers")}>
@@ -744,11 +805,11 @@ export default function HandlesTable({ platform, refreshKey }) {
               <th style={thStyle("zone")} onClick={() => toggleSort("zone")}>
                 Label{arrow("zone")}
               </th>
-              <th style={thStyle("last_seen")} onClick={() => toggleSort("last_seen")}>
+              <th style={{ ...thStyle("last_seen") }} onClick={() => toggleSort("last_seen")}>
                 Last seen{arrow("last_seen")}
               </th>
-              {/* Edit column */}
-              <th style={{ ...thStyle("_edit"), cursor: "default", width: 40 }} />
+              {/* Detail column */}
+              <th style={{ ...thStyle("_edit"), cursor: "default" }} />
             </tr>
           </thead>
           <tbody>
@@ -781,10 +842,42 @@ export default function HandlesTable({ platform, refreshKey }) {
                     if (editBtn) editBtn.style.opacity = "0";
                   }}>
                   {/* Name */}
-                  <td style={{ ...tdStyle, whiteSpace: "nowrap" }}>
-                    <div style={{ fontWeight: 600, fontSize: F.sm, color: T.text, lineHeight: 1.3 }}>
-                      {h.name || pri?.handle || "\u2014"}
-                    </div>
+                  <td style={{ ...tdStyle, maxWidth: 180 }}
+                    onClick={() => { if (!editCell) startEdit(h, "name"); }}>
+                    {editCell?.id === h.id && editCell?.field === "name" ? (
+                      <input
+                        autoFocus
+                        value={editVal}
+                        onChange={e => setEditVal(e.target.value)}
+                        onBlur={() => commitEdit()}
+                        onKeyDown={e => { if (e.key === "Enter") { e.currentTarget.blur(); } if (e.key === "Escape") cancelEdit(); }}
+                        style={{
+                          width: "100%", border: "none", outline: "none",
+                          borderBottom: `2px solid ${T.accent}`,
+                          fontFamily: sans, fontSize: F.sm, fontWeight: 600,
+                          color: T.text, background: "transparent", padding: "1px 2px",
+                        }}
+                      />
+                    ) : (
+                      <div style={{
+                        fontWeight: 600, fontSize: F.sm, color: T.text, lineHeight: 1.3,
+                        cursor: "text", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                      }}>
+                        {h.name || pri?.handle || "\u2014"}
+                      </div>
+                    )}
+                    {h.entity_type && h.entity_type !== "person" && (
+                      <span style={{
+                        display: "inline-block", marginTop: 2,
+                        fontSize: 10, fontWeight: 700, letterSpacing: "0.04em",
+                        color: h.entity_type === "organization" ? "#2563EB" : "#7C3AED",
+                        background: h.entity_type === "organization" ? "#EFF6FF" : "#F5F3FF",
+                        border: `1px solid ${h.entity_type === "organization" ? "#BFDBFE" : "#DDD6FE"}`,
+                        borderRadius: 4, padding: "1px 5px", fontFamily: sans,
+                      }}>
+                        {h.entity_type === "organization" ? "ORG" : "PAGE"}
+                      </span>
+                    )}
                   </td>
                   {/* Platforms */}
                   <td style={tdStyle}>
@@ -828,19 +921,40 @@ export default function HandlesTable({ platform, refreshKey }) {
                     {totalFollowers(h) > 0 ? fmt(totalFollowers(h)) : "\u2014"}
                   </td>
                   {/* Zone / Label */}
-                  <td style={tdStyle}>
-                    <ZoneBadge zone={h.zone} />
+                  <td style={{ ...tdStyle, cursor: "pointer" }}
+                    onClick={() => { if (!editCell) startEdit(h, "zone"); }}>
+                    {editCell?.id === h.id && editCell?.field === "zone" ? (
+                      <select
+                        autoFocus
+                        value={editVal}
+                        onChange={e => { const v = e.target.value; setEditVal(v); commitEdit(v); }}
+                        onBlur={() => cancelEdit()}
+                        onKeyDown={e => { if (e.key === "Escape") cancelEdit(); }}
+                        style={{
+                          fontFamily: sans, fontSize: F.xs, fontWeight: 600,
+                          border: `1px solid ${T.border}`, borderRadius: 6,
+                          padding: "3px 6px", background: T.card, color: T.text,
+                          cursor: "pointer", outline: "none",
+                        }}
+                      >
+                        {["ELITE", "INFLUENTIAL", "SIGNAL", "IGNORE"].map(z => (
+                          <option key={z} value={z}>{z}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <ZoneBadge zone={h.zone} />
+                    )}
                   </td>
                   {/* Last seen */}
                   <td style={{ ...tdStyle, whiteSpace: "nowrap", color: T.dim, fontSize: F.xs }}>
                     {timeAgo(h.last_interaction) || timeAgo(h.updated_at) || "\u2014"}
                   </td>
-                  {/* Edit button */}
-                  <td style={{ ...tdStyle, padding: "10px 8px", width: 40 }}>
+                  {/* Detail button */}
+                  <td style={{ ...tdStyle, padding: "10px 8px" }}>
                     <button
                       data-edit-btn
                       onClick={() => openEdit(h)}
-                      title="Edit handle"
+                      title="More details"
                       style={{
                         display: "inline-flex", alignItems: "center", justifyContent: "center",
                         width: 28, height: 28, borderRadius: 7,
@@ -852,7 +966,7 @@ export default function HandlesTable({ platform, refreshKey }) {
                       onMouseEnter={e => { e.currentTarget.style.background = T.accentBg; e.currentTarget.style.color = T.accent; e.currentTarget.style.borderColor = T.accentBorder; }}
                       onMouseLeave={e => { e.currentTarget.style.background = T.well; e.currentTarget.style.color = T.sub; e.currentTarget.style.borderColor = T.border; }}
                     >
-                      ✎
+                      ···
                     </button>
                   </td>
                 </tr>

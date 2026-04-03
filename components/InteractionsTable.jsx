@@ -59,6 +59,12 @@ const ZONE_OPTIONS = [
   { value: "IGNORE", label: "Ignore" },
 ];
 
+const ENTITY_TYPE_OPTIONS = [
+  { value: "person",       label: "Person" },
+  { value: "organization", label: "Organization" },
+  { value: "page",         label: "Page" },
+];
+
 const EMPTY_ROW = {
   name: "", platform: "x", handle: "", interaction_type: "mention",
   content: "", mention_url: "", followers: "", zone: "SIGNAL",
@@ -273,6 +279,8 @@ function DetailPanelBody({ draft, handle, onChange, isCreate }) {
         onChange={v => set("bio", v)} />
       <DetailSelect label="Label" value={draft.zone || "SIGNAL"} options={ZONE_OPTIONS}
         onChange={v => set("zone", v)} />
+      <DetailSelect label="Type" value={draft.entity_type || (isCreate ? "person" : (handle.entity_type || "person"))} options={ENTITY_TYPE_OPTIONS}
+        onChange={v => set("entity_type", v)} />
 
       <div style={{ fontFamily: sans, fontSize: 10, fontWeight: 600, color: T.dim,
         textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8, marginTop: 4 }}>Handles</div>
@@ -428,6 +436,25 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
   const [deleting, setDeleting] = useState(false);
   const [detailRow, setDetailRow] = useState(null);
 
+  // Inline edit state
+  const [editCell, setEditCell] = useState(null); // { id, field }
+  const [editVal, setEditVal] = useState("");
+
+  function startEdit(row, field) {
+    setEditCell({ id: row.id, field });
+    setEditVal(row[field] ?? "");
+  }
+
+  function commitInlineEdit(overrideVal) {
+    if (!editCell) return;
+    const { id, field } = editCell;
+    const val = overrideVal !== undefined ? overrideVal : editVal;
+    setEditCell(null);
+    saveField(id, field, val);
+  }
+
+  function cancelInlineEdit() { setEditCell(null); }
+
   const saveField = useCallback((rowId, field, value) => {
     const isHandleField = ["name", "bio", "zone"].includes(field) ||
       field.startsWith("handle_") || field.startsWith("followers_");
@@ -446,6 +473,7 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
         if (field === "name") u.name = value;
         if (field === "bio") u.bio = value;
         if (field === "zone") u.zone = value;
+        if (field === "entity_type") u.entity_type = value;
       }
       if (isTarget) {
         if (field === "content") u.content = value;
@@ -465,7 +493,7 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
       if (!isSameHandle && !isHandleField && !isTarget) return r;
       const u = { ...r, handles: { ...r.handles } };
       if (isSameHandle) {
-        if (["name", "bio", "zone"].includes(field)) u.handles[field] = value;
+        if (["name", "bio", "zone", "entity_type"].includes(field)) u.handles[field] = value;
         if (field.startsWith("handle_") || field.startsWith("followers_"))
           u.handles[field] = field.startsWith("followers_") ? (parseInt(value, 10) || null) : value;
       }
@@ -475,7 +503,7 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
     setDetailRow(prev => {
       if (!prev || prev.id !== rowId) return prev;
       const u = { ...prev };
-      if (field === "name" || field === "bio" || field === "zone") u[field] = value;
+      if (["name", "bio", "zone", "entity_type"].includes(field)) u[field] = value;
       else if (field === "content") u.content = value;
       else if (field === "mention_url") u.mention_url = value;
       else if (field === "post_url") u.post_url = value;
@@ -719,52 +747,91 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
         )
       ) : (
         <div style={{ overflowX: "auto", borderRadius: 12, border: `1px solid ${T.border}`, boxShadow: T.shadowSm }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", background: T.card, minWidth: 880 }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", background: T.card, minWidth: 900 }}>
+            <colgroup>
+              <col style={{ width: 36 }} />
+              <col style={{ width: 180 }} />
+              <col style={{ width: 60 }} />
+              <col style={{ width: 100 }} />
+              <col />
+              <col style={{ width: 80 }} />
+              <col style={{ width: 100 }} />
+              <col style={{ width: 86 }} />
+              <col style={{ width: 44 }} />
+            </colgroup>
             <thead>
               <tr style={{ background: T.well }}>
-                <th style={{ ...thStyle(""), cursor: "pointer", width: 36, textAlign: "center", padding: "10px 8px" }} onClick={toggleSelectAll}>
+                <th style={{ ...thStyle(""), cursor: "pointer", textAlign: "center", padding: "10px 8px" }} onClick={toggleSelectAll}>
                   <input type="checkbox" checked={sorted.length > 0 && selected.size === sorted.length}
                     onChange={toggleSelectAll} style={{ cursor: "pointer", accentColor: T.accent }} />
                 </th>
                 <th style={thStyle("name")} onClick={() => toggleSort("name")}>Person{arrow("name")}</th>
-                <th style={thStyle("platform")} onClick={() => toggleSort("platform")}>Platform{arrow("platform")}</th>
+                <th style={{ ...thStyle("platform"), textAlign: "center" }} onClick={() => toggleSort("platform")}>Plat{arrow("platform")}</th>
                 <th style={thStyle("type")} onClick={() => toggleSort("type")}>Type{arrow("type")}</th>
-                <th style={{ ...thStyle("content"), cursor: "default", width: "28%" }}>Content</th>
+                <th style={{ ...thStyle("content"), cursor: "default" }}>Content</th>
                 <th style={thStyle("followers")} onClick={() => toggleSort("followers")}>Followers{arrow("followers")}</th>
                 <th style={thStyle("zone")} onClick={() => toggleSort("zone")}>Label{arrow("zone")}</th>
                 <th style={thStyle("date")} onClick={() => toggleSort("date")}>Date{arrow("date")}</th>
+                <th style={{ ...thStyle("_detail"), cursor: "default" }} />
               </tr>
             </thead>
             <tbody>
               {sorted.length === 0 && (
-                <tr><td colSpan={8} style={{ ...tdStyle, textAlign: "center", color: T.dim, padding: "40px 12px" }}>
+                <tr><td colSpan={9} style={{ ...tdStyle, textAlign: "center", color: T.dim, padding: "40px 12px" }}>
                   No interactions found{platform && platform !== "all" ? ` on ${PLAT_LABEL[platform] || platform}` : ""}{weekFilter ? " for the selected week" : ""}.
                 </td></tr>
               )}
               {sorted.map((row, i) => {
                 const isSelected = selected.has(row.id);
                 const isDetail = detailRow?.id === row.id;
+                const isEditingName = editCell?.id === row.id && editCell?.field === "name";
+                const isEditingZone = editCell?.id === row.id && editCell?.field === "zone";
                 return (
                   <tr key={row.id}
-                    onClick={() => { if (row.source === "interactions") { setDetailRow(row); } }}
                     style={{
                       background: isDetail ? T.accentBg : isSelected ? T.blueBg : i % 2 === 0 ? T.card : T.well + "88",
-                      cursor: row.source === "interactions" ? "pointer" : "default",
                       transition: "background 0.1s",
+                    }}
+                    onMouseEnter={e => {
+                      const btn = e.currentTarget.querySelector("[data-detail-btn]");
+                      if (btn) btn.style.opacity = "1";
+                    }}
+                    onMouseLeave={e => {
+                      const btn = e.currentTarget.querySelector("[data-detail-btn]");
+                      if (btn) btn.style.opacity = "0";
                     }}>
-                    <td style={{ ...tdStyle, textAlign: "center", padding: "11px 8px" }} onClick={e => e.stopPropagation()}>
+                    <td style={{ ...tdStyle, textAlign: "center", padding: "11px 8px" }}>
                       <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(row.id)}
                         style={{ cursor: "pointer", accentColor: T.accent }} />
                     </td>
-                    <td style={tdStyle}>
-                      <div style={{ maxWidth: 260 }}>
-                        <div style={{ fontWeight: 600, fontSize: F.sm, color: T.text, lineHeight: 1.3 }}>{row.name}</div>
-                        {row.bio && <div style={{ marginTop: 4, fontSize: F.xs, color: T.sub, lineHeight: 1.45, whiteSpace: "normal" }}>{truncate(row.bio, 120)}</div>}
-                      </div>
+                    {/* Name — inline editable */}
+                    <td style={{ ...tdStyle, maxWidth: 180 }}
+                      onClick={() => { if (!editCell && row.source === "interactions") startEdit(row, "name"); }}>
+                      {isEditingName ? (
+                        <input
+                          autoFocus
+                          value={editVal}
+                          onChange={e => setEditVal(e.target.value)}
+                          onBlur={() => commitInlineEdit()}
+                          onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") cancelInlineEdit(); }}
+                          style={{
+                            width: "100%", border: "none", outline: "none",
+                            borderBottom: `2px solid ${T.accent}`,
+                            fontFamily: sans, fontSize: F.sm, fontWeight: 600,
+                            color: T.text, background: "transparent", padding: "1px 2px",
+                          }}
+                        />
+                      ) : (
+                        <div style={{ fontWeight: 600, fontSize: F.sm, color: T.text, lineHeight: 1.3,
+                          cursor: row.source === "interactions" ? "text" : "default",
+                          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {row.name}
+                        </div>
+                      )}
                     </td>
+                    {/* Platform */}
                     <td style={{ ...tdStyle, textAlign: "center" }}>
                       <a href={PLAT_URL[row.platform]?.(row.handle) || "#"} target="_blank" rel="noreferrer"
-                        onClick={e => e.stopPropagation()}
                         style={{ display: "inline-flex", alignItems: "center", justifyContent: "center",
                           width: 30, height: 30, borderRadius: 8,
                           background: (PLAT_COLORS[row.platform] || T.dim) + "14",
@@ -780,13 +847,59 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
                         const s = { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                           fontSize: F.xs, color: row.content ? T.sub : T.dim, fontStyle: row.content ? "normal" : "italic", display: "block" };
                         return href && row.content
-                          ? <a href={href} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ ...s, textDecoration: "none" }} title={href}>{text}</a>
+                          ? <a href={href} target="_blank" rel="noreferrer" style={{ ...s, textDecoration: "none" }} title={href}>{text}</a>
                           : <div style={s}>{text}</div>;
                       })()}
                     </td>
                     <td style={{ ...tdStyle, fontWeight: 600, whiteSpace: "nowrap" }}>{row.followers ? fmt(row.followers) : "—"}</td>
-                    <td style={tdStyle}><ZoneBadge zone={row.zone} /></td>
+                    {/* Label — inline editable */}
+                    <td style={{ ...tdStyle, cursor: "pointer" }}
+                      onClick={() => { if (!editCell && row.source === "interactions") startEdit(row, "zone"); }}>
+                      {isEditingZone ? (
+                        <select
+                          autoFocus
+                          value={editVal}
+                          onChange={e => { const v = e.target.value; setEditVal(v); commitInlineEdit(v); }}
+                          onBlur={() => cancelInlineEdit()}
+                          onKeyDown={e => { if (e.key === "Escape") cancelInlineEdit(); }}
+                          style={{
+                            fontFamily: sans, fontSize: F.xs, fontWeight: 600,
+                            border: `1px solid ${T.border}`, borderRadius: 6,
+                            padding: "3px 6px", background: T.card, color: T.text,
+                            cursor: "pointer", outline: "none",
+                          }}
+                        >
+                          {["ELITE", "INFLUENTIAL", "SIGNAL", "IGNORE"].map(z => (
+                            <option key={z} value={z}>{z}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <ZoneBadge zone={row.zone} />
+                      )}
+                    </td>
                     <td style={{ ...tdStyle, whiteSpace: "nowrap", color: T.sub, fontSize: F.xs }}>{fmtDate(row.date)}</td>
+                    {/* Detail button */}
+                    <td style={{ ...tdStyle, padding: "10px 8px" }}>
+                      {row.source === "interactions" && (
+                        <button
+                          data-detail-btn
+                          onClick={() => setDetailRow(row)}
+                          title="More details"
+                          style={{
+                            display: "inline-flex", alignItems: "center", justifyContent: "center",
+                            width: 28, height: 28, borderRadius: 7,
+                            background: T.well, border: `1px solid ${T.border}`,
+                            cursor: "pointer", color: T.sub,
+                            opacity: 0, transition: "opacity 0.15s, background 0.1s",
+                            fontSize: 13,
+                          }}
+                          onMouseEnter={e => { e.currentTarget.style.background = T.accentBg; e.currentTarget.style.color = T.accent; e.currentTarget.style.borderColor = T.accentBorder || T.border; }}
+                          onMouseLeave={e => { e.currentTarget.style.background = T.well; e.currentTarget.style.color = T.sub; e.currentTarget.style.borderColor = T.border; }}
+                        >
+                          ···
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 );
               })}

@@ -1302,10 +1302,18 @@ function PostsTable({ posts, activePlatform, selectedWeek, onImported }) {
       )}
 
       <div style={{ overflowX: "auto", borderRadius: 12, border: `1px solid ${T.border}` }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", background: T.card }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", background: T.card, minWidth: 700 }}>
+          <colgroup>
+            <col />
+            <col style={{ width: 72 }} />
+            <col style={{ width: 80 }} />
+            <col style={{ width: 80 }} />
+            <col style={{ width: 90 }} />
+            <col style={{ width: 90 }} />
+          </colgroup>
           <thead>
             <tr style={{ background: T.well }}>
-              <th style={{ ...thStyle(), width: "50%", cursor: "default" }}>Content</th>
+              <th style={{ ...thStyle(), cursor: "default" }}>Content</th>
               <th style={{ ...thStyle(), cursor: "default" }}>Platform</th>
               <th style={thStyle("likes")} onClick={() => toggleSort("likes")}>
                 Likes {sortBy === "likes" ? (sortDesc ? "↓" : "↑") : ""}

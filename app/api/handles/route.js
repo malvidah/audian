@@ -70,7 +70,7 @@ export async function GET() {
 export async function POST(req) {
   try {
     const body = await req.json();
-    const allowed = ['name','bio','zone','followed_by','avatar_url',
+    const allowed = ['name','bio','zone','entity_type','followed_by','avatar_url',
       'handle_instagram','handle_x','handle_youtube','handle_linkedin',
       'followers_instagram','followers_x','followers_youtube','followers_linkedin'];
     const safe = Object.fromEntries(Object.entries(body).filter(([k]) => allowed.includes(k)));
@@ -90,7 +90,7 @@ export async function PATCH(req) {
   try {
     const { id, updates } = await req.json();
     if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
-    const allowed = ['name','bio','zone','followed_by','avatar_url',
+    const allowed = ['name','bio','zone','entity_type','followed_by','avatar_url',
       'handle_instagram','handle_x','handle_youtube','handle_linkedin',
       'followers_instagram','followers_x','followers_youtube','followers_linkedin'];
     const safe = Object.fromEntries(Object.entries(updates).filter(([k]) => allowed.includes(k)));
