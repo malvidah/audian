@@ -198,8 +198,7 @@ function TagInput({ value = [], onChange, allTags = [] }) {
 // ─── Avatar ──────────────────────────────────────────────────────────────────
 // Displays a profile photo, or a gradient+initials fallback.
 // onUpload(file)     — camera icon overlay, click opens file picker
-// onAutoPhoto()      — "BT" badge button beside the circle, fetches from Big Think
-function Avatar({ name, avatarUrl, size = 36, onUpload, onAutoPhoto, autoPhotoLoading }) {
+function Avatar({ name, avatarUrl, size = 36, onUpload }) {
   const [hover, setHover] = useState(false);
   const [previewUrl, setPreviewUrl] = useState(null);
   const fileRef = useRef(null);
@@ -261,24 +260,6 @@ function Avatar({ name, avatarUrl, size = 36, onUpload, onAutoPhoto, autoPhotoLo
         )}
       </div>
 
-      {/* Big Think auto-import button — only shown when no photo and name exists */}
-      {onAutoPhoto && !src && name && name !== "?" && (
-        <button
-          onClick={e => { e.stopPropagation(); onAutoPhoto(); }}
-          disabled={autoPhotoLoading}
-          title="Find photo on Big Think"
-          style={{
-            fontFamily: sans, fontSize: 9, fontWeight: 800, letterSpacing: "0.04em",
-            padding: "2px 5px", borderRadius: 5, cursor: autoPhotoLoading ? "wait" : "pointer",
-            border: `1px solid ${T.border}`, background: T.well, color: T.dim,
-            opacity: autoPhotoLoading ? 0.5 : 1, transition: "all 0.12s", whiteSpace: "nowrap",
-          }}
-          onMouseEnter={e => { if (!autoPhotoLoading) { e.currentTarget.style.background = T.accentBg; e.currentTarget.style.color = T.accent; e.currentTarget.style.borderColor = T.accentBorder; }}}
-          onMouseLeave={e => { e.currentTarget.style.background = T.well; e.currentTarget.style.color = T.dim; e.currentTarget.style.borderColor = T.border; }}
-        >
-          {autoPhotoLoading ? "…" : "BT"}
-        </button>
-      )}
     </div>
   );
 }
@@ -289,8 +270,6 @@ function HandleDrawer({ open, mode, handle, onClose, onSaved, allTags = [] }) {
   const [error, setError] = useState(null);
   const [avatarUrl, setAvatarUrl] = useState(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
-  const [autoPhotoLoading, setAutoPhotoLoading] = useState(false);
-  const [autoPhotoError, setAutoPhotoError] = useState(null);
 
   // Populate form when editing
   useEffect(() => {
@@ -337,26 +316,6 @@ function HandleDrawer({ open, mode, handle, onClose, onSaved, allTags = [] }) {
     }
   }
 
-  async function handleAutoPhoto() {
-    if (!handle?.id || !form.name) return;
-    setAutoPhotoLoading(true);
-    setAutoPhotoError(null);
-    try {
-      const res = await fetch("/api/handles/autophoto", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ handle_id: handle.id, name: form.name }),
-      });
-      const d = await res.json();
-      if (d.error) { setAutoPhotoError(d.error); return; }
-      setAvatarUrl(d.url);
-      onSaved({ ...handle, avatar_url: d.url }, "edit");
-    } catch (e) {
-      setAutoPhotoError(e.message);
-    } finally {
-      setAutoPhotoLoading(false);
-    }
-  }
 
   if (!open) return null;
 
@@ -446,16 +405,14 @@ function HandleDrawer({ open, mode, handle, onClose, onSaved, allTags = [] }) {
               avatarUrl={avatarUrl}
               size={48}
               onUpload={mode === "edit" ? handleAvatarUpload : undefined}
-              onAutoPhoto={mode === "edit" ? handleAutoPhoto : undefined}
-              autoPhotoLoading={autoPhotoLoading}
             />
             <div>
               <div style={{ fontSize: F.lg, fontWeight: 700, color: T.text, lineHeight: 1.2 }}>
                 {title}
               </div>
               {mode === "edit" && (
-                <div style={{ fontSize: F.xs, color: autoPhotoError ? T.red : T.dim, marginTop: 3 }}>
-                  {autoPhotoLoading ? "Searching Big Think…" : avatarUploading ? "Uploading…" : autoPhotoError || "Click photo to change"}
+                <div style={{ fontSize: F.xs, color: T.dim, marginTop: 3 }}>
+                  {avatarUploading ? "Uploading…" : "Click photo to change"}
                 </div>
               )}
               {mode === "create" && (
@@ -852,24 +809,6 @@ export default function HandlesTable({ platform, refreshKey }) {
     } catch {}
   }
 
-  async function autoPhotoForRow(handleId, name) {
-    setHandles(prev => prev.map(h => h.id === handleId ? { ...h, _autoPhotoLoading: true } : h));
-    try {
-      const res = await fetch("/api/handles/autophoto", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ handle_id: handleId, name }),
-      });
-      const d = await res.json();
-      if (d.url) {
-        setHandles(prev => prev.map(h => h.id === handleId ? { ...h, avatar_url: d.url, _autoPhotoLoading: false } : h));
-      } else {
-        setHandles(prev => prev.map(h => h.id === handleId ? { ...h, _autoPhotoLoading: false } : h));
-      }
-    } catch {
-      setHandles(prev => prev.map(h => h.id === handleId ? { ...h, _autoPhotoLoading: false } : h));
-    }
-  }
 
   function primaryHandle(h) {
     for (const p of ["instagram", "x", "youtube", "linkedin"]) {
@@ -1117,8 +1056,6 @@ export default function HandlesTable({ platform, refreshKey }) {
                           avatarUrl={h.avatar_url}
                           size={32}
                           onUpload={file => uploadAvatarForRow(h.id, file)}
-                          onAutoPhoto={() => autoPhotoForRow(h.id, h.name)}
-                          autoPhotoLoading={h._autoPhotoLoading}
                         />
                       </div>
                       {/* Name text — click to inline-edit */}
