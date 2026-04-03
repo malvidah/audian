@@ -51,7 +51,8 @@ function fmt(n) {
 
 function fmtDate(iso) {
   if (!iso) return "";
-  const d = new Date(iso);
+  const safe = /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso + "T12:00:00" : iso;
+  const d = new Date(safe);
   const now = new Date();
   const diffDays = Math.floor((now - d) / 86400000);
   if (diffDays === 0) return "today";
