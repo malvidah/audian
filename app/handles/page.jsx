@@ -106,7 +106,7 @@ function ActiveInNetwork({ activePlatform, dateFrom, dateTo }) {
         // Filter for ELITE handles, optionally by platform
         const filtered = (data || []).filter(row => {
           const h = row.handles || {};
-          if (h.zone !== "ELITE") return false;
+          if (h.zone !== "ELITE" && h.zone !== "COLLABORATOR") return false;
           if (activePlatform && activePlatform !== "all") {
             return row.platform === activePlatform;
           }
