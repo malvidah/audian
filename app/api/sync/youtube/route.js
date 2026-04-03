@@ -149,74 +149,21 @@ export async function POST() {
       }
     }
 
-    // ── 5. Subscriber history backfill via YouTube Analytics API ─────────────
-    // Uses yt-analytics.readonly scope (already requested during OAuth).
-    // Fetches daily subscribersGained + subscribersLost from channel creation
-    // to today, then reconstructs absolute counts by working backwards from the
-    // current subscriber count. Replaces all existing youtube platform_metrics
-    // with biweekly snapshots + a current full snapshot (with video data).
-    let backfillSnapshots = 0;
+    // ── 5. Clean up any bad historical data from previous failed backfills ──────
+    // The Analytics API backfill produced flat/wrong data (8.65M for all dates
+    // since 2020). Remove those rows; correct history comes from manual CSV uploads.
+    // Also removes any stale rows with impossibly low counts (< 1000) from early syncs.
     try {
-      const today      = now.slice(0, 10);
-      const channelId  = channel.id;
-      const currentSubs = parseInt(channel.statistics?.subscriberCount || 0);
-
-      const analyticsUrl = new URL('https://youtubeanalytics.googleapis.com/v2/reports');
-      // Must use "channel==MINE" — the Analytics API doesn't accept arbitrary UCxxx IDs;
-      // it only returns data for the authenticated user's own channel.
-      analyticsUrl.searchParams.set('ids',        'channel==MINE');
-      analyticsUrl.searchParams.set('metrics',    'subscribersGained,subscribersLost');
-      analyticsUrl.searchParams.set('dimensions', 'day');
-      analyticsUrl.searchParams.set('startDate',  '2005-01-01'); // before YouTube existed; API clips to channel creation
-      analyticsUrl.searchParams.set('endDate',    today);
-      analyticsUrl.searchParams.set('sort',       'day');
-
-      const analyticsRes  = await fetch(analyticsUrl.toString(), {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const analyticsData = await analyticsRes.json();
-
-      // Log errors from Analytics API so we can debug without silently failing
-      if (analyticsData.error) {
-        console.warn('YouTube Analytics API error:', JSON.stringify(analyticsData.error));
-      }
-
-      // Only proceed if we got a meaningful number of data points (guard against partial responses)
-      if (analyticsData.rows?.length > 30) {
-        const rows = analyticsData.rows; // [[date, gained, lost], ...]
-
-        // Reconstruct absolute counts backwards from today's known total
-        const daily = new Array(rows.length);
-        let running = currentSubs;
-        for (let i = rows.length - 1; i >= 0; i--) {
-          const [date, gained, lost] = rows[i];
-          daily[i] = { date, count: Math.max(0, Math.round(running)) };
-          running = running - gained + lost;
-        }
-
-        // Sample every 14 days (biweekly) for chart performance; always keep first + last
-        const snapshots = daily
-          .filter((_, i) => i % 14 === 0 || i === daily.length - 1)
-          .map(({ date, count }) => ({
-            platform:    'youtube',
-            snapshot_at: `${date}T00:00:00Z`,
-            followers:   count,
-          }));
-
-        // Wipe existing youtube metrics and replace with full history
-        await supabase.from('platform_metrics').delete().eq('platform', 'youtube');
-
-        for (let i = 0; i < snapshots.length; i += 200) {
-          const { error: snapErr } = await supabase
-            .from('platform_metrics')
-            .insert(snapshots.slice(i, i + 200));
-          if (snapErr) throw snapErr;
-        }
-        backfillSnapshots = snapshots.length;
-      }
-    } catch (analyticsErr) {
-      // Analytics backfill is best-effort; don't abort the whole sync
-      console.warn('Analytics subscriber backfill skipped:', analyticsErr.message || analyticsErr);
+      await supabase.from('platform_metrics')
+        .delete()
+        .eq('platform', 'youtube')
+        .lt('snapshot_at', '2026-01-01T00:00:00Z'); // remove pre-2026 flat backfill garbage
+      await supabase.from('platform_metrics')
+        .delete()
+        .eq('platform', 'youtube')
+        .lt('followers', 1000); // remove obviously wrong counts (e.g. 827 stale row)
+    } catch (cleanupErr) {
+      console.warn('YouTube metrics cleanup skipped:', cleanupErr.message);
     }
 
     // Always write the current full snapshot (with video data) — either as a
@@ -344,20 +291,18 @@ export async function POST() {
     if (newVideos > 0)          parts.push(`${newVideos} new video${newVideos !== 1 ? 's' : ''}`);
     if (updatedVideos > 0)      parts.push(`${updatedVideos} refreshed`);
     if (commentsSaved > 0)      parts.push(`${commentsSaved} new comment${commentsSaved !== 1 ? 's' : ''}`);
-    if (backfillSnapshots > 0)  parts.push(`${backfillSnapshots} subscriber history points`);
     if (parts.length === 0)     parts.push(`${postRows.length} video${postRows.length !== 1 ? 's' : ''} already up to date`);
     const msg = parts.join(' · ');
 
     return NextResponse.json({
-      success:            true,
-      channel:            channel.snippet?.title,
-      subscribers:        channel.statistics?.subscriberCount,
-      playlist_items:     videoIds.length,
-      videos_synced:      postRows.length,
-      new_videos:         newVideos,
-      comments_synced:    commentsSaved,
-      backfill_snapshots: backfillSnapshots,
-      message:            msg,
+      success:         true,
+      channel:         channel.snippet?.title,
+      subscribers:     channel.statistics?.subscriberCount,
+      playlist_items:  videoIds.length,
+      videos_synced:   postRows.length,
+      new_videos:      newVideos,
+      comments_synced: commentsSaved,
+      message:         msg,
     });
 
   } catch (err) {
