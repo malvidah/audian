@@ -233,10 +233,11 @@ function DetailPanelBody({ draft, handle, onChange, isCreate }) {
 }
 
 // ─── Edit detail panel (existing interaction) ──────────────────────────────
-function DetailPanel({ row, rawData, onClose, onSave }) {
+function DetailPanel({ row, rawData, onClose, onSave, onDelete }) {
   const rawRow = rawData?.find(r => r.id === row?.id);
   const handle = rawRow?.handles || {};
   const save = useCallback((field, value) => onSave(row.id, field, value), [row?.id, onSave]);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   if (!row) return null;
 
   return (
@@ -245,8 +246,40 @@ function DetailPanel({ row, rawData, onClose, onSave }) {
       overflowY: "auto", padding: "24px 28px" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
         <div style={{ fontFamily: sans, fontSize: F.lg, fontWeight: 700, color: T.text }}>Detail</div>
-        <button onClick={onClose} style={{ fontFamily: sans, fontSize: F.md, background: "none",
-          border: "none", color: T.dim, cursor: "pointer", padding: "4px 8px", lineHeight: 1 }}>✕</button>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {confirmDelete ? (
+            <>
+              <span style={{ fontFamily: sans, fontSize: F.xs, color: T.red, fontWeight: 600 }}>Delete this interaction?</span>
+              <button
+                onClick={() => onDelete(row.id)}
+                style={{ fontFamily: sans, fontSize: F.xs, fontWeight: 700, padding: "4px 10px",
+                  borderRadius: 7, border: "none", background: T.red, color: "#fff", cursor: "pointer" }}>
+                Yes, delete
+              </button>
+              <button
+                onClick={() => setConfirmDelete(false)}
+                style={{ fontFamily: sans, fontSize: F.xs, fontWeight: 600, padding: "4px 10px",
+                  borderRadius: 7, border: `1px solid ${T.border}`, background: T.card, color: T.sub, cursor: "pointer" }}>
+                Cancel
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => setConfirmDelete(true)}
+              title="Delete interaction"
+              style={{ display: "flex", alignItems: "center", justifyContent: "center",
+                width: 30, height: 30, borderRadius: 8, border: `1px solid ${T.border}`,
+                background: T.card, cursor: "pointer", color: T.dim,
+                transition: "all 0.12s" }}
+              onMouseEnter={e => { e.currentTarget.style.background = T.redBg; e.currentTarget.style.borderColor = T.redBorder; e.currentTarget.style.color = T.red; }}
+              onMouseLeave={e => { e.currentTarget.style.background = T.card; e.currentTarget.style.borderColor = T.border; e.currentTarget.style.color = T.dim; }}
+            >
+              <TrashIcon size={14} />
+            </button>
+          )}
+          <button onClick={onClose} style={{ fontFamily: sans, fontSize: F.md, background: "none",
+            border: "none", color: T.dim, cursor: "pointer", padding: "4px 8px", lineHeight: 1 }}>✕</button>
+        </div>
       </div>
       <DetailPanelBody draft={row} handle={handle} onChange={save} isCreate={false} />
     </div>
@@ -883,7 +916,18 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
           <div onClick={() => setDetailRow(null)} style={{
             position: "fixed", inset: 0, zIndex: 999, background: "rgba(0,0,0,0.15)" }} />
           <DetailPanel row={detailRow} rawData={rawData} onClose={() => setDetailRow(null)}
-            onSave={saveField} />
+            onSave={saveField}
+            onDelete={async (id) => {
+              try {
+                await fetch("/api/interactions/delete", { method: "DELETE",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ ids: [id] }) });
+                setLiveData(prev => prev.filter(r => r.id !== id));
+                setRawData(prev => prev.filter(r => r.id !== id));
+                setDetailRow(null);
+              } catch (err) { console.error("Delete failed:", err); }
+            }}
+          />
         </>
       )}
 
