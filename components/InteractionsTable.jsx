@@ -752,14 +752,11 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
               <col style={{ width: 80 }} />
               <col style={{ width: 100 }} />
               <col style={{ width: 86 }} />
-              <col style={{ width: 44 }} />
+              <col style={{ width: 40 }} />
             </colgroup>
             <thead>
               <tr style={{ background: T.well }}>
-                <th style={{ ...thStyle(""), cursor: "pointer", textAlign: "center", padding: "10px 8px" }} onClick={toggleSelectAll}>
-                  <input type="checkbox" checked={sorted.length > 0 && selected.size === sorted.length}
-                    onChange={toggleSelectAll} style={{ cursor: "pointer", accentColor: T.accent }} />
-                </th>
+                <th style={{ ...thStyle(""), cursor: "default", padding: "10px 8px" }} />
                 <th style={thStyle("name")} onClick={() => toggleSort("name")}>Person{arrow("name")}</th>
                 <th style={{ ...thStyle("platform"), textAlign: "center" }} onClick={() => toggleSort("platform")}>Plat{arrow("platform")}</th>
                 <th style={thStyle("type")} onClick={() => toggleSort("type")}>Type{arrow("type")}</th>
@@ -795,9 +792,8 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
                       const btn = e.currentTarget.querySelector("[data-detail-btn]");
                       if (btn) btn.style.opacity = "0";
                     }}>
-                    <td style={{ ...tdStyle, textAlign: "center", padding: "11px 8px" }}>
-                      <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(row.id)}
-                        style={{ cursor: "pointer", accentColor: T.accent }} />
+                    <td style={{ ...tdStyle, padding: "8px 6px 8px 10px" }}>
+                      <InlineAvatar name={row.name} avatarUrl={row.avatar_url} size={28} />
                     </td>
                     {/* Name — inline editable */}
                     <td style={{ ...tdStyle, maxWidth: 180, cursor: row.source === "interactions" ? "text" : "default" }}
