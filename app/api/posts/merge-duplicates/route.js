@@ -53,6 +53,14 @@ export async function POST() {
     const apiPosts    = posts.filter(p => p.source === 'api');
     const bufferPosts = posts.filter(p => p.source === 'buffer_export');
 
+    console.log(`[merge-duplicates] total=${posts?.length} api=${apiPosts.length} buffer=${bufferPosts.length}`);
+    if (apiPosts[0]) {
+      const ap = apiPosts[0];
+      const bp = bufferPosts[0];
+      console.log(`[merge-duplicates] sample api: id=${ap.id} post_id=${ap.post_id} date=${ap.published_at?.slice(0,10)} prefix="${normalisePrefix(ap.content)}"`);
+      if (bp) console.log(`[merge-duplicates] sample buf: id=${bp.id} post_id=${bp.post_id} date=${bp.published_at?.slice(0,10)} prefix="${normalisePrefix(bp.content)}"`);
+    }
+
     const merges   = [];  // { apiId, bufferId, updatedFields }
     const usedBuf  = new Set();
     const usedApi  = new Set();
