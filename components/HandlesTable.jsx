@@ -710,36 +710,15 @@ function ZoneBadge({ zone, onClick }) {
 
 function StatCard({ label, value, color = T.text, active = false, onClick, clickable = false }) {
   return (
-    <button
-      onClick={onClick}
-      disabled={!clickable}
-      style={{
-        flex: "1 1 180px",
-        minWidth: 150,
-        textAlign: "left",
-        borderRadius: 14,
-        padding: "18px 18px 16px",
-        border: `1px solid ${active ? color + "44" : T.border}`,
-        background: active ? color + "10" : T.card,
-        boxShadow: active ? T.shadowMd : T.shadowSm,
-        cursor: clickable ? "pointer" : "default",
-        transition: "all 0.15s ease",
-        fontFamily: sans,
-      }}
-    >
-      <div style={{
-        fontSize: 10,
-        color: clickable ? color : T.dim,
-        fontWeight: clickable ? 700 : 600,
-        marginBottom: 6,
-        textTransform: "uppercase",
-        letterSpacing: "0.08em",
-      }}>
-        {label}
-      </div>
-      <div style={{ fontSize: F.xl, lineHeight: 1, fontWeight: 800, color }}>
-        {value}
-      </div>
+    <button onClick={onClick} disabled={!clickable} style={{
+      flex: "1 1 0", minWidth: 0, textAlign: "left", borderRadius: 12,
+      padding: "12px 14px 11px", border: `1px solid ${active ? color + "55" : T.border}`,
+      background: active ? color + "10" : T.card, boxShadow: active ? `0 0 0 1px ${color}33` : "none",
+      cursor: clickable ? "pointer" : "default", transition: "all 0.15s ease", fontFamily: sans,
+    }}>
+      <div style={{ fontSize: 9, color: clickable ? color : T.dim, fontWeight: 700,
+        marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.08em", whiteSpace: "nowrap" }}>{label}</div>
+      <div style={{ fontSize: F.lg, lineHeight: 1, fontWeight: 800, color }}>{value}</div>
     </button>
   );
 }
@@ -752,7 +731,7 @@ function SummaryStats({ handles, selectedZones, onToggleZone }) {
   }, {});
 
   return (
-    <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
+    <div style={{ display: "flex", gap: 12, flexWrap: "nowrap", marginBottom: 20 }}>
       <StatCard label="Total" value={handles.length} />
       <StatCard label="With bio" value={handles.filter(h => h.bio).length} />
       {ZONE_ORDER.filter(z => z !== "IGNORE").map((zone) => (
