@@ -413,14 +413,6 @@ export default function InteractionsPage() {
             dateTo={dateTo}
           />
 
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-            <button onClick={() => setCreating(true)} style={{
-              fontFamily: sans, fontSize: F.xs, fontWeight: 600, padding: "4px 12px",
-              borderRadius: 8, border: `1px solid ${T.border}`, background: T.card,
-              color: T.accent, cursor: "pointer",
-            }}>+ Add</button>
-          </div>
-
           <InteractionsTable platform={activePlatform} weekFilter={weekFilter} refreshKey={refreshKey} />
 
           {creating && (

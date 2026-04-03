@@ -553,6 +553,7 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
             platform: plat, type: row.interaction_type || "like",
             content: row.content || null, mention_url: row.mention_url || null,
             post_url: row.post_url || null, followers, zone: h.zone || "SIGNAL",
+            entity_type: h.entity_type || "person",
             date: row.interacted_at || null,
           };
         });
