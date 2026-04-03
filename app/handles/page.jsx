@@ -166,6 +166,7 @@ function ActiveInNetwork({ activePlatform, dateFrom, dateTo }) {
             count,
             date:        row.interacted_at,
             gradIdx,
+            avatar_url:  h.avatar_url || null,
           };
         });
 
@@ -245,14 +246,20 @@ function ActiveInNetwork({ activePlatform, dateFrom, dateTo }) {
                 {/* Top row: avatar + name + platform link */}
                 <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
                   {/* Avatar */}
-                  <div style={{
-                    width: 34, height: 34, borderRadius: "50%", flexShrink: 0,
-                    background: avatarLetter ? AVATAR_GRADIENTS[p.gradIdx] : T.well,
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    color: "#fff", fontFamily: sans, fontSize: 14, fontWeight: 700,
-                  }}>
-                    {avatarLetter || "?"}
-                  </div>
+                  {p.avatar_url ? (
+                    <img src={p.avatar_url} alt={p.name} style={{
+                      width: 34, height: 34, borderRadius: "50%", objectFit: "cover", flexShrink: 0, display: "block",
+                    }} />
+                  ) : (
+                    <div style={{
+                      width: 34, height: 34, borderRadius: "50%", flexShrink: 0,
+                      background: avatarLetter ? AVATAR_GRADIENTS[p.gradIdx] : T.well,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      color: "#fff", fontFamily: sans, fontSize: 14, fontWeight: 700,
+                    }}>
+                      {avatarLetter || "?"}
+                    </div>
+                  )}
 
                   {/* Name */}
                   <div style={{ flex: 1, minWidth: 0 }}>
