@@ -68,7 +68,7 @@ const TAB_STYLE = (active) => ({
 const TABS = [
   { key: "engagement",   label: "Posts",        emoji: "\uD83D\uDCCA", href: "/" },
   { key: "interactions", label: "Interactions", emoji: "\uD83E\uDD1D", href: "/interactions" },
-  { key: "handles",      label: "People & Orgs", emoji: "\uD83D\uDC64", href: "/handles" },
+  { key: "handles",      label: "People & Organizations", emoji: "\uD83D\uDC64", href: "/handles" },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -949,7 +949,7 @@ function ProfileMenu({ session, avatarUrl, connections = [], onDisconnect, posts
               style={{ display: "flex", alignItems: "center", gap: 8, padding: "11px 18px", textDecoration: "none" }}
               onMouseEnter={e => e.currentTarget.style.background = T.well}
               onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-              <span style={{ fontFamily: sans, fontSize: F.sm, color: T.text, fontWeight: 500 }}>Manage people & orgs</span>
+              <span style={{ fontFamily: sans, fontSize: F.sm, color: T.text, fontWeight: 500 }}>Manage people & organizations</span>
               <span style={{ color: T.dim, fontSize: F.xs, marginLeft: "auto" }}>&#8599;</span>
             </a>
           </div>
