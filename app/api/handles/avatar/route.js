@@ -1,6 +1,12 @@
 import { NextResponse } from 'next/server';
+import sharp from 'sharp';
 import { supabaseAdmin as supabase } from '@/lib/supabase';
 export const dynamic = 'force-dynamic';
+
+// Profile photos are stored as 256×256 WebP at quality 82.
+// Worst case ~15 KB per image — 1 GB free tier holds ~65 000 avatars.
+const MAX_DIM  = 256;
+const QUALITY  = 82;
 
 export async function POST(req) {
   try {
@@ -12,23 +18,27 @@ export async function POST(req) {
       return NextResponse.json({ error: 'file and handle_id required' }, { status: 400 });
     }
 
-    // Validate type
     const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
     if (!allowed.includes(file.type)) {
       return NextResponse.json({ error: 'Only JPEG, PNG, WEBP, or GIF allowed' }, { status: 400 });
     }
 
-    const ext = file.type.split('/')[1].replace('jpeg', 'jpg');
-    const storagePath = `handles/${handleId}.${ext}`;
-    const buf = Buffer.from(await file.arrayBuffer());
+    const raw = Buffer.from(await file.arrayBuffer());
 
-    // Upload (upsert=true replaces existing)
+    // Resize to MAX_DIM × MAX_DIM (cover crop, centre) and encode as WebP
+    const compressed = await sharp(raw)
+      .resize(MAX_DIM, MAX_DIM, { fit: 'cover', position: 'centre' })
+      .webp({ quality: QUALITY })
+      .toBuffer();
+
+    // Always store as .webp regardless of original format
+    const storagePath = `handles/${handleId}.webp`;
+
     const { error: uploadErr } = await supabase.storage
       .from('avatars')
-      .upload(storagePath, buf, { contentType: file.type, upsert: true });
+      .upload(storagePath, compressed, { contentType: 'image/webp', upsert: true });
 
     if (uploadErr) {
-      // If bucket doesn't exist yet, surface a clear message
       if (uploadErr.message?.includes('not found') || uploadErr.statusCode === 404) {
         return NextResponse.json(
           { error: 'Storage bucket "avatars" not found. Create it in Supabase Dashboard → Storage.' },
@@ -38,11 +48,9 @@ export async function POST(req) {
       return NextResponse.json({ error: uploadErr.message }, { status: 500 });
     }
 
-    // Get public URL (add cache-busting param so browsers pick up replacements)
     const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(storagePath);
     const publicUrl = `${urlData.publicUrl}?t=${Date.now()}`;
 
-    // Persist on handle record
     const { error: patchErr } = await supabase
       .from('handles')
       .update({ avatar_url: publicUrl, updated_at: new Date().toISOString() })
