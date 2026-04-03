@@ -197,82 +197,87 @@ function TagInput({ value = [], onChange, allTags = [] }) {
 
 // ─── Avatar ──────────────────────────────────────────────────────────────────
 // Displays a profile photo, or a gradient+initials fallback.
-// If onUpload is provided, hovering shows a camera icon and clicking opens the
-// file picker. onUpload(file) is called with the selected File object.
-function Avatar({ name, avatarUrl, size = 36, onUpload }) {
+// onUpload(file)     — camera icon overlay, click opens file picker
+// onAutoPhoto()      — "BT" badge button beside the circle, fetches from Big Think
+function Avatar({ name, avatarUrl, size = 36, onUpload, onAutoPhoto, autoPhotoLoading }) {
   const [hover, setHover] = useState(false);
   const [previewUrl, setPreviewUrl] = useState(null);
   const fileRef = useRef(null);
 
-  // Pick a consistent gradient based on name string
   const gradIdx = (name || "?").split("").reduce((s, c) => s + c.charCodeAt(0), 0) % AVATAR_GRADIENTS.length;
   const gradient = AVATAR_GRADIENTS[gradIdx];
   const initials = (name || "?").split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
-
   const src = previewUrl || avatarUrl;
 
   function handleFileChange(e) {
     const file = e.target.files?.[0];
     if (!file) return;
-    // Optimistic preview
     setPreviewUrl(URL.createObjectURL(file));
     onUpload?.(file);
     e.target.value = "";
   }
 
   return (
-    <div
-      style={{
-        position: "relative", width: size, height: size, borderRadius: "50%",
-        flexShrink: 0, cursor: onUpload ? "pointer" : "default",
-        overflow: "hidden",
-      }}
-      onMouseEnter={() => onUpload && setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      onClick={() => onUpload && fileRef.current?.click()}
-      title={onUpload ? "Click to upload photo" : undefined}
-    >
-      {/* Photo or gradient */}
-      {src ? (
-        <img src={src} alt={name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-      ) : (
-        <div style={{
-          width: "100%", height: "100%",
-          background: gradient,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          fontFamily: sans, fontWeight: 700,
-          fontSize: size * 0.36, color: "#fff",
-          letterSpacing: "0.02em",
-        }}>
-          {initials}
-        </div>
-      )}
+    <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+      {/* Circle */}
+      <div
+        style={{
+          position: "relative", width: size, height: size, borderRadius: "50%",
+          flexShrink: 0, cursor: onUpload ? "pointer" : "default",
+          overflow: "hidden",
+        }}
+        onMouseEnter={() => onUpload && setHover(true)}
+        onMouseLeave={() => setHover(false)}
+        onClick={() => onUpload && fileRef.current?.click()}
+        title={onUpload ? "Click to upload photo" : undefined}
+      >
+        {src ? (
+          <img src={src} alt={name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+        ) : (
+          <div style={{
+            width: "100%", height: "100%", background: gradient,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontFamily: sans, fontWeight: 700, fontSize: size * 0.36, color: "#fff",
+            letterSpacing: "0.02em",
+          }}>
+            {initials}
+          </div>
+        )}
+        {onUpload && hover && (
+          <div style={{
+            position: "absolute", inset: 0, background: "rgba(0,0,0,0.45)",
+            display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "50%",
+          }}>
+            <svg width={size * 0.42} height={size * 0.42} viewBox="0 0 24 24" fill="none"
+              stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+              <circle cx="12" cy="13" r="4"/>
+            </svg>
+          </div>
+        )}
+        {onUpload && (
+          <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif"
+            style={{ display: "none" }} onChange={handleFileChange} />
+        )}
+      </div>
 
-      {/* Camera overlay on hover */}
-      {onUpload && hover && (
-        <div style={{
-          position: "absolute", inset: 0,
-          background: "rgba(0,0,0,0.45)",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          borderRadius: "50%",
-        }}>
-          <svg width={size * 0.42} height={size * 0.42} viewBox="0 0 24 24" fill="none"
-            stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-            <circle cx="12" cy="13" r="4"/>
-          </svg>
-        </div>
-      )}
-
-      {/* Hidden file input */}
-      {onUpload && (
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/jpeg,image/png,image/webp,image/gif"
-          style={{ display: "none" }}
-          onChange={handleFileChange}
-        />
+      {/* Big Think auto-import button — only shown when no photo and name exists */}
+      {onAutoPhoto && !src && name && name !== "?" && (
+        <button
+          onClick={e => { e.stopPropagation(); onAutoPhoto(); }}
+          disabled={autoPhotoLoading}
+          title="Find photo on Big Think"
+          style={{
+            fontFamily: sans, fontSize: 9, fontWeight: 800, letterSpacing: "0.04em",
+            padding: "2px 5px", borderRadius: 5, cursor: autoPhotoLoading ? "wait" : "pointer",
+            border: `1px solid ${T.border}`, background: T.well, color: T.dim,
+            opacity: autoPhotoLoading ? 0.5 : 1, transition: "all 0.12s", whiteSpace: "nowrap",
+          }}
+          onMouseEnter={e => { if (!autoPhotoLoading) { e.currentTarget.style.background = T.accentBg; e.currentTarget.style.color = T.accent; e.currentTarget.style.borderColor = T.accentBorder; }}}
+          onMouseLeave={e => { e.currentTarget.style.background = T.well; e.currentTarget.style.color = T.dim; e.currentTarget.style.borderColor = T.border; }}
+        >
+          {autoPhotoLoading ? "…" : "BT"}
+        </button>
       )}
     </div>
   );
@@ -284,6 +289,8 @@ function HandleDrawer({ open, mode, handle, onClose, onSaved, allTags = [] }) {
   const [error, setError] = useState(null);
   const [avatarUrl, setAvatarUrl] = useState(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
+  const [autoPhotoLoading, setAutoPhotoLoading] = useState(false);
+  const [autoPhotoError, setAutoPhotoError] = useState(null);
 
   // Populate form when editing
   useEffect(() => {
@@ -312,7 +319,7 @@ function HandleDrawer({ open, mode, handle, onClose, onSaved, allTags = [] }) {
   }, [mode, handle, open]);
 
   async function handleAvatarUpload(file) {
-    if (!handle?.id) return; // can't upload for unsaved handle
+    if (!handle?.id) return;
     setAvatarUploading(true);
     try {
       const fd = new FormData();
@@ -327,6 +334,27 @@ function HandleDrawer({ open, mode, handle, onClose, onSaved, allTags = [] }) {
       setError(e.message);
     } finally {
       setAvatarUploading(false);
+    }
+  }
+
+  async function handleAutoPhoto() {
+    if (!handle?.id || !form.name) return;
+    setAutoPhotoLoading(true);
+    setAutoPhotoError(null);
+    try {
+      const res = await fetch("/api/handles/autophoto", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ handle_id: handle.id, name: form.name }),
+      });
+      const d = await res.json();
+      if (d.error) { setAutoPhotoError(d.error); return; }
+      setAvatarUrl(d.url);
+      onSaved({ ...handle, avatar_url: d.url }, "edit");
+    } catch (e) {
+      setAutoPhotoError(e.message);
+    } finally {
+      setAutoPhotoLoading(false);
     }
   }
 
@@ -418,14 +446,16 @@ function HandleDrawer({ open, mode, handle, onClose, onSaved, allTags = [] }) {
               avatarUrl={avatarUrl}
               size={48}
               onUpload={mode === "edit" ? handleAvatarUpload : undefined}
+              onAutoPhoto={mode === "edit" ? handleAutoPhoto : undefined}
+              autoPhotoLoading={autoPhotoLoading}
             />
             <div>
               <div style={{ fontSize: F.lg, fontWeight: 700, color: T.text, lineHeight: 1.2 }}>
                 {title}
               </div>
-              {mode === "edit" && handle?.name && (
-                <div style={{ fontSize: F.xs, color: T.dim, marginTop: 3 }}>
-                  {avatarUploading ? "Uploading…" : "Click photo to change"}
+              {mode === "edit" && (
+                <div style={{ fontSize: F.xs, color: autoPhotoError ? T.red : T.dim, marginTop: 3 }}>
+                  {autoPhotoLoading ? "Searching Big Think…" : avatarUploading ? "Uploading…" : autoPhotoError || "Click photo to change"}
                 </div>
               )}
               {mode === "create" && (
@@ -843,6 +873,25 @@ export default function HandlesTable({ platform, refreshKey }) {
     } catch {}
   }
 
+  async function autoPhotoForRow(handleId, name) {
+    setHandles(prev => prev.map(h => h.id === handleId ? { ...h, _autoPhotoLoading: true } : h));
+    try {
+      const res = await fetch("/api/handles/autophoto", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ handle_id: handleId, name }),
+      });
+      const d = await res.json();
+      if (d.url) {
+        setHandles(prev => prev.map(h => h.id === handleId ? { ...h, avatar_url: d.url, _autoPhotoLoading: false } : h));
+      } else {
+        setHandles(prev => prev.map(h => h.id === handleId ? { ...h, _autoPhotoLoading: false } : h));
+      }
+    } catch {
+      setHandles(prev => prev.map(h => h.id === handleId ? { ...h, _autoPhotoLoading: false } : h));
+    }
+  }
+
   function primaryHandle(h) {
     for (const p of ["instagram", "x", "youtube", "linkedin"]) {
       if (h[`handle_${p}`]) return { p, handle: h[`handle_${p}`], followers: h[`followers_${p}`] };
@@ -1089,6 +1138,8 @@ export default function HandlesTable({ platform, refreshKey }) {
                           avatarUrl={h.avatar_url}
                           size={32}
                           onUpload={file => uploadAvatarForRow(h.id, file)}
+                          onAutoPhoto={() => autoPhotoForRow(h.id, h.name)}
+                          autoPhotoLoading={h._autoPhotoLoading}
                         />
                       </div>
                       {/* Name text — click to inline-edit */}
