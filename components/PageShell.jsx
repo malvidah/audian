@@ -881,6 +881,7 @@ function FollowersChart({ snapshots, activePlatform }) {
     ? snapshots.filter(s => s.platform === activePlatform)
     : snapshots;
 
+  // Deduplicate to one snapshot per platform per day (keep latest)
   const latestPerPlatformDay = {};
   for (const s of filtered) {
     const day = s.snapshot_at.slice(0, 10);
@@ -890,12 +891,35 @@ function FollowersChart({ snapshots, activePlatform }) {
       latestPerPlatformDay[key] = s;
     }
   }
-  const byDate = {};
+
+  // Build per-platform sorted arrays so we can fill-forward missing days
+  const platArrays = {};
   for (const s of Object.values(latestPerPlatformDay)) {
-    const day = s.snapshot_at.slice(0, 10);
-    if (!byDate[day]) byDate[day] = { date: new Date(`${day}T00:00:00Z`), total: 0 };
-    byDate[day].total += (s.followers || 0);
+    const plat = s.platform;
+    if (!platArrays[plat]) platArrays[plat] = [];
+    platArrays[plat].push(s);
   }
+  for (const plat of Object.keys(platArrays)) {
+    platArrays[plat].sort((a, b) => a.snapshot_at.localeCompare(b.snapshot_at));
+  }
+
+  // Collect all unique days across all platforms, sorted
+  const allDays = [...new Set(Object.values(latestPerPlatformDay).map(s => s.snapshot_at.slice(0, 10)))].sort();
+
+  // For each day, sum every platform's last-known value (fill-forward)
+  // This prevents spikes when platforms have uneven snapshot coverage
+  const byDate = {};
+  const platLastVal = {};
+  for (const day of allDays) {
+    for (const [plat, arr] of Object.entries(platArrays)) {
+      for (const s of arr) {
+        if (s.snapshot_at.slice(0, 10) <= day) platLastVal[plat] = s.followers || 0;
+      }
+    }
+    const total = Object.values(platLastVal).reduce((sum, v) => sum + v, 0);
+    byDate[day] = { date: new Date(`${day}T00:00:00Z`), total };
+  }
+
   const pts = Object.values(byDate).sort((a, b) => a.date - b.date);
   if (pts.length === 0) return null;
 
