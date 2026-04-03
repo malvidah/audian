@@ -2,86 +2,20 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { PlatIcon, PlatChip, PLAT_COLORS as PLAT_COLOR } from "./PlatIcon";
+import {
+  T, sans, F, fmt, timeAgo, truncate, ghostInputStyle,
+  ZONE_CFG, ZONE_ORDER, PLAT_URL, PLAT_LABEL, PLATFORMS, ENTITY_TYPES, AVATAR_GRADIENTS,
+} from "../lib/design.js";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
-// ─── Design tokens (shared) ─────────────────────────────────────────────────
-const T = {
-  bg: "#F8F7F5", surface: "#FFFFFF", card: "#FFFFFF", well: "#F3F2F0",
-  border: "#E8E6E1", border2: "#D6D3CC", text: "#1A1816", sub: "#6B6560",
-  dim: "#A8A39C", accent: "#FF6B35", accentBg: "#FFF3EE", accentBorder: "#FFD4C2",
-  green: "#16A34A", greenBg: "#F0FDF4", greenBorder: "#BBF7D0",
-  yellow: "#CA8A04", yellowBg: "#FEFCE8", yellowBorder: "#FEF08A",
-  red: "#DC2626", redBg: "#FEF2F2", redBorder: "#FECACA",
-  blue: "#2563EB", blueBg: "#EFF6FF", blueBorder: "#BFDBFE",
-  purple: "#7C3AED", purpleBg: "#F5F3FF", purpleBorder: "#DDD6FE",
-  shadow: "0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04)",
-  shadowSm: "0 1px 2px rgba(0,0,0,0.05)",
-};
-
-const sans = "-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif";
-const F = { xl: 28, lg: 20, md: 15, sm: 13, xs: 11 };
-
-// Ghost input: looks exactly like the text it replaces, hairline accent underline only
-function ghostInput({ fontSize = F.sm, fontWeight = 400, color = T.text, italic = false } = {}) {
-  return {
-    width: "100%", border: "none", outline: "none", background: "transparent",
-    fontFamily: sans, fontSize, fontWeight, color, fontStyle: italic ? "italic" : "normal",
-    padding: "0", margin: "0", boxSizing: "border-box",
-    boxShadow: `inset 0 -1px 0 0 ${T.accent}99`,
-    borderRadius: 0,
-  };
-}
-
-const PLAT_URL   = {
-  instagram: h => `https://instagram.com/${h}`,
-  x:         h => `https://x.com/${h}`,
-  youtube:   h => `https://youtube.com/@${h}`,
-  linkedin:  h => `https://linkedin.com/in/${h}`,
-};
-
-const ZONE_CFG = {
-  ELITE:       { label: "ELITE",       color: T.accent, bg: T.accentBg, border: T.accentBorder },
-  INFLUENTIAL: { label: "INFLUENTIAL", color: T.green,  bg: T.greenBg,  border: T.greenBorder },
-  SIGNAL:      { label: "SIGNAL",      color: T.blue,   bg: T.blueBg,   border: T.blueBorder },
-  IGNORE:      { label: "IGNORE",      color: T.dim,    bg: T.well,     border: T.border },
-};
-
-const LIST_ORDER = ["ELITE", "INFLUENTIAL", "SIGNAL", "IGNORE"];
-
-const PLATFORMS = ["instagram", "x", "youtube", "linkedin"];
-
-const PLAT_LABEL = { instagram: "Instagram", x: "X (Twitter)", youtube: "YouTube", linkedin: "LinkedIn" };
-
-function normalizeZone(zone) {
-  return LIST_ORDER.includes(zone) ? zone : "UNASSIGNED";
-}
-
-function fmt(n) {
-  if (!n && n !== 0) return "\u2014";
-  n = parseInt(n);
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
-  if (n >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, "") + "K";
-  return n.toLocaleString();
-}
-
-function timeAgo(ts) {
-  if (!ts) return null;
-  const d = Math.floor((Date.now() - new Date(ts)) / 86400000);
-  if (d === 0) return "today";
-  if (d === 1) return "yesterday";
-  if (d < 30) return `${d}d ago`;
-  if (d < 365) return `${Math.floor(d / 30)}mo ago`;
-  return `${Math.floor(d / 365)}y ago`;
-}
-
-function truncate(str, max) {
-  if (!str) return "\u2014";
-  return str.length > max ? str.slice(0, max) + "..." : str;
-}
+const LIST_ORDER = ZONE_ORDER;
+function normalizeZone(zone) { return LIST_ORDER.includes(zone) ? zone : "UNASSIGNED"; }
+// ghostInput renamed for local use
+const ghostInput = ghostInputStyle;
 
 // ─── HandleDrawer ────────────────────────────────────────────────────────────
 
@@ -90,12 +24,6 @@ const EMPTY_FORM = {
   handle_instagram: "", handle_x: "", handle_youtube: "", handle_linkedin: "",
   followers_instagram: "", followers_x: "", followers_youtube: "", followers_linkedin: "",
 };
-
-const ENTITY_TYPES = [
-  { value: "person",       label: "Person" },
-  { value: "organization", label: "Organization" },
-  { value: "page",         label: "Page" },
-];
 
 function EntityTypeSelect({ value, onChange }) {
   const active = value || "person";

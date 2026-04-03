@@ -3,44 +3,14 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import { PlatDot, PLAT_COLORS } from "./PlatIcon";
+// Re-export design system so pages that import PageShell still work
+export { T, sans, F, fmt, fmtDate, timeAgo, truncate, PLAT_LABEL } from "../lib/design.js";
+import { T, sans, F, fmt, fmtDate, timeAgo, PLAT_LABEL } from "../lib/design.js";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
-
-// ─── Design tokens ────────────────────────────────────────────────────────────
-export const T = {
-  bg:           "#F8F7F5",
-  surface:      "#FFFFFF",
-  card:         "#FFFFFF",
-  well:         "#F3F2F0",
-  border:       "#E8E6E1",
-  border2:      "#D6D3CC",
-  text:         "#1A1816",
-  sub:          "#6B6560",
-  dim:          "#A8A39C",
-  accent:       "#FF6B35",
-  accentBg:     "#FFF3EE",
-  accentBorder: "#FFD4C2",
-  green:        "#16A34A",
-  greenBg:      "#F0FDF4",
-  greenBorder:  "#BBF7D0",
-  yellow:       "#CA8A04",
-  yellowBg:     "#FEFCE8",
-  yellowBorder: "#FEF08A",
-  red:          "#DC2626",
-  redBg:        "#FEF2F2",
-  redBorder:    "#FECACA",
-  shadow:       "0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04)",
-  shadowSm:     "0 1px 2px rgba(0,0,0,0.05)",
-  shadowMd:     "0 4px 24px rgba(0,0,0,0.08)",
-};
-
-const PLAT_LABEL  = { youtube: "YouTube", x: "X", instagram: "Instagram", linkedin: "LinkedIn" };
-
-export const sans = "-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif";
-export const F    = { xl: 28, lg: 20, md: 15, sm: 13, xs: 11 };
 
 function daysAgo(n) {
   const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10);
@@ -106,18 +76,6 @@ const TABS = [
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-function fmt(n) {
-  if (!n && n !== 0) return "—";
-  n = parseInt(n);
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
-  if (n >= 1_000)     return (n / 1_000).toFixed(1) + "K";
-  return n.toLocaleString();
-}
-
-function fmtDate(iso) {
-  if (!iso) return "";
-  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
 
 function parseCSVLine(line) {
   const result = [];

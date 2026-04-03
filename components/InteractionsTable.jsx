@@ -2,111 +2,35 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { PlatIcon, PlatChip, PlatDot, PLAT_COLORS } from "./PlatIcon";
+import {
+  T, sans, F, fmt, fmtDate, truncate, normalizeType, ghostInputStyle,
+  ZONE_CFG, ZONE_ORDER, PLAT_URL, PLAT_LABEL, ENTITY_TYPES, TYPE_BADGE,
+} from "../lib/design.js";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
-const T = {
-  bg: "#F8F7F5", surface: "#FFFFFF", card: "#FFFFFF", well: "#F3F2F0",
-  border: "#E8E6E1", border2: "#D6D3CC", text: "#1A1816", sub: "#6B6560",
-  dim: "#A8A39C", accent: "#FF6B35", accentBg: "#FFF3EE", accentBorder: "#FFD4C2",
-  green: "#16A34A", greenBg: "#F0FDF4", greenBorder: "#BBF7D0",
-  yellow: "#CA8A04", yellowBg: "#FEFCE8", yellowBorder: "#FEF08A",
-  red: "#DC2626", redBg: "#FEF2F2", redBorder: "#FECACA",
-  blue: "#2563EB", blueBg: "#EFF6FF", blueBorder: "#BFDBFE",
-  purple: "#7C3AED", purpleBg: "#F5F3FF", purpleBorder: "#DDD6FE",
-  shadow: "0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04)",
-  shadowSm: "0 1px 2px rgba(0,0,0,0.05)",
-  shadowMd: "0 4px 24px rgba(0,0,0,0.08)",
-};
+const ghostInput = ghostInputStyle;
 
-const PLAT_LABEL = { youtube: "YouTube", x: "X", instagram: "Instagram", linkedin: "LinkedIn" };
-const PLAT_URL = {
-  instagram: h => `https://instagram.com/${h}`,
-  x: h => `https://x.com/${h}`,
-  youtube: h => `https://youtube.com/@${h}`,
-  linkedin: h => `https://linkedin.com/in/${h}`,
-};
-
-const sans = "-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif";
-const F = { xl: 28, lg: 20, md: 15, sm: 13, xs: 11 };
-
-// Ghost input: matches the display text exactly, only indicator is a hairline accent underline
-function ghostInput({ fontSize = F.sm, fontWeight = 400, color = T.text, italic = false } = {}) {
-  return {
-    width: "100%", border: "none", outline: "none", background: "transparent",
-    fontFamily: sans, fontSize, fontWeight, color, fontStyle: italic ? "italic" : "normal",
-    padding: "0", margin: "0", boxSizing: "border-box",
-    boxShadow: `inset 0 -1px 0 0 ${T.accent}99`,
-    borderRadius: 0,
-  };
-}
-
-const ZONE_CFG = {
-  ELITE:       { label: "ELITE",       color: T.accent,  bg: T.accentBg, border: T.accentBorder },
-  INFLUENTIAL: { label: "INFLUENTIAL", color: T.green,   bg: T.greenBg,  border: T.greenBorder },
-  SIGNAL:      { label: "SIGNAL",      color: T.blue,    bg: T.blueBg,   border: T.blueBorder },
-  UNASSIGNED:  { label: "UNASSIGNED",  color: "#64748B", bg: "#F1F5F9",  border: "#CBD5E1" },
-  IGNORE:      { label: "IGNORE",      color: T.dim,     bg: T.well,     border: T.border },
-};
-const LIST_ORDER = ["ELITE", "INFLUENTIAL", "SIGNAL", "UNASSIGNED", "IGNORE"];
+const LIST_ORDER = [...ZONE_ORDER, "UNASSIGNED"];
+function normalizeZone(zone) { return LIST_ORDER.includes(zone) ? zone : "UNASSIGNED"; }
+function isCommentType(type) { return ["comment", "commented", "reply"].includes((type || "").toLowerCase()); }
 
 const PLAT_OPTIONS = [
   { value: "x", label: "X" }, { value: "instagram", label: "IG" },
   { value: "youtube", label: "YT" }, { value: "linkedin", label: "LI" },
 ];
-const TYPE_OPTIONS = [
-  { value: "mention", label: "Mention" }, { value: "repost", label: "Repost" },
-  { value: "comment", label: "Comment" }, { value: "reply", label: "Reply" },
-  { value: "like", label: "Like" }, { value: "follow", label: "Follow" },
-  { value: "tag", label: "Tag" },
-];
-const ZONE_OPTIONS = [
-  { value: "ELITE", label: "Elite" }, { value: "INFLUENTIAL", label: "Influential" },
-  { value: "SIGNAL", label: "Signal" }, { value: "UNASSIGNED", label: "Unassigned" },
-  { value: "IGNORE", label: "Ignore" },
-];
-
-const ENTITY_TYPE_OPTIONS = [
-  { value: "person",       label: "Person" },
-  { value: "organization", label: "Organization" },
-  { value: "page",         label: "Page" },
-];
+const TYPE_OPTIONS = Object.entries(TYPE_BADGE).map(([value, { label }]) => ({ value, label }));
+const ZONE_OPTIONS = LIST_ORDER.map(v => ({ value: v, label: ZONE_CFG[v]?.label || v }));
+const ENTITY_TYPE_OPTIONS = ENTITY_TYPES;
 
 const EMPTY_ROW = {
   name: "", platform: "x", handle: "", interaction_type: "mention",
   content: "", mention_url: "", followers: "", zone: "SIGNAL",
   interacted_at: new Date().toISOString().slice(0, 10),
 };
-
-function fmt(n) {
-  if (!n && n !== 0) return "—";
-  n = parseInt(n, 10);
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
-  if (n >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, "") + "K";
-  return n.toLocaleString();
-}
-
-function fmtDate(iso) {
-  if (!iso) return "";
-  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
-
-function truncate(str, max) {
-  if (!str) return "—";
-  return str.length > max ? str.slice(0, max) + "..." : str;
-}
-
-function normalizeZone(zone) { return LIST_ORDER.includes(zone) ? zone : "UNASSIGNED"; }
-function isCommentType(type) { return ["comment", "commented", "reply"].includes((type || "").toLowerCase()); }
-function normalizeType(type) {
-  const raw = (type || "").toLowerCase();
-  if (raw === "liked") return "like"; if (raw === "followed") return "follow";
-  if (raw === "commented") return "comment"; if (raw === "reposted") return "repost";
-  if (raw === "mentioned") return "mention"; return raw || "unknown";
-}
 
 function TrashIcon({ size = 16, color = T.red }) {
   return (
