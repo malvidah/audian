@@ -606,7 +606,7 @@ function SummaryStats({ handles, selectedZones, onToggleZone }) {
     <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
       <StatCard label="Total" value={handles.length} />
       <StatCard label="With bio" value={handles.filter(h => h.bio).length} />
-      {["ELITE", "INFLUENTIAL", "SIGNAL"].map((zone) => (
+      {ZONE_ORDER.filter(z => z !== "IGNORE").map((zone) => (
         <StatCard
           key={zone}
           label={zone}
@@ -762,8 +762,8 @@ export default function HandlesTable({ platform, refreshKey }) {
       } else if (sortBy === "followers") {
         av = totalFollowers(a); bv = totalFollowers(b);
       } else if (sortBy === "zone") {
-        const order = { ELITE: 0, INFLUENTIAL: 1, SIGNAL: 2, IGNORE: 3 };
-        av = order[a.zone] ?? 4; bv = order[b.zone] ?? 4;
+        const order = Object.fromEntries(ZONE_ORDER.map((z, i) => [z, i]));
+        av = order[a.zone] ?? ZONE_ORDER.length; bv = order[b.zone] ?? ZONE_ORDER.length;
       } else if (sortBy === "interactions") {
         av = a.interaction_count || 0; bv = b.interaction_count || 0;
       } else if (sortBy === "last_seen") {
@@ -1079,7 +1079,7 @@ export default function HandlesTable({ platform, refreshKey }) {
                           cursor: "pointer", width: "100%", height: "100%",
                         }}
                       >
-                        {["ELITE", "INFLUENTIAL", "SIGNAL", "IGNORE"].map(z => (
+                        {ZONE_ORDER.map(z => (
                           <option key={z} value={z}>{z}</option>
                         ))}
                       </select>
