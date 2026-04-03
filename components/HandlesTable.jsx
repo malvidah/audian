@@ -767,7 +767,7 @@ export default function HandlesTable({ platform, refreshKey }) {
       } else if (sortBy === "interactions") {
         av = a.interaction_count || 0; bv = b.interaction_count || 0;
       } else if (sortBy === "last_seen") {
-        av = a.last_interaction || a.updated_at || ""; bv = b.last_interaction || b.updated_at || "";
+        av = a.last_interaction || ""; bv = b.last_interaction || "";
       } else {
         av = a[sortBy] ?? ""; bv = b[sortBy] ?? "";
       }
@@ -1087,7 +1087,7 @@ export default function HandlesTable({ platform, refreshKey }) {
                   </td>
                   {/* Last seen */}
                   <td style={{ ...tdStyle, whiteSpace: "nowrap", color: T.dim, fontSize: F.xs }}>
-                    {timeAgo(h.last_interaction) || timeAgo(h.updated_at) || "\u2014"}
+                    {timeAgo(h.last_interaction) || "\u2014"}
                   </td>
                   {/* Detail button */}
                   <td style={{ ...tdStyle, padding: "10px 8px" }}>
