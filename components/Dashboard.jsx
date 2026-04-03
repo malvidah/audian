@@ -291,7 +291,7 @@ function ProfileMenu({ session, supabase, connections, onDisconnect, eliteList =
 
           {/* Handles link */}
           <div style={{ borderTop: `1px solid ${T.border}` }}>
-            <a href="/handles"
+            <a href="/peopleandorganizations"
               style={{ display: "flex", alignItems: "center", gap: 8, padding: "11px 18px", textDecoration: "none" }}
               onMouseEnter={e => e.currentTarget.style.background = T.well}
               onMouseLeave={e => e.currentTarget.style.background = "none"}>
@@ -1157,7 +1157,7 @@ function OrbitSection({ interactions, open, onToggle }) {
           <span style={{ fontFamily: sans, fontSize: 11, fontWeight: 700, color: "#9095A8", textTransform: "uppercase", letterSpacing: "0.06em" }}>Handles</span>
           <span style={{ color: "#555B6E", fontSize: 11, transform: open ? "rotate(180deg)" : "none", display: "inline-block", transition: "transform 0.15s" }}>▾</span>
         </button>
-        <a href="/handles"
+        <a href="/peopleandorganizations"
           style={{ fontFamily: sans, fontSize: 11, fontWeight: 600, color: "#6C6FFF", textDecoration: "none",
             padding: "5px 12px", borderRadius: 8, border: "1px solid #6C6FFF40", background: "#6C6FFF10",
             display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}

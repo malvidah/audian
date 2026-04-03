@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
@@ -23,6 +23,17 @@ const T = {
 
 const sans = "-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif";
 const F = { xl: 28, lg: 20, md: 15, sm: 13, xs: 11 };
+
+// Ghost input: looks exactly like the text it replaces, hairline accent underline only
+function ghostInput({ fontSize = F.sm, fontWeight = 400, color = T.text, italic = false } = {}) {
+  return {
+    width: "100%", border: "none", outline: "none", background: "transparent",
+    fontFamily: sans, fontSize, fontWeight, color, fontStyle: italic ? "italic" : "normal",
+    padding: "0", margin: "0", boxSizing: "border-box",
+    boxShadow: `inset 0 -1px 0 0 ${T.accent}99`,
+    borderRadius: 0,
+  };
+}
 
 const PLAT_ICON  = { instagram: "\uD83D\uDCF8", x: "\uD835\uDD4F", youtube: "\u25B6", linkedin: "in" };
 const PLAT_COLOR = { instagram: "#E1306C", x: "#000", youtube: "#FF0000", linkedin: "#0A66C2" };
@@ -76,7 +87,7 @@ function truncate(str, max) {
 // ─── HandleDrawer ────────────────────────────────────────────────────────────
 
 const EMPTY_FORM = {
-  name: "", bio: "", zone: "SIGNAL", entity_type: "person",
+  name: "", bio: "", zone: "SIGNAL", entity_type: "person", tags: [],
   handle_instagram: "", handle_x: "", handle_youtube: "", handle_linkedin: "",
   followers_instagram: "", followers_x: "", followers_youtube: "", followers_linkedin: "",
 };
@@ -107,7 +118,157 @@ function EntityTypeSelect({ value, onChange }) {
   );
 }
 
-function HandleDrawer({ open, mode, handle, onClose, onSaved }) {
+// ─── TagInput ────────────────────────────────────────────────────────────────
+// Controlled multi-tag input with autocomplete from existing tags.
+// value: string[]   onChange: (string[]) => void   allTags: string[]
+function TagInput({ value = [], onChange, allTags = [] }) {
+  const [inputVal, setInputVal] = useState("");
+  const [open, setOpen] = useState(false);
+  const [focusIdx, setFocusIdx] = useState(-1);
+  const inputRef = useRef(null);
+  const dropRef  = useRef(null);
+
+  const query = inputVal.trim().toLowerCase();
+  const suggestions = allTags.filter(t =>
+    t.toLowerCase().includes(query) && !value.includes(t)
+  );
+  const canCreate = query.length > 0 && !allTags.some(t => t.toLowerCase() === query) && !value.includes(inputVal.trim());
+  const dropItems = canCreate ? [`+ Add "${inputVal.trim()}"`, ...suggestions] : suggestions;
+
+  function addTag(tag) {
+    const clean = tag.startsWith('+ Add "') ? inputVal.trim() : tag;
+    if (!clean || value.includes(clean)) return;
+    onChange([...value, clean]);
+    setInputVal("");
+    setOpen(false);
+    setFocusIdx(-1);
+    inputRef.current?.focus();
+  }
+
+  function removeTag(tag) {
+    onChange(value.filter(t => t !== tag));
+  }
+
+  function handleKeyDown(e) {
+    if (e.key === "Backspace" && !inputVal && value.length > 0) {
+      removeTag(value[value.length - 1]);
+      return;
+    }
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setFocusIdx(i => Math.min(i + 1, dropItems.length - 1));
+      return;
+    }
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setFocusIdx(i => Math.max(i - 1, -1));
+      return;
+    }
+    if ((e.key === "Enter" || e.key === "Tab" || e.key === ",") && open) {
+      e.preventDefault();
+      if (focusIdx >= 0 && dropItems[focusIdx]) {
+        addTag(dropItems[focusIdx]);
+      } else if (inputVal.trim()) {
+        addTag(inputVal.trim());
+      }
+      return;
+    }
+    if (e.key === "Escape") { setOpen(false); setFocusIdx(-1); }
+  }
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handler(e) {
+      if (!dropRef.current?.contains(e.target) && !inputRef.current?.contains(e.target)) {
+        setOpen(false);
+        setFocusIdx(-1);
+      }
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  return (
+    <div style={{ position: "relative" }}>
+      {/* Tag pills + input */}
+      <div
+        onClick={() => inputRef.current?.focus()}
+        style={{
+          display: "flex", flexWrap: "wrap", gap: 5, alignItems: "center",
+          minHeight: 38, padding: "5px 10px",
+          border: `1px solid ${T.border}`, borderRadius: 8,
+          background: T.surface, cursor: "text",
+          transition: "border-color 0.15s",
+        }}
+        onFocus={() => {}}
+      >
+        {value.map(tag => (
+          <span key={tag} style={{
+            display: "inline-flex", alignItems: "center", gap: 4,
+            background: T.purpleBg, color: T.purple,
+            border: `1px solid ${T.purpleBorder}`,
+            borderRadius: 999, padding: "2px 8px 2px 10px",
+            fontSize: F.xs, fontWeight: 600, fontFamily: sans,
+            whiteSpace: "nowrap",
+          }}>
+            {tag}
+            <button
+              onClick={e => { e.stopPropagation(); removeTag(tag); }}
+              style={{
+                background: "none", border: "none", cursor: "pointer", padding: 0,
+                color: T.purple, fontSize: 13, lineHeight: 1, opacity: 0.6,
+                display: "flex", alignItems: "center",
+              }}
+            >×</button>
+          </span>
+        ))}
+        <input
+          ref={inputRef}
+          value={inputVal}
+          onChange={e => { setInputVal(e.target.value); setOpen(true); setFocusIdx(-1); }}
+          onFocus={() => setOpen(true)}
+          onKeyDown={handleKeyDown}
+          placeholder={value.length === 0 ? "Add tags…" : ""}
+          style={{
+            border: "none", outline: "none", background: "transparent",
+            fontFamily: sans, fontSize: F.sm, color: T.text,
+            flex: 1, minWidth: 80,
+          }}
+        />
+      </div>
+
+      {/* Dropdown */}
+      {open && dropItems.length > 0 && (
+        <div ref={dropRef} style={{
+          position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0,
+          background: T.surface, border: `1px solid ${T.border}`, borderRadius: 9,
+          boxShadow: T.shadow, zIndex: 200,
+          maxHeight: 200, overflowY: "auto",
+          fontFamily: sans,
+        }}>
+          {dropItems.map((item, i) => (
+            <div
+              key={item}
+              onMouseDown={e => { e.preventDefault(); addTag(item); }}
+              onMouseEnter={() => setFocusIdx(i)}
+              style={{
+                padding: "8px 12px", cursor: "pointer",
+                fontSize: F.sm, color: i === 0 && canCreate ? T.accent : T.text,
+                fontWeight: i === 0 && canCreate ? 600 : 400,
+                background: focusIdx === i ? T.well : "transparent",
+                borderBottom: i < dropItems.length - 1 ? `1px solid ${T.border}` : "none",
+              }}
+            >
+              {item}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HandleDrawer({ open, mode, handle, onClose, onSaved, allTags = [] }) {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
@@ -120,6 +281,7 @@ function HandleDrawer({ open, mode, handle, onClose, onSaved }) {
         bio:                handle.bio                || "",
         zone:               handle.zone               || "SIGNAL",
         entity_type:        handle.entity_type        || "person",
+        tags:               Array.isArray(handle.tags) ? handle.tags : [],
         handle_instagram:   handle.handle_instagram   || "",
         handle_x:           handle.handle_x           || "",
         handle_youtube:     handle.handle_youtube     || "",
@@ -268,6 +430,15 @@ function HandleDrawer({ open, mode, handle, onClose, onSaved }) {
           {/* Entity type */}
           <Field label="Type">
             <EntityTypeSelect value={form.entity_type} onChange={v => set("entity_type", v)} />
+          </Field>
+
+          {/* Tags */}
+          <Field label="Tags">
+            <TagInput
+              value={form.tags}
+              onChange={v => set("tags", v)}
+              allTags={allTags}
+            />
           </Field>
 
           {/* Platform handles */}
@@ -533,6 +704,7 @@ function SummaryStats({ handles, selectedZones, onToggleZone }) {
 // ─── Main component ─────────────────────────────────────────────────────────
 export default function HandlesTable({ platform, refreshKey }) {
   const [handles, setHandles] = useState([]);
+  const [allTags, setAllTags] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedZones, setSelectedZones] = useState(new Set());
   const [search, setSearch] = useState("");
@@ -548,12 +720,24 @@ export default function HandlesTable({ platform, refreshKey }) {
   const [editCell, setEditCell] = useState(null); // { id, field }
   const [editVal, setEditVal] = useState("");
 
+  const loadTags = useCallback(async () => {
+    try {
+      const res = await fetch("/api/tags");
+      const d = await res.json();
+      setAllTags(d.tags || []);
+    } catch {}
+  }, []);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/handles");
-      const d = await res.json();
-      setHandles(d.handles || []);
+      const [handlesRes, tagsRes] = await Promise.all([
+        fetch("/api/handles"),
+        fetch("/api/tags"),
+      ]);
+      const [hd, td] = await Promise.all([handlesRes.json(), tagsRes.json()]);
+      setHandles(hd.handles || []);
+      setAllTags(td.tags || []);
     } catch {}
     setLoading(false);
   }, []);
@@ -604,6 +788,8 @@ export default function HandlesTable({ platform, refreshKey }) {
     } else {
       setHandles(prev => prev.map(h => h.id === savedHandle.id ? { ...h, ...savedHandle } : h));
     }
+    // Refresh tag list in case new tags were added
+    loadTags();
   }
 
   function primaryHandle(h) {
@@ -715,6 +901,7 @@ export default function HandlesTable({ platform, refreshKey }) {
         handle={drawerHandle}
         onClose={() => setDrawerOpen(false)}
         onSaved={handleDrawerSaved}
+        allTags={allTags}
       />
 
       <SummaryStats handles={baseFiltered} selectedZones={selectedZones} onToggleZone={toggleZone} />
@@ -842,7 +1029,7 @@ export default function HandlesTable({ platform, refreshKey }) {
                     if (editBtn) editBtn.style.opacity = "0";
                   }}>
                   {/* Name */}
-                  <td style={{ ...tdStyle, maxWidth: 180 }}
+                  <td style={{ ...tdStyle, maxWidth: 180, cursor: "text" }}
                     onClick={() => { if (!editCell) startEdit(h, "name"); }}>
                     {editCell?.id === h.id && editCell?.field === "name" ? (
                       <input
@@ -850,18 +1037,13 @@ export default function HandlesTable({ platform, refreshKey }) {
                         value={editVal}
                         onChange={e => setEditVal(e.target.value)}
                         onBlur={() => commitEdit()}
-                        onKeyDown={e => { if (e.key === "Enter") { e.currentTarget.blur(); } if (e.key === "Escape") cancelEdit(); }}
-                        style={{
-                          width: "100%", border: "none", outline: "none",
-                          borderBottom: `2px solid ${T.accent}`,
-                          fontFamily: sans, fontSize: F.sm, fontWeight: 600,
-                          color: T.text, background: "transparent", padding: "1px 2px",
-                        }}
+                        onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") cancelEdit(); }}
+                        style={ghostInput({ fontSize: F.sm, fontWeight: 600 })}
                       />
                     ) : (
                       <div style={{
                         fontWeight: 600, fontSize: F.sm, color: T.text, lineHeight: 1.3,
-                        cursor: "text", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                       }}>
                         {h.name || pri?.handle || "\u2014"}
                       </div>
@@ -877,6 +1059,22 @@ export default function HandlesTable({ platform, refreshKey }) {
                       }}>
                         {h.entity_type === "organization" ? "ORG" : "PAGE"}
                       </span>
+                    )}
+                    {Array.isArray(h.tags) && h.tags.length > 0 && (
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 3, marginTop: 4 }}>
+                        {h.tags.map(tag => (
+                          <span key={tag} style={{
+                            display: "inline-block",
+                            fontSize: 10, fontWeight: 600,
+                            color: T.purple, background: T.purpleBg,
+                            border: `1px solid ${T.purpleBorder}`,
+                            borderRadius: 999, padding: "1px 6px",
+                            fontFamily: sans, whiteSpace: "nowrap",
+                          }}>
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
                     )}
                   </td>
                   {/* Platforms */}
@@ -907,43 +1105,70 @@ export default function HandlesTable({ platform, refreshKey }) {
                     </div>
                   </td>
                   {/* Bio */}
-                  <td style={{ ...tdStyle, maxWidth: 0 }}>
-                    <div style={{
-                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                      fontSize: F.xs, color: h.bio ? T.sub : T.dim,
-                      fontStyle: h.bio ? "normal" : "italic",
-                    }}>
-                      {h.bio ? truncate(h.bio, 80) : "\u2014"}
-                    </div>
-                  </td>
-                  {/* Followers */}
-                  <td style={{ ...tdStyle, fontWeight: 600, whiteSpace: "nowrap" }}>
-                    {totalFollowers(h) > 0 ? fmt(totalFollowers(h)) : "\u2014"}
-                  </td>
-                  {/* Zone / Label */}
-                  <td style={{ ...tdStyle, cursor: "pointer" }}
-                    onClick={() => { if (!editCell) startEdit(h, "zone"); }}>
-                    {editCell?.id === h.id && editCell?.field === "zone" ? (
-                      <select
+                  <td style={{ ...tdStyle, maxWidth: 0, cursor: "text" }}
+                    onClick={() => { if (!editCell) startEdit(h, "bio"); }}>
+                    {editCell?.id === h.id && editCell?.field === "bio" ? (
+                      <input
                         autoFocus
                         value={editVal}
-                        onChange={e => { const v = e.target.value; setEditVal(v); commitEdit(v); }}
+                        onChange={e => setEditVal(e.target.value)}
+                        onBlur={() => commitEdit()}
+                        onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") cancelEdit(); }}
+                        style={ghostInput({ fontSize: F.xs, color: T.sub })}
+                      />
+                    ) : (
+                      <div style={{
+                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                        fontSize: F.xs, color: h.bio ? T.sub : T.dim,
+                        fontStyle: h.bio ? "normal" : "italic",
+                      }}>
+                        {h.bio ? truncate(h.bio, 80) : "—"}
+                      </div>
+                    )}
+                  </td>
+                  {/* Followers */}
+                  {(() => {
+                    const isEditingFollowers = editCell?.id === h.id && editCell?.field?.startsWith("followers_");
+                    const followerField = pri ? `followers_${pri.p}` : null;
+                    return (
+                      <td style={{ ...tdStyle, fontWeight: 600, whiteSpace: "nowrap", cursor: followerField ? "text" : "default" }}
+                        onClick={() => { if (!editCell && followerField) startEdit(h, followerField); }}>
+                        {isEditingFollowers ? (
+                          <input
+                            autoFocus
+                            type="number"
+                            value={editVal}
+                            onChange={e => setEditVal(e.target.value)}
+                            onBlur={() => { commitEdit(editVal === "" ? null : parseInt(editVal, 10) || null); }}
+                            onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") cancelEdit(); }}
+                            style={{ ...ghostInput({ fontSize: F.sm, fontWeight: 600 }), width: 80 }}
+                          />
+                        ) : (
+                          totalFollowers(h) > 0 ? fmt(totalFollowers(h)) : "\u2014"
+                        )}
+                      </td>
+                    );
+                  })()}
+                  {/* Zone / Label — overlay select on badge so badge stays visible */}
+                  <td style={{ ...tdStyle }}>
+                    <div style={{ position: "relative", display: "inline-block" }}>
+                      <ZoneBadge zone={editCell?.id === h.id && editCell?.field === "zone" ? editVal : h.zone} />
+                      <select
+                        value={editCell?.id === h.id && editCell?.field === "zone" ? editVal : (h.zone || "SIGNAL")}
+                        onChange={e => { const v = e.target.value; setEditVal(v); if (!editCell) startEdit(h, "zone"); commitEdit(v); }}
+                        onFocus={() => { if (!editCell) startEdit(h, "zone"); }}
                         onBlur={() => cancelEdit()}
                         onKeyDown={e => { if (e.key === "Escape") cancelEdit(); }}
                         style={{
-                          fontFamily: sans, fontSize: F.xs, fontWeight: 600,
-                          border: `1px solid ${T.border}`, borderRadius: 6,
-                          padding: "3px 6px", background: T.card, color: T.text,
-                          cursor: "pointer", outline: "none",
+                          position: "absolute", inset: 0, opacity: 0,
+                          cursor: "pointer", width: "100%", height: "100%",
                         }}
                       >
                         {["ELITE", "INFLUENTIAL", "SIGNAL", "IGNORE"].map(z => (
                           <option key={z} value={z}>{z}</option>
                         ))}
                       </select>
-                    ) : (
-                      <ZoneBadge zone={h.zone} />
-                    )}
+                    </div>
                   </td>
                   {/* Last seen */}
                   <td style={{ ...tdStyle, whiteSpace: "nowrap", color: T.dim, fontSize: F.xs }}>

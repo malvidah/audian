@@ -8,7 +8,7 @@ export async function PATCH(req) {
     const { id, updates } = await req.json();
 
     // Fields that live on the handles table
-    const handleFields = ['bio', 'name', 'followed_by', 'zone', 'entity_type', 'avatar_url',
+    const handleFields = ['bio', 'name', 'followed_by', 'zone', 'entity_type', 'tags', 'avatar_url',
       'handle_x', 'handle_instagram', 'handle_youtube', 'handle_linkedin',
       'followers_x', 'followers_instagram', 'followers_youtube', 'followers_linkedin'];
     // Fields that live on the interactions table

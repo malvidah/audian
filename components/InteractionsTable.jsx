@@ -34,6 +34,17 @@ const PLAT_URL = {
 const sans = "-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif";
 const F = { xl: 28, lg: 20, md: 15, sm: 13, xs: 11 };
 
+// Ghost input: matches the display text exactly, only indicator is a hairline accent underline
+function ghostInput({ fontSize = F.sm, fontWeight = 400, color = T.text, italic = false } = {}) {
+  return {
+    width: "100%", border: "none", outline: "none", background: "transparent",
+    fontFamily: sans, fontSize, fontWeight, color, fontStyle: italic ? "italic" : "normal",
+    padding: "0", margin: "0", boxSizing: "border-box",
+    boxShadow: `inset 0 -1px 0 0 ${T.accent}99`,
+    borderRadius: 0,
+  };
+}
+
 const ZONE_CFG = {
   ELITE:       { label: "ELITE",       color: T.accent,  bg: T.accentBg, border: T.accentBorder },
   INFLUENTIAL: { label: "INFLUENTIAL", color: T.green,   bg: T.greenBg,  border: T.greenBorder },
@@ -824,7 +835,7 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
                         style={{ cursor: "pointer", accentColor: T.accent }} />
                     </td>
                     {/* Name — inline editable */}
-                    <td style={{ ...tdStyle, maxWidth: 180 }}
+                    <td style={{ ...tdStyle, maxWidth: 180, cursor: row.source === "interactions" ? "text" : "default" }}
                       onClick={() => { if (!editCell && row.source === "interactions") startEdit(row, "name"); }}>
                       {isEditingName ? (
                         <input
@@ -833,16 +844,10 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
                           onChange={e => setEditVal(e.target.value)}
                           onBlur={() => commitInlineEdit()}
                           onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") cancelInlineEdit(); }}
-                          style={{
-                            width: "100%", border: "none", outline: "none",
-                            borderBottom: `2px solid ${T.accent}`,
-                            fontFamily: sans, fontSize: F.sm, fontWeight: 600,
-                            color: T.text, background: "transparent", padding: "1px 2px",
-                          }}
+                          style={ghostInput({ fontSize: F.sm, fontWeight: 600 })}
                         />
                       ) : (
                         <div style={{ fontWeight: 600, fontSize: F.sm, color: T.text, lineHeight: 1.3,
-                          cursor: row.source === "interactions" ? "text" : "default",
                           overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                           {row.name}
                         </div>
@@ -859,39 +864,74 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
                       </a>
                     </td>
                     <td style={tdStyle}><TypeBadge type={row.type} /></td>
-                    <td style={{ ...tdStyle, maxWidth: 0 }}>
-                      {(() => {
-                        const href = row.mention_url || row.post_url;
-                        const text = row.content ? truncate(row.content, 100) : "—";
-                        const s = { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                          fontSize: F.xs, color: row.content ? T.sub : T.dim, fontStyle: row.content ? "normal" : "italic", display: "block" };
-                        return href && row.content
-                          ? <a href={href} target="_blank" rel="noreferrer" style={{ ...s, textDecoration: "none" }} title={href}>{text}</a>
-                          : <div style={s}>{text}</div>;
-                      })()}
-                    </td>
-                    <td style={{ ...tdStyle, fontWeight: 600, whiteSpace: "nowrap" }}>{row.followers ? fmt(row.followers) : "—"}</td>
-                    {/* Label — inline editable */}
-                    <td style={{ ...tdStyle, cursor: "pointer" }}
-                      onClick={() => { if (!editCell && row.source === "interactions") startEdit(row, "zone"); }}>
-                      {isEditingZone ? (
-                        <select
-                          autoFocus
-                          value={editVal}
-                          onChange={e => { const v = e.target.value; setEditVal(v); commitInlineEdit(v); }}
-                          onBlur={() => cancelInlineEdit()}
-                          onKeyDown={e => { if (e.key === "Escape") cancelInlineEdit(); }}
-                          style={{
-                            fontFamily: sans, fontSize: F.xs, fontWeight: 600,
-                            border: `1px solid ${T.border}`, borderRadius: 6,
-                            padding: "3px 6px", background: T.card, color: T.text,
-                            cursor: "pointer", outline: "none",
-                          }}
-                        >
-                          {["ELITE", "INFLUENTIAL", "SIGNAL", "IGNORE"].map(z => (
-                            <option key={z} value={z}>{z}</option>
-                          ))}
-                        </select>
+                    {/* Content — inline editable */}
+                    {(() => {
+                      const isEditingContent = editCell?.id === row.id && editCell?.field === "content";
+                      const href = row.mention_url || row.post_url;
+                      return (
+                        <td style={{ ...tdStyle, maxWidth: 0, cursor: row.source === "interactions" ? "text" : "default" }}
+                          onClick={e => { if (!editCell && row.source === "interactions" && !e.target.closest("a")) startEdit(row, "content"); }}>
+                          {isEditingContent ? (
+                            <input
+                              autoFocus
+                              value={editVal}
+                              onChange={e => setEditVal(e.target.value)}
+                              onBlur={() => commitInlineEdit()}
+                              onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") cancelInlineEdit(); }}
+                              style={ghostInput({ fontSize: F.xs, color: T.sub })}
+                            />
+                          ) : (() => {
+                            const text = row.content ? truncate(row.content, 100) : "—";
+                            const s = { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                              fontSize: F.xs, color: row.content ? T.sub : T.dim, fontStyle: row.content ? "normal" : "italic", display: "block" };
+                            return href && row.content
+                              ? <a href={href} target="_blank" rel="noreferrer" style={{ ...s, textDecoration: "none" }} title={href}>{text}</a>
+                              : <div style={s}>{text}</div>;
+                          })()}
+                        </td>
+                      );
+                    })()}
+                    {/* Followers — inline editable */}
+                    {(() => {
+                      const platField = row.platform ? `followers_${row.platform}` : null;
+                      const isEditingFollowers = editCell?.id === row.id && editCell?.field === platField;
+                      return (
+                        <td style={{ ...tdStyle, fontWeight: 600, whiteSpace: "nowrap", cursor: platField && row.source === "interactions" ? "text" : "default" }}
+                          onClick={() => { if (!editCell && platField && row.source === "interactions") { setEditCell({ id: row.id, field: platField }); setEditVal(row.followers ?? ""); } }}>
+                          {isEditingFollowers ? (
+                            <input
+                              autoFocus
+                              type="number"
+                              value={editVal}
+                              onChange={e => setEditVal(e.target.value)}
+                              onBlur={() => commitInlineEdit(editVal === "" ? null : parseInt(editVal, 10) || null)}
+                              onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") cancelInlineEdit(); }}
+                              style={{ ...ghostInput({ fontSize: F.sm, fontWeight: 600 }), width: 70 }}
+                            />
+                          ) : (
+                            row.followers ? fmt(row.followers) : "—"
+                          )}
+                        </td>
+                      );
+                    })()}
+                    {/* Label — overlay select on badge */}
+                    <td style={{ ...tdStyle }}>
+                      {row.source === "interactions" ? (
+                        <div style={{ position: "relative", display: "inline-block" }}>
+                          <ZoneBadge zone={isEditingZone ? editVal : row.zone} />
+                          <select
+                            value={isEditingZone ? editVal : (row.zone || "SIGNAL")}
+                            onChange={e => { const v = e.target.value; if (!editCell) startEdit(row, "zone"); commitInlineEdit(v); }}
+                            onFocus={() => { if (!editCell) startEdit(row, "zone"); }}
+                            onBlur={() => cancelInlineEdit()}
+                            onKeyDown={e => { if (e.key === "Escape") cancelInlineEdit(); }}
+                            style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", width: "100%", height: "100%" }}
+                          >
+                            {["ELITE", "INFLUENTIAL", "SIGNAL", "IGNORE"].map(z => (
+                              <option key={z} value={z}>{z}</option>
+                            ))}
+                          </select>
+                        </div>
                       ) : (
                         <ZoneBadge zone={row.zone} />
                       )}

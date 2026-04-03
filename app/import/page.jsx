@@ -2124,7 +2124,7 @@ export default function ImportPage() {
               </a>
             ))}
           </div>
-          <a href={mode === "handles" ? "/handles" : "/interactions"} style={{ fontFamily: sans, fontSize: F.sm, color: T.sub,
+          <a href={mode === "handles" ? "/peopleandorganizations" : "/interactions"} style={{ fontFamily: sans, fontSize: F.sm, color: T.sub,
             textDecoration: "none", padding: "6px 12px", borderRadius: 8,
             border: `1px solid ${T.border}` }}>← Back</a>
         </div>

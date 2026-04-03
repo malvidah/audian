@@ -102,7 +102,7 @@ const TAB_STYLE = (active) => ({
 const TABS = [
   { key: "engagement",   label: "Posts",        emoji: "\uD83D\uDCCA", href: "/" },
   { key: "interactions", label: "Interactions", emoji: "\uD83E\uDD1D", href: "/interactions" },
-  { key: "handles",      label: "People & Organizations", emoji: "\uD83D\uDC64", href: "/handles" },
+  { key: "handles",      label: "People & Organizations", emoji: "\uD83D\uDC64", href: "/peopleandorganizations" },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -979,7 +979,7 @@ function ProfileMenu({ session, avatarUrl, connections = [], onDisconnect, posts
 
           {/* Manage handles */}
           <div style={{ borderTop: `1px solid ${T.border}` }}>
-            <a href="/handles"
+            <a href="/peopleandorganizations"
               style={{ display: "flex", alignItems: "center", gap: 8, padding: "11px 18px", textDecoration: "none" }}
               onMouseEnter={e => e.currentTarget.style.background = T.well}
               onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
