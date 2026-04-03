@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 import dynamic from "next/dynamic";
 import PageShell, { T, sans, F } from "../../components/PageShell";
@@ -95,6 +95,13 @@ function NotableInteractions({ activePlatform, dateFrom, dateTo }) {
   const [mentions, setMentions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [hoveredId, setHoveredId] = useState(null);
+  const [chevronHover, setChevronHover] = useState(null); // "left" | "right" | null
+  const scrollRef = useRef(null);
+
+  function scroll(dir) {
+    if (!scrollRef.current) return;
+    scrollRef.current.scrollBy({ left: dir * 360, behavior: "smooth" });
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -229,12 +236,34 @@ function NotableInteractions({ activePlatform, dateFrom, dateTo }) {
         </span>
       </div>
 
-      {/* Card grid */}
-      <div style={{
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))",
-        gap: 14,
-      }}>
+      {/* Horizontal scroll strip */}
+      <div style={{ position: "relative" }}>
+        {/* Left chevron */}
+        <button
+          onClick={() => scroll(-1)}
+          onMouseEnter={() => setChevronHover("left")}
+          onMouseLeave={() => setChevronHover(null)}
+          style={{
+            position: "absolute", left: -14, top: "50%", transform: "translateY(-50%)",
+            zIndex: 10, width: 28, height: 28, borderRadius: "50%",
+            border: `1px solid ${T.border}`,
+            background: chevronHover === "left" ? T.accent : T.card,
+            color: chevronHover === "left" ? "#fff" : T.sub,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            cursor: "pointer", fontSize: 14, fontWeight: 700,
+            boxShadow: "0 1px 4px rgba(0,0,0,0.10)",
+            transition: "all 0.15s",
+          }}>
+          ‹
+        </button>
+
+        {/* Scroll container */}
+        <div ref={scrollRef} style={{
+          display: "flex", gap: 14, overflowX: "auto", overflowY: "hidden",
+          scrollbarWidth: "none", msOverflowStyle: "none",
+          paddingBottom: 4,
+        }}>
+          <style>{`#notable-scroll::-webkit-scrollbar { display: none; }`}</style>
         {mentions.map((m) => {
           const isHovered = hoveredId === m.id;
           const zoneCfg = ZONE_BADGE_CFG[m.zone] || ZONE_BADGE_CFG.SIGNAL;
@@ -256,6 +285,8 @@ function NotableInteractions({ activePlatform, dateFrom, dateTo }) {
                 boxShadow: isHovered ? T.shadowMd : T.shadowSm,
                 transition: "all 0.15s ease",
                 transform: isHovered ? "translateY(-1px)" : "none",
+                flexShrink: 0,
+                width: 320,
               }}
             >
               {/* Top row: avatar + name + platform */}
@@ -382,7 +413,27 @@ function NotableInteractions({ activePlatform, dateFrom, dateTo }) {
             </div>
           );
         })}
-      </div>
+        </div>{/* end scroll container */}
+
+        {/* Right chevron */}
+        <button
+          onClick={() => scroll(1)}
+          onMouseEnter={() => setChevronHover("right")}
+          onMouseLeave={() => setChevronHover(null)}
+          style={{
+            position: "absolute", right: -14, top: "50%", transform: "translateY(-50%)",
+            zIndex: 10, width: 28, height: 28, borderRadius: "50%",
+            border: `1px solid ${T.border}`,
+            background: chevronHover === "right" ? T.accent : T.card,
+            color: chevronHover === "right" ? "#fff" : T.sub,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            cursor: "pointer", fontSize: 14, fontWeight: 700,
+            boxShadow: "0 1px 4px rgba(0,0,0,0.10)",
+            transition: "all 0.15s",
+          }}>
+          ›
+        </button>
+      </div>{/* end relative wrapper */}
     </div>
   );
 }
