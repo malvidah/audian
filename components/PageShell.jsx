@@ -1555,12 +1555,45 @@ export default function PageShell({ activeTab, children }) {
         setRefreshKey(v => v + 1);
       }
 
+      // ── Photo pass: try Big Think for handles that still have no photo ──
+      let photoUpdates = 0;
+      try {
+        const allRes = await fetch("/api/handles");
+        const allData = await allRes.json();
+        const noPhoto = (allData.handles || []).filter(
+          h => handleIds.includes(h.id) && !h.avatar_url && h.name?.trim()
+        );
+        if (noPhoto.length > 0) {
+          setActionMessage({ tone: "muted", text: `Looking up ${noPhoto.length} photo${noPhoto.length === 1 ? "" : "s"} on Big Think…` });
+          for (const h of noPhoto) {
+            try {
+              const r = await fetch("/api/handles/autophoto", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ handle_id: h.id, name: h.name }),
+              });
+              const d = await r.json();
+              if (d.url) photoUpdates++;
+            } catch {}
+            // Polite delay between Big Think requests
+            await new Promise(res => setTimeout(res, 400));
+          }
+        }
+      } catch {}
+
+      const anyUpdates = enriched > 0 || photoUpdates > 0;
+      const parts = [];
+      if (bioUpdates > 0) parts.push(`${bioUpdates} bio${bioUpdates === 1 ? "" : "s"}`);
+      if (followerUpdates > 0) parts.push(`${followerUpdates} follower count${followerUpdates === 1 ? "" : "s"}`);
+      if (photoUpdates > 0) parts.push(`${photoUpdates} photo${photoUpdates === 1 ? "" : "s"}`);
+
       setActionMessage({
-        tone: enriched > 0 ? "success" : "muted",
-        text: enriched > 0
-          ? `Updated ${enriched} person${enriched === 1 ? "" : "s"} · ${bioUpdates} bio${bioUpdates === 1 ? "" : "s"} and ${followerUpdates} follower count${followerUpdates === 1 ? "" : "s"} filled in.`
+        tone: anyUpdates ? "success" : "muted",
+        text: anyUpdates
+          ? `Updated ${enriched + photoUpdates} person${(enriched + photoUpdates) === 1 ? "" : "s"} · ${parts.join(", ")} filled in.`
           : `Checked ${checked} profile${checked === 1 ? "" : "s"} and everything already looked filled in.`,
       });
+      setRefreshKey(v => v + 1);
     } catch (e) {
       setActionMessage({ tone: "error", text: e.message || "Enrichment failed." });
     } finally {
