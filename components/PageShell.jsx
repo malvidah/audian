@@ -456,19 +456,59 @@ function PlatformStats({ posts, activePlatform, onPlatformSelect, followerLatest
 
 // ─── Sign In ─────────────────────────────────────────────────────────────────
 function SignIn() {
-  const [email, setEmail] = useState("");
-  const [sent, setSent] = useState(false);
-  const [loading, setLoading] = useState(false);
-  async function go() {
+  const [tab,      setTab]      = useState("password"); // "magic" | "password"
+  const [email,    setEmail]    = useState("");
+  const [sent,     setSent]     = useState(false);
+  const [loading,  setLoading]  = useState(false);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [passErr,  setPassErr]  = useState(null);
+
+  async function goMagic() {
     if (!email) return;
     setLoading(true);
     const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: window.location.origin } });
     if (!error) setSent(true);
     setLoading(false);
   }
+
+  async function goPassword() {
+    if (!username || !password) return;
+    setLoading(true);
+    setPassErr(null);
+    try {
+      // Look up email for this username from user_settings (RLS disabled — anon read OK)
+      const res = await fetch("/api/settings");
+      const { settings } = await res.json();
+      if (!settings.auth_username || settings.auth_username !== username) {
+        setPassErr("Invalid username or password");
+        setLoading(false);
+        return;
+      }
+      const authEmail = settings.auth_email;
+      if (!authEmail) {
+        setPassErr("No email linked to this username. Ask your admin to configure it.");
+        setLoading(false);
+        return;
+      }
+      const { error } = await supabase.auth.signInWithPassword({ email: authEmail, password });
+      if (error) setPassErr("Invalid username or password");
+    } catch {
+      setPassErr("Sign in failed. Try again.");
+    }
+    setLoading(false);
+  }
+
+  const inputStyle = {
+    width: "100%", background: T.well, border: `1px solid ${T.border}`, borderRadius: 8,
+    padding: "10px 12px", color: T.text, fontFamily: sans, fontSize: F.sm,
+    outline: "none", boxSizing: "border-box", marginBottom: 10,
+  };
+
   return (
     <div style={{ minHeight: "100vh", background: T.bg, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: sans }}>
       <div style={{ background: T.card, borderRadius: 16, border: `1px solid ${T.border}`, padding: "40px 44px", maxWidth: 380, width: "100%", boxShadow: T.shadowMd }}>
+        {/* Logo */}
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 28 }}>
           <div style={{ width: 36, height: 36, borderRadius: 10, background: T.accent, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <span style={{ color: "#fff", fontSize: 16, fontWeight: 700 }}>A</span>
@@ -478,19 +518,62 @@ function SignIn() {
             <div style={{ fontSize: F.xs, color: T.sub }}>Social Intelligence</div>
           </div>
         </div>
+
         <div style={{ fontSize: F.lg, fontWeight: 600, color: T.text, marginBottom: 6, letterSpacing: "-0.02em" }}>Welcome back</div>
-        <div style={{ fontSize: F.sm, color: T.sub, marginBottom: 24 }}>Sign in to your workspace</div>
-        {sent ? (
-          <div style={{ background: T.greenBg, border: `1px solid ${T.greenBorder}`, borderRadius: 8, padding: "12px 14px", fontSize: F.sm, color: T.green }}>
-            Check your email for the magic link.
-          </div>
+        <div style={{ fontSize: F.sm, color: T.sub, marginBottom: 20 }}>Sign in to your workspace</div>
+
+        {/* Tab switcher */}
+        <div style={{ display: "flex", background: T.well, borderRadius: 9, padding: 3, marginBottom: 20 }}>
+          {[["password", "Username"], ["magic", "Magic link"]].map(([key, label]) => (
+            <button key={key} onClick={() => { setTab(key); setPassErr(null); setSent(false); }}
+              style={{
+                flex: 1, padding: "7px 0", borderRadius: 7, border: "none", cursor: "pointer",
+                fontFamily: sans, fontSize: F.xs, fontWeight: 600,
+                background: tab === key ? T.card : "transparent",
+                color: tab === key ? T.text : T.sub,
+                boxShadow: tab === key ? T.shadowSm : "none",
+                transition: "all 0.15s",
+              }}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {tab === "magic" ? (
+          sent ? (
+            <div style={{ background: T.greenBg, border: `1px solid ${T.greenBorder}`, borderRadius: 8, padding: "12px 14px", fontSize: F.sm, color: T.green }}>
+              Check your email for the magic link.
+            </div>
+          ) : (
+            <>
+              <input type="email" placeholder="you@company.com" value={email}
+                onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && goMagic()}
+                style={inputStyle} />
+              <button onClick={goMagic} disabled={loading}
+                style={{ width: "100%", background: T.accent, border: "none", borderRadius: 8, padding: "11px", color: "#fff", fontFamily: sans, fontSize: F.sm, fontWeight: 600, cursor: "pointer" }}>
+                {loading ? "Sending..." : "Continue with email"}
+              </button>
+            </>
+          )
         ) : (
           <>
-            <input type="email" placeholder="you@company.com" value={email} onChange={e => setEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && go()}
-              style={{ width: "100%", background: T.well, border: `1px solid ${T.border}`, borderRadius: 8, padding: "10px 12px", color: T.text, fontFamily: sans, fontSize: F.sm, outline: "none", boxSizing: "border-box", marginBottom: 10 }} />
-            <button onClick={go} disabled={loading}
-              style={{ width: "100%", background: T.accent, border: "none", borderRadius: 8, padding: "11px", color: "#fff", fontFamily: sans, fontSize: F.sm, fontWeight: 600, cursor: "pointer" }}>
-              {loading ? "Sending..." : "Continue with email"}
+            <input placeholder="Username" value={username}
+              onChange={e => setUsername(e.target.value)} onKeyDown={e => e.key === "Enter" && goPassword()}
+              style={inputStyle} autoComplete="username" />
+            <input type="password" placeholder="Password" value={password}
+              onChange={e => setPassword(e.target.value)} onKeyDown={e => e.key === "Enter" && goPassword()}
+              style={{ ...inputStyle, marginBottom: passErr ? 8 : 10 }} autoComplete="current-password" />
+            {passErr && (
+              <div style={{ fontSize: F.xs, color: T.red, marginBottom: 10 }}>{passErr}</div>
+            )}
+            <button onClick={goPassword} disabled={loading || !username || !password}
+              style={{
+                width: "100%", background: T.accent, border: "none", borderRadius: 8,
+                padding: "11px", color: "#fff", fontFamily: sans, fontSize: F.sm,
+                fontWeight: 600, cursor: loading ? "wait" : "pointer",
+                opacity: !username || !password ? 0.6 : 1,
+              }}>
+              {loading ? "Signing in..." : "Sign in"}
             </button>
           </>
         )}
@@ -539,6 +622,12 @@ function ProfileMenu({ session, avatarUrl, connections = [], onDisconnect, posts
   const [channelInput, setChannelInput]     = useState("");
   const [channelSaving, setChannelSaving]   = useState(false);
   const [channelResult, setChannelResult]   = useState(null);
+  // Login settings
+  const [showLoginSettings, setShowLoginSettings] = useState(false);
+  const [loginUsername,     setLoginUsername]     = useState("");
+  const [newPassword,       setNewPassword]       = useState("");
+  const [loginSaving,       setLoginSaving]       = useState(false);
+  const [loginMsg,          setLoginMsg]          = useState(null);
   const menuRef    = useRef(null);
   const csvFileRef = useRef(null);
   const csvPlatRef = useRef(null); // which platform the pending file input is for
@@ -553,6 +642,37 @@ function ProfileMenu({ session, avatarUrl, connections = [], onDisconnect, posts
     document.addEventListener("mousedown", handle);
     return () => document.removeEventListener("mousedown", handle);
   }, [open]);
+
+  // Load current login username when menu opens
+  useEffect(() => {
+    if (!open) return;
+    fetch("/api/settings").then(r => r.json()).then(d => {
+      if (d.settings?.auth_username) setLoginUsername(d.settings.auth_username);
+    }).catch(() => {});
+  }, [open]);
+
+  async function saveLoginSettings() {
+    setLoginSaving(true);
+    setLoginMsg(null);
+    try {
+      const updates = { auth_username: loginUsername, auth_email: email };
+      await fetch("/api/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updates),
+      });
+      if (newPassword) {
+        const { error } = await supabase.auth.updateUser({ password: newPassword });
+        if (error) throw new Error(error.message);
+        setNewPassword("");
+      }
+      setLoginMsg("Saved ✓");
+      setTimeout(() => setLoginMsg(null), 3000);
+    } catch (e) {
+      setLoginMsg("Error: " + e.message);
+    }
+    setLoginSaving(false);
+  }
 
   async function disconnect(platformId) {
     setDisconnecting(platformId);
@@ -846,6 +966,88 @@ function ProfileMenu({ session, avatarUrl, connections = [], onDisconnect, posts
             {showImport && (
               <div style={{ padding: "0 18px 14px" }}>
                 <ImportPanel posts={posts} onImported={onImported} />
+              </div>
+            )}
+          </div>
+
+          {/* Login settings */}
+          <div style={{ borderTop: `1px solid ${T.border}` }}>
+            <button
+              onClick={() => setShowLoginSettings(s => !s)}
+              style={{
+                width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
+                padding: "12px 18px", background: "none", border: "none", cursor: "pointer",
+                textAlign: "left",
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = T.well}
+              onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+            >
+              <span style={{ fontFamily: sans, fontSize: F.sm, color: T.text, fontWeight: 500 }}>Login settings</span>
+              <span style={{ color: T.dim, fontSize: F.xs }}>{showLoginSettings ? "▾" : "▸"}</span>
+            </button>
+            {showLoginSettings && (
+              <div style={{ padding: "0 18px 16px" }}>
+                <div style={{ fontSize: F.xs, color: T.dim, marginBottom: 10, fontFamily: sans }}>
+                  Signed in as <strong style={{ color: T.sub }}>{email}</strong>
+                </div>
+                {/* Username */}
+                <div style={{ marginBottom: 8 }}>
+                  <label style={{ display: "block", fontFamily: sans, fontSize: F.xs, fontWeight: 600,
+                    color: T.sub, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>
+                    Login username
+                  </label>
+                  <input
+                    value={loginUsername}
+                    onChange={e => setLoginUsername(e.target.value)}
+                    placeholder="e.g. bigthink"
+                    style={{
+                      width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 7,
+                      border: `1px solid ${T.border}`, background: T.well, color: T.text,
+                      fontFamily: sans, fontSize: F.sm, outline: "none",
+                    }}
+                    onFocus={e => e.target.style.borderColor = T.accent}
+                    onBlur={e => e.target.style.borderColor = T.border}
+                  />
+                </div>
+                {/* Password */}
+                <div style={{ marginBottom: 12 }}>
+                  <label style={{ display: "block", fontFamily: sans, fontSize: F.xs, fontWeight: 600,
+                    color: T.sub, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>
+                    New password <span style={{ fontWeight: 400, textTransform: "none" }}>(leave blank to keep)</span>
+                  </label>
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={e => setNewPassword(e.target.value)}
+                    placeholder="New password"
+                    autoComplete="new-password"
+                    style={{
+                      width: "100%", boxSizing: "border-box", padding: "8px 10px", borderRadius: 7,
+                      border: `1px solid ${T.border}`, background: T.well, color: T.text,
+                      fontFamily: sans, fontSize: F.sm, outline: "none",
+                    }}
+                    onFocus={e => e.target.style.borderColor = T.accent}
+                    onBlur={e => e.target.style.borderColor = T.border}
+                  />
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <button
+                    onClick={saveLoginSettings}
+                    disabled={loginSaving || !loginUsername}
+                    style={{
+                      padding: "7px 16px", borderRadius: 7, border: "none", cursor: "pointer",
+                      background: T.accent, color: "#fff", fontFamily: sans, fontSize: F.xs,
+                      fontWeight: 600, opacity: loginSaving || !loginUsername ? 0.6 : 1,
+                    }}>
+                    {loginSaving ? "Saving…" : "Save"}
+                  </button>
+                  {loginMsg && (
+                    <span style={{ fontFamily: sans, fontSize: F.xs,
+                      color: loginMsg.startsWith("Error") ? T.red : T.green }}>
+                      {loginMsg}
+                    </span>
+                  )}
+                </div>
               </div>
             )}
           </div>
