@@ -2,6 +2,7 @@
 // Shared platform icon components — single source of truth for all platform icons.
 // Import PlatIcon for a bare SVG, PlatChip for icon in a flat-color rounded-square bg,
 // PlatDot for icon in a circular bg (used in small indicators).
+import { useId } from "react";
 
 export const PLAT_COLORS = {
   instagram: "#E1306C",
@@ -11,10 +12,14 @@ export const PLAT_COLORS = {
 };
 
 export function PlatIcon({ platform, size = 16 }) {
+  // useId gives each instance a unique ID so SVG gradient IDs never collide on the page
+  const uid = useId().replace(/:/g, "");
+  const igGrad = `ig-grad-${uid}`;
+
   if (platform === "instagram") return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
       <defs>
-        <radialGradient id="ig-grad" cx="30%" cy="107%" r="130%">
+        <radialGradient id={igGrad} cx="30%" cy="107%" r="130%">
           <stop offset="0%"  stopColor="#fdf497"/>
           <stop offset="5%"  stopColor="#fdf497"/>
           <stop offset="45%" stopColor="#fd5949"/>
@@ -22,7 +27,7 @@ export function PlatIcon({ platform, size = 16 }) {
           <stop offset="90%" stopColor="#285AEB"/>
         </radialGradient>
       </defs>
-      <rect x="2" y="2" width="20" height="20" rx="6" fill="url(#ig-grad)"/>
+      <rect x="2" y="2" width="20" height="20" rx="6" fill={`url(#${igGrad})`}/>
       <circle cx="12" cy="12" r="4.5" stroke="white" strokeWidth="1.8" fill="none"/>
       <circle cx="17.5" cy="6.5" r="1.2" fill="white"/>
     </svg>
@@ -53,9 +58,10 @@ export function PlatChip({ platform, size = 15, radius = 7 }) {
     <span style={{
       display: "inline-flex", alignItems: "center", justifyContent: "center",
       width: chipSize, height: chipSize, borderRadius: radius,
-      background: color + "14", flexShrink: 0, color,
+      background: platform === "instagram" ? "transparent" : color + "14",
+      flexShrink: 0, color,
     }}>
-      <PlatIcon platform={platform} size={size} />
+      <PlatIcon platform={platform} size={platform === "instagram" ? chipSize : size} />
     </span>
   );
 }
@@ -68,9 +74,10 @@ export function PlatDot({ platform, size = 8 }) {
     <span style={{
       display: "inline-flex", alignItems: "center", justifyContent: "center",
       width: boxSize, height: boxSize, borderRadius: "50%",
-      background: color + "18", flexShrink: 0, color,
+      background: platform === "instagram" ? "transparent" : color + "18",
+      flexShrink: 0, color,
     }}>
-      <PlatIcon platform={platform} size={size + 2} />
+      <PlatIcon platform={platform} size={platform === "instagram" ? boxSize : size + 2} />
     </span>
   );
 }

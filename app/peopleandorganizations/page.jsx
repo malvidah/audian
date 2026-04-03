@@ -278,14 +278,8 @@ function ActiveInNetwork({ activePlatform, dateFrom, dateTo }) {
                     <a
                       href={PLAT_URL[p.platform]?.(p.handle) || "#"}
                       target="_blank" rel="noreferrer"
-                      style={{
-                        display: "inline-flex", alignItems: "center", justifyContent: "center",
-                        width: 26, height: 26, borderRadius: 7, flexShrink: 0,
-                        background: (PLAT_COLORS[p.platform] || T.dim) + "14",
-                        color: PLAT_COLORS[p.platform] || T.dim,
-                        fontSize: 11, fontWeight: 700, textDecoration: "none",
-                      }}>
-                      <PlatIcon platform={p.platform} size={15} />
+                      style={{ textDecoration: "none", flexShrink: 0 }}>
+                      <PlatChip platform={p.platform} size={15} radius={7} />
                     </a>
                   )}
                 </div>
