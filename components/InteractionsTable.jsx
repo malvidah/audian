@@ -393,6 +393,10 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
         if (field === "bio") u.bio = value;
         if (field === "zone") u.zone = value;
         if (field === "entity_type") u.entity_type = value;
+        if (field.startsWith("followers_")) {
+          const platSuffix = field.replace("followers_", "");
+          if (r.platform === platSuffix) u.followers = parseInt(value, 10) || 0;
+        }
       }
       if (isTarget) {
         if (field === "content") u.content = value;
