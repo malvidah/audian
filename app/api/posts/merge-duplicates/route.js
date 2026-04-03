@@ -123,6 +123,13 @@ export async function POST() {
     }
 
     if (merges.length === 0) {
+      // Sample api post impressions to confirm previous run's updates landed
+      const apiImpressionsSample = apiPosts.slice(0, 5).map(p => ({
+        post_id: p.post_id,
+        impressions: p.impressions,
+        likes: p.likes,
+        content: p.content?.slice(0, 40),
+      }));
       return NextResponse.json({
         merged: 0,
         message: 'No matching duplicate pairs found.',
@@ -130,8 +137,7 @@ export async function POST() {
           total: posts?.length,
           apiCount: apiPosts.length,
           bufferCount: bufferPosts.length,
-          sampleApi: apiPosts[0] ? { post_id: apiPosts[0].post_id, source: apiPosts[0].source, date: apiPosts[0].published_at?.slice(0,10), prefix: normalisePrefix(apiPosts[0].content) } : null,
-          sampleBuf: bufferPosts[0] ? { post_id: bufferPosts[0].post_id, source: bufferPosts[0].source, date: bufferPosts[0].published_at?.slice(0,10), prefix: normalisePrefix(bufferPosts[0].content) } : null,
+          apiImpressionsSample,
         }
       });
     }
