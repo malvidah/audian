@@ -422,7 +422,7 @@ export function CreatePanel({ onClose, onCreated }) {
 }
 
 // ─── Main component ─────────────────────────────────────────────────────────
-export default function InteractionsTable({ platform, weekFilter, refreshKey, commentsOnly = false }) {
+export default function InteractionsTable({ platform, weekFilter, refreshKey, commentsOnly = false, dateFrom, dateTo }) {
   const [sortBy, setSortBy] = useState("date");
   const [sortDesc, setSortDesc] = useState(true);
   const [liveData, setLiveData] = useState([]);
@@ -525,8 +525,11 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
     async function fetchInteractions() {
       setLoading(true);
       try {
+        let interactionsQuery = supabase.from("interactions").select("*, handles(*)").order("interacted_at", { ascending: false });
+        if (dateFrom) interactionsQuery = interactionsQuery.gte("interacted_at", dateFrom);
+        if (dateTo) interactionsQuery = interactionsQuery.lte("interacted_at", dateTo + "T23:59:59Z");
         const [{ data, error }, commentsResult] = await Promise.all([
-          supabase.from("interactions").select("*, handles(*)").order("interacted_at", { ascending: false }),
+          interactionsQuery,
           commentsOnly
             ? supabase.from("platform_comments").select("*").order("published_at", { ascending: false })
             : Promise.resolve({ data: [], error: null }),
@@ -582,7 +585,7 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
     }
     fetchInteractions();
     return () => { cancelled = true; };
-  }, [refreshKey, fetchKey]);
+  }, [refreshKey, fetchKey, dateFrom, dateTo]);
 
   const baseFiltered = useMemo(() => {
     let data = liveData;

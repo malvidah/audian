@@ -47,6 +47,40 @@ function daysAgo(n) {
 }
 const TODAY = new Date().toISOString().slice(0, 10);
 
+// ─── Quarter helpers ──────────────────────────────────────────────────────────
+// Q0=Winter(Jan-Mar), Q1=Spring(Apr-Jun), Q2=Summer(Jul-Sep), Q3=Fall(Oct-Dec)
+const QUARTER_NAMES = ["Winter", "Spring", "Summer", "Fall"];
+function quarterDates(year, q) {
+  const startMonth = q * 3;
+  const endMonth = startMonth + 2;
+  const pad = n => String(n).padStart(2, "0");
+  const start = `${year}-${pad(startMonth + 1)}-01`;
+  const lastDay = new Date(year, endMonth + 1, 0).getDate();
+  const end = `${year}-${pad(endMonth + 1)}-${lastDay}`;
+  return { start, end };
+}
+function currentQuarter() {
+  const now = new Date();
+  return { year: now.getFullYear(), q: Math.floor(now.getMonth() / 3) };
+}
+function quarterPresets() {
+  const { year, q } = currentQuarter();
+  const presets = [];
+  for (let i = 3; i >= 0; i--) {
+    let pq = q - i, py = year;
+    if (pq < 0) { pq += 4; py -= 1; }
+    const { start, end } = quarterDates(py, pq);
+    presets.push({
+      key: `q${pq}_${py}`,
+      label: `${QUARTER_NAMES[pq]} ${py}`,
+      from: start,
+      to: end,
+      isCurrent: i === 0,
+    });
+  }
+  return presets;
+}
+
 const TAB_STYLE = (active) => ({
   display: "inline-flex",
   alignItems: "center",
@@ -1264,8 +1298,8 @@ export default function PageShell({ activeTab, children }) {
   const [error,          setError]         = useState(null);
   const [activePlatform, setActivePlatform] = useState("all");
   const [selectedWeek,   setSelectedWeek]  = useState(null);
-  const [dateRange,      setDateRange]      = useState("30d");   // "30d" | "6m" | "1y" | "custom"
-  const [dateFrom,       setDateFrom]      = useState(daysAgo(30));
+  const [dateRange,      setDateRange]      = useState("3m");
+  const [dateFrom,       setDateFrom]      = useState(daysAgo(90));
   const [dateTo,         setDateTo]        = useState(TODAY);
   const [showCustom,     setShowCustom]    = useState(false);
   const [followerSnaps,  setFollowerSnaps] = useState([]);
@@ -1482,10 +1516,12 @@ export default function PageShell({ activeTab, children }) {
             {/* Preset pills */}
             <div style={{ display: "flex", background: T.well, border: `1px solid ${T.border}`, borderRadius: 8, padding: 2, gap: 1 }}>
               {[
-                { key: "30d", label: "30d",    from: () => daysAgo(30),  to: () => TODAY },
-                { key: "6m",  label: "6m",     from: () => daysAgo(183), to: () => TODAY },
-                { key: "1y",  label: "1y",     from: () => daysAgo(365), to: () => TODAY },
-                { key: "custom", label: "Custom ▾", from: null, to: null },
+                { key: "1m",  label: "1m",  days: 30 },
+                { key: "3m",  label: "3m",  days: 90 },
+                { key: "6m",  label: "6m",  days: 183 },
+                { key: "1y",  label: "1y",  days: 365 },
+                { key: "3y",  label: "3y",  days: 1095 },
+                { key: "custom", label: "Custom" },
               ].map(opt => {
                 const isActive = dateRange === opt.key;
                 return (
@@ -1493,9 +1529,9 @@ export default function PageShell({ activeTab, children }) {
                     onClick={() => {
                       setDateRange(opt.key);
                       setSelectedWeek(null);
-                      if (opt.key !== "custom") {
-                        setDateFrom(opt.from());
-                        setDateTo(opt.to());
+                      if (opt.days) {
+                        setDateFrom(daysAgo(opt.days));
+                        setDateTo(TODAY);
                         setShowCustom(false);
                       } else {
                         setShowCustom(s => !s);
@@ -1515,20 +1551,18 @@ export default function PageShell({ activeTab, children }) {
               })}
             </div>
 
-            {/* Custom date inputs — shown inline when Custom is active */}
-            {showCustom && (
-              <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 8px", background: T.card, border: `1px solid ${T.border}`, borderRadius: 8 }}>
-                <input type="date" value={dateFrom}
-                  onChange={e => { setDateFrom(e.target.value); setSelectedWeek(null); }}
-                  style={{ fontFamily: sans, fontSize: F.xs, color: T.text, background: "transparent", border: "none", outline: "none", cursor: "pointer" }}
-                />
-                <span style={{ color: T.border, fontSize: F.xs }}>→</span>
-                <input type="date" value={dateTo}
-                  onChange={e => { setDateTo(e.target.value); setSelectedWeek(null); }}
-                  style={{ fontFamily: sans, fontSize: F.xs, color: T.text, background: "transparent", border: "none", outline: "none", cursor: "pointer" }}
-                />
-              </div>
-            )}
+            {/* Date range — always visible, editable for custom */}
+            <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 8px", background: T.card, border: `1px solid ${T.border}`, borderRadius: 8 }}>
+              <input type="date" value={dateFrom}
+                onChange={e => { setDateFrom(e.target.value); setDateRange("custom"); setShowCustom(true); setSelectedWeek(null); }}
+                style={{ fontFamily: sans, fontSize: F.xs, color: T.text, background: "transparent", border: "none", outline: "none", cursor: "pointer" }}
+              />
+              <span style={{ color: T.dim, fontSize: F.xs }}>→</span>
+              <input type="date" value={dateTo}
+                onChange={e => { setDateTo(e.target.value); setDateRange("custom"); setShowCustom(true); setSelectedWeek(null); }}
+                style={{ fontFamily: sans, fontSize: F.xs, color: T.text, background: "transparent", border: "none", outline: "none", cursor: "pointer" }}
+              />
+            </div>
           </div>
         </div>
       </div>

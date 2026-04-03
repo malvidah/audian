@@ -413,7 +413,7 @@ export default function InteractionsPage() {
             dateTo={dateTo}
           />
 
-          <InteractionsTable platform={activePlatform} weekFilter={weekFilter} refreshKey={refreshKey} />
+          <InteractionsTable platform={activePlatform} weekFilter={weekFilter} refreshKey={refreshKey} dateFrom={dateFrom} dateTo={dateTo} />
 
           {creating && (
             <>
