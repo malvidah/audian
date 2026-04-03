@@ -21,6 +21,26 @@ function normalisePrefix(content) {
 
 export async function POST() {
   try {
+    // ── Write sanity-check: update one post, re-fetch, revert ──────────────
+    const { data: testRows } = await supabaseAdmin
+      .from('posts').select('id,synced_at').eq('platform','instagram').limit(1);
+    let writeWorks = false;
+    if (testRows?.length) {
+      const testId  = testRows[0].id;
+      const testTag = 'merge-test-' + Date.now();
+      const { error: writeErr } = await supabaseAdmin
+        .from('posts').update({ synced_at: new Date().toISOString() }).eq('id', testId);
+      if (!writeErr) {
+        const { data: verify } = await supabaseAdmin
+          .from('posts').select('id').eq('id', testId).limit(1);
+        writeWorks = !!verify?.length;
+      }
+    }
+    if (!writeWorks) {
+      return NextResponse.json({ error: 'Supabase writes are not working from this route', supabaseUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL, serviceKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY }, { status: 500 });
+    }
+    // ─────────────────────────────────────────────────────────────────────
+
     // Fetch all instagram posts
     const { data: posts, error } = await supabaseAdmin
       .from('posts')
