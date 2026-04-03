@@ -901,9 +901,10 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
                           {isEditingFollowers ? (
                             <input
                               autoFocus
-                              type="number"
+                              type="text"
+                              inputMode="numeric"
                               value={editVal}
-                              onChange={e => setEditVal(e.target.value)}
+                              onChange={e => setEditVal(e.target.value.replace(/[^\d]/g, ""))}
                               onBlur={() => commitInlineEdit(editVal === "" ? null : parseInt(editVal, 10) || null)}
                               onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") cancelInlineEdit(); }}
                               style={{ ...ghostInput({ fontSize: F.sm, fontWeight: 600 }), width: 70 }}

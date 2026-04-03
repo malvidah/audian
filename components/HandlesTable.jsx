@@ -476,9 +476,9 @@ function HandleDrawer({ open, mode, handle, onClose, onSaved, allTags = [] }) {
                   />
                   <Input
                     value={form[`followers_${p}`]}
-                    onChange={v => set(`followers_${p}`, v)}
+                    onChange={v => set(`followers_${p}`, v.replace(/[^\d]/g, ""))}
                     placeholder="Followers"
-                    type="number"
+                    inputMode="numeric"
                     style={{ flex: 1, minWidth: 0 }}
                   />
                 </div>
@@ -1136,9 +1136,10 @@ export default function HandlesTable({ platform, refreshKey }) {
                         {isEditingFollowers ? (
                           <input
                             autoFocus
-                            type="number"
+                            type="text"
+                            inputMode="numeric"
                             value={editVal}
-                            onChange={e => setEditVal(e.target.value)}
+                            onChange={e => setEditVal(e.target.value.replace(/[^\d]/g, ""))}
                             onBlur={() => { commitEdit(editVal === "" ? null : parseInt(editVal, 10) || null); }}
                             onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") cancelEdit(); }}
                             style={{ ...ghostInput({ fontSize: F.sm, fontWeight: 600 }), width: 80 }}
