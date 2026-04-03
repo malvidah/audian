@@ -20,7 +20,6 @@ const CreatePanelDynamic = dynamic(() => import("../../components/InteractionsTa
 });
 
 // ─── Helpers (shared with EliteMentions) ─────────────────────────────────────
-const PLAT_COLORS = { youtube: "#FF0000", x: "#000000", instagram: "#E1306C", linkedin: "#0077B5" };
 
 function fmt(n) {
   if (!n && n !== 0) return "—";
