@@ -69,7 +69,7 @@ function SummaryStats({ data, selectedZones, onToggleZone, commentsOnly }) {
       <StatCard label={commentsOnly ? "Total comments" : "Total interactions"} value={total} />
       <StatCard label="Unique people" value={uniquePeople} />
       <StatCard label="Unique elite" value={uniqueElite} color={ZONE_CFG.ELITE.color} />
-      {["ELITE", "INFLUENTIAL", "SIGNAL"].map(zone => (
+      {ZONE_ORDER.filter(z => z !== "IGNORE").map(zone => (
         <StatCard key={zone} label={zone} value={counts[zone] || 0} color={ZONE_CFG[zone].color}
           active={selectedZones.has(zone)} clickable onClick={() => onToggleZone(zone)} />
       ))}
@@ -351,6 +351,7 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
   const [rawData, setRawData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedZones, setSelectedZones] = useState(new Set());
+  const [followerMin, setFollowerMin] = useState(0);
   const [fetchKey, setFetchKey] = useState(0);
   const [selected, setSelected] = useState(new Set());
   const [search, setSearch] = useState("");
@@ -550,9 +551,11 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
   }, [commentsOnly, liveData, platform, weekFilter, search]);
 
   const filtered = useMemo(() => {
-    if (!selectedZones.size) return baseFiltered;
-    return baseFiltered.filter(r => selectedZones.has(normalizeZone(r.zone)));
-  }, [baseFiltered, selectedZones]);
+    let rows = baseFiltered;
+    if (selectedZones.size) rows = rows.filter(r => selectedZones.has(normalizeZone(r.zone)));
+    if (followerMin > 0) rows = rows.filter(r => (r.followers || 0) >= followerMin);
+    return rows;
+  }, [baseFiltered, selectedZones, followerMin]);
 
   const sorted = useMemo(() => {
     return [...filtered].sort((a, b) => {
@@ -560,7 +563,7 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
       if (sortBy === "date") { av = a.date || ""; bv = b.date || ""; }
       else if (sortBy === "followers") { av = a.followers || 0; bv = b.followers || 0; }
       else if (sortBy === "name") { av = (a.name || "").toLowerCase(); bv = (b.name || "").toLowerCase(); }
-      else if (sortBy === "zone") { const o = { ELITE: 0, INFLUENTIAL: 1, SIGNAL: 2, IGNORE: 3 }; av = o[a.zone] ?? 4; bv = o[b.zone] ?? 4; }
+      else if (sortBy === "zone") { const o = Object.fromEntries(LIST_ORDER.map((z, i) => [z, i])); av = o[a.zone] ?? LIST_ORDER.length; bv = o[b.zone] ?? LIST_ORDER.length; }
       else if (sortBy === "platform") { av = a.platform || ""; bv = b.platform || ""; }
       else if (sortBy === "type") { av = normalizeType(a.type); bv = normalizeType(b.type); }
       else { av = a[sortBy] ?? ""; bv = b[sortBy] ?? ""; }
@@ -605,44 +608,104 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
 
       <SummaryStats data={baseFiltered} selectedZones={selectedZones} onToggleZone={toggleZone} commentsOnly={commentsOnly} />
 
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
-        <div style={{ fontFamily: sans, fontSize: F.xs, color: T.sub, fontWeight: 600 }}>
-          {selectedZones.size ? `Showing: ${[...selectedZones].join(", ")}` : "Showing: all labels"}
-        </div>
-        {selectedZones.size > 0 && (
-          <button onClick={() => setSelectedZones(new Set())} style={{ background: "transparent", color: T.dim,
-            border: `1px solid ${T.border}`, borderRadius: 999, padding: "4px 10px",
-            fontFamily: sans, fontSize: F.xs, fontWeight: 600, cursor: "pointer" }}>Clear filters</button>
-        )}
-        <input
-          value={search}
-          placeholder="Search..."
-          onChange={e => setSearch(e.target.value)}
-          style={{
-            marginLeft: "auto", background: T.card, border: `1px solid ${T.border}`,
-            color: T.text, borderRadius: 8, padding: "6px 12px", fontFamily: sans,
-            fontSize: F.sm, outline: "none", width: 200,
-          }}
-        />
-        <button
-          onClick={() => setShowCreate(true)}
-          title="Add new interaction"
-          style={{
-            display: "inline-flex", alignItems: "center", gap: 6,
-            padding: "6px 14px", borderRadius: 8, cursor: "pointer",
-            background: T.accent, border: "none",
-            color: "#fff", fontFamily: sans, fontSize: F.sm, fontWeight: 700,
-            boxShadow: "0 1px 4px rgba(255,107,53,0.3)",
-            transition: "opacity 0.15s, transform 0.1s",
-            flexShrink: 0,
-          }}
-          onMouseEnter={e => { e.currentTarget.style.opacity = "0.88"; e.currentTarget.style.transform = "translateY(-1px)"; }}
-          onMouseLeave={e => { e.currentTarget.style.opacity = "1"; e.currentTarget.style.transform = "translateY(0)"; }}
-        >
-          <span style={{ fontSize: 18, lineHeight: 1, fontWeight: 300 }}>+</span>
-          Add interaction
-        </button>
-      </div>
+      {/* ── Filter bar ───────────────────────────────────────────────── */}
+      {(() => {
+        const FOLLOWER_OPTS = [
+          { label: "Any", value: 0 },
+          { label: "1K+", value: 1_000 },
+          { label: "10K+", value: 10_000 },
+          { label: "100K+", value: 100_000 },
+          { label: "1M+", value: 1_000_000 },
+        ];
+        const hasFilters = selectedZones.size > 0 || followerMin > 0 || search;
+        const pillBase = { fontFamily: sans, fontSize: F.xs, fontWeight: 600, padding: "3px 11px",
+          borderRadius: 999, cursor: "pointer", transition: "all 0.12s", border: `1px solid ${T.border}`,
+          background: "transparent", color: T.dim };
+        return (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+            {/* Zone pills */}
+            <span style={{ fontFamily: sans, fontSize: F.xs, fontWeight: 600, color: T.dim, flexShrink: 0 }}>Zone</span>
+            <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+              {LIST_ORDER.filter(z => z !== "UNASSIGNED").map(z => {
+                const cfg = ZONE_CFG[z] || {};
+                const on = selectedZones.has(z);
+                return (
+                  <button key={z} onClick={() => toggleZone(z)} style={{
+                    ...pillBase,
+                    border: `1px solid ${on ? (cfg.border || T.border) : T.border}`,
+                    background: on ? (cfg.bg || T.well) : "transparent",
+                    color: on ? (cfg.color || T.text) : T.dim,
+                  }}>
+                    {z}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Divider */}
+            <div style={{ width: 1, height: 18, background: T.border, flexShrink: 0, margin: "0 2px" }} />
+
+            {/* Follower threshold pills */}
+            <span style={{ fontFamily: sans, fontSize: F.xs, fontWeight: 600, color: T.dim, flexShrink: 0 }}>Followers</span>
+            <div style={{ display: "flex", gap: 5 }}>
+              {FOLLOWER_OPTS.map(opt => {
+                const on = followerMin === opt.value;
+                return (
+                  <button key={opt.value} onClick={() => setFollowerMin(opt.value)} style={{
+                    ...pillBase,
+                    border: `1px solid ${on ? T.accentBorder : T.border}`,
+                    background: on ? T.accentBg : "transparent",
+                    color: on ? T.accent : T.dim,
+                  }}>
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Clear all */}
+            {hasFilters && (
+              <button
+                onClick={() => { setSelectedZones(new Set()); setFollowerMin(0); setSearch(""); }}
+                style={{ ...pillBase, border: `1px solid ${T.border}`, marginLeft: 2 }}>
+                Clear all
+              </button>
+            )}
+
+            {/* Search + Add — pushed right */}
+            <div style={{ display: "flex", gap: 8, marginLeft: "auto", alignItems: "center" }}>
+              <input
+                value={search}
+                placeholder="Search..."
+                onChange={e => setSearch(e.target.value)}
+                style={{
+                  background: T.card, border: `1px solid ${T.border}`,
+                  color: T.text, borderRadius: 8, padding: "6px 12px", fontFamily: sans,
+                  fontSize: F.sm, outline: "none", width: 200,
+                }}
+              />
+              <button
+                onClick={() => setShowCreate(true)}
+                title="Add new interaction"
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 6,
+                  padding: "6px 14px", borderRadius: 8, cursor: "pointer",
+                  background: T.accent, border: "none",
+                  color: "#fff", fontFamily: sans, fontSize: F.sm, fontWeight: 700,
+                  boxShadow: "0 1px 4px rgba(255,107,53,0.3)",
+                  transition: "opacity 0.15s, transform 0.1s",
+                  flexShrink: 0,
+                }}
+                onMouseEnter={e => { e.currentTarget.style.opacity = "0.88"; e.currentTarget.style.transform = "translateY(-1px)"; }}
+                onMouseLeave={e => { e.currentTarget.style.opacity = "1"; e.currentTarget.style.transform = "translateY(0)"; }}
+              >
+                <span style={{ fontSize: 18, lineHeight: 1, fontWeight: 300 }}>+</span>
+                Add interaction
+              </button>
+            </div>
+          </div>
+        );
+      })()}
 
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
         <div style={{ fontFamily: sans, fontSize: F.sm, color: T.sub }}>
@@ -837,7 +900,7 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
                             onKeyDown={e => { if (e.key === "Escape") cancelInlineEdit(); }}
                             style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", width: "100%", height: "100%" }}
                           >
-                            {["ELITE", "INFLUENTIAL", "SIGNAL", "IGNORE"].map(z => (
+                            {LIST_ORDER.filter(z => z !== "UNASSIGNED").map(z => (
                               <option key={z} value={z}>{z}</option>
                             ))}
                           </select>
