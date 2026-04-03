@@ -525,19 +525,34 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
     async function fetchInteractions() {
       setLoading(true);
       try {
-        let interactionsQuery = supabase.from("interactions").select("*, handles(*)").order("interacted_at", { ascending: false });
-        if (dateFrom) interactionsQuery = interactionsQuery.gte("interacted_at", dateFrom);
-        if (dateTo) interactionsQuery = interactionsQuery.lte("interacted_at", dateTo + "T23:59:59Z");
-        const [{ data, error }, commentsResult] = await Promise.all([
-          interactionsQuery,
+        // Paginate past Supabase's 1000-row default cap
+        const PAGE = 1000;
+        let allInteractions = [];
+        let from = 0;
+        while (true) {
+          let q = supabase
+            .from("interactions")
+            .select("*, handles(*)")
+            .order("interacted_at", { ascending: false })
+            .range(from, from + PAGE - 1);
+          if (dateFrom) q = q.gte("interacted_at", dateFrom);
+          if (dateTo) q = q.lte("interacted_at", dateTo + "T23:59:59Z");
+          const { data: page, error } = await q;
+          if (error) throw error;
+          allInteractions = allInteractions.concat(page || []);
+          if (!page || page.length < PAGE) break;
+          from += PAGE;
+        }
+        const data = allInteractions;
+
+        const [commentsResult] = await Promise.all([
           commentsOnly
             ? supabase.from("platform_comments").select("*").order("published_at", { ascending: false })
             : Promise.resolve({ data: [], error: null }),
         ]);
-        if (error) throw error;
         if (commentsResult?.error) throw commentsResult.error;
 
-        if (!cancelled) setRawData(data || []);
+        if (!cancelled) setRawData(data);
 
         const mappedInteractions = (data || []).map((row, i) => {
           const h = row.handles || {};
