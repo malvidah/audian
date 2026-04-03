@@ -737,7 +737,7 @@ function Toggle({ on, onClick }) {
   );
 }
 
-function ProfileMenu({ session, avatarUrl, connections = [], onDisconnect, posts, onImported }) {
+function ProfileMenu({ session, avatarUrl, onAvatarChange, connections = [], onDisconnect, posts, onImported }) {
   const [open, setOpen] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [disconnecting, setDisconnecting] = useState(null);
@@ -754,11 +754,42 @@ function ProfileMenu({ session, avatarUrl, connections = [], onDisconnect, posts
   const [newPassword,       setNewPassword]       = useState("");
   const [loginSaving,       setLoginSaving]       = useState(false);
   const [loginMsg,          setLoginMsg]          = useState(null);
+  // Account avatar upload
+  const [localAvatarUrl,   setLocalAvatarUrl]   = useState(avatarUrl);
+  const [avatarUploading,  setAvatarUploading]  = useState(false);
+  const [avatarHover,      setAvatarHover]      = useState(false);
+  const avatarFileRef = useRef(null);
   const menuRef    = useRef(null);
   const csvFileRef = useRef(null);
   const csvPlatRef = useRef(null); // which platform the pending file input is for
   const email = session?.user?.email || "";
   const initial = email[0]?.toUpperCase() || "?";
+
+  // Sync prop → local when parent re-fetches
+  useEffect(() => { setLocalAvatarUrl(avatarUrl); }, [avatarUrl]);
+
+  async function handleAvatarUpload(file) {
+    if (!file || avatarUploading) return;
+    setAvatarUploading(true);
+    const preview = URL.createObjectURL(file);
+    setLocalAvatarUrl(preview);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res  = await fetch("/api/account/avatar", { method: "POST", body: form });
+      const data = await res.json();
+      if (data.url) {
+        setLocalAvatarUrl(data.url);
+        onAvatarChange?.(data.url);
+      } else {
+        setLocalAvatarUrl(avatarUrl); // revert on error
+      }
+    } catch {
+      setLocalAvatarUrl(avatarUrl);
+    } finally {
+      setAvatarUploading(false);
+    }
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -881,7 +912,7 @@ function ProfileMenu({ session, avatarUrl, connections = [], onDisconnect, posts
       <button onClick={() => setOpen(o => !o)}
         style={{
           width: 36, height: 36, borderRadius: "50%",
-          background: avatarUrl ? `url(${avatarUrl}) center/cover` : `linear-gradient(135deg, ${T.accent} 0%, #ff9060 100%)`,
+          background: localAvatarUrl ? `url(${localAvatarUrl}) center/cover` : `linear-gradient(135deg, ${T.accent} 0%, #ff9060 100%)`,
           border: open ? `2px solid ${T.accent}` : "2px solid transparent",
           boxShadow: open ? `0 0 0 3px ${T.accent}30` : "none",
           display: "flex", alignItems: "center", justifyContent: "center",
@@ -889,7 +920,7 @@ function ProfileMenu({ session, avatarUrl, connections = [], onDisconnect, posts
           fontFamily: sans, fontSize: 14, fontWeight: 700, color: "#fff",
           overflow: "hidden", flexShrink: 0,
         }}>
-        {!avatarUrl && initial}
+        {!localAvatarUrl && initial}
       </button>
 
       {open && (
@@ -911,15 +942,52 @@ function ProfileMenu({ session, avatarUrl, connections = [], onDisconnect, posts
           {/* User info */}
           <div style={{ padding: "16px 18px 14px", borderBottom: `1px solid ${T.border}` }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <div style={{
-                width: 38, height: 38, borderRadius: "50%", flexShrink: 0,
-                background: avatarUrl ? `url(${avatarUrl}) center/cover` : `linear-gradient(135deg, ${T.accent} 0%, #ff9060 100%)`,
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontFamily: sans, fontSize: 15, fontWeight: 700, color: "#fff", overflow: "hidden",
-              }}>{!avatarUrl && initial}</div>
+              {/* Clickable avatar — click to upload new photo */}
+              <div
+                style={{ position: "relative", width: 42, height: 42, flexShrink: 0, cursor: "pointer" }}
+                onMouseEnter={() => setAvatarHover(true)}
+                onMouseLeave={() => setAvatarHover(false)}
+                onClick={() => avatarFileRef.current?.click()}
+                title="Click to update profile photo"
+              >
+                <div style={{
+                  width: 42, height: 42, borderRadius: "50%",
+                  background: localAvatarUrl ? `url(${localAvatarUrl}) center/cover` : `linear-gradient(135deg, ${T.accent} 0%, #ff9060 100%)`,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontFamily: sans, fontSize: 16, fontWeight: 700, color: "#fff", overflow: "hidden",
+                  transition: "opacity 0.15s",
+                  opacity: avatarUploading ? 0.5 : 1,
+                }}>
+                  {!localAvatarUrl && initial}
+                </div>
+                {(avatarHover || avatarUploading) && (
+                  <div style={{
+                    position: "absolute", inset: 0, borderRadius: "50%",
+                    background: "rgba(0,0,0,0.45)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}>
+                    {avatarUploading ? (
+                      <span style={{ color: "#fff", fontSize: 13, fontWeight: 700 }}>…</span>
+                    ) : (
+                      <svg width={17} height={17} viewBox="0 0 24 24" fill="none"
+                        stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                        <circle cx="12" cy="13" r="4"/>
+                      </svg>
+                    )}
+                  </div>
+                )}
+                <input
+                  ref={avatarFileRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif"
+                  style={{ display: "none" }}
+                  onChange={e => { const f = e.target.files?.[0]; if (f) handleAvatarUpload(f); e.target.value = ""; }}
+                />
+              </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{email.split("@")[0]}</div>
-                <div style={{ fontFamily: sans, fontSize: F.xs, color: T.dim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{email}</div>
+                <div style={{ fontFamily: sans, fontSize: F.xs, color: T.dim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {avatarUploading ? "Uploading…" : email}
+                </div>
               </div>
             </div>
           </div>
@@ -1628,7 +1696,7 @@ export default function PageShell({ activeTab, children }) {
         <div style={{ maxWidth: 1100, margin: "0 auto", padding: "12px 24px",
           display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <ProfileMenu session={session} avatarUrl={avatarUrl} connections={connections}
+            <ProfileMenu session={session} avatarUrl={avatarUrl} onAvatarChange={url => setAvatarUrl(url)} connections={connections}
               onDisconnect={async (id) => {
                 await fetch("/api/disconnect", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ platform: id }) });
                 setConnections(c => c.filter(x => x.platform !== id));
