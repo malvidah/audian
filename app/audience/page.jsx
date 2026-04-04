@@ -24,6 +24,42 @@ const INSIGHT_COLORS = [
   { border: "#BBF7D0", bg: "#F0FDF7", accent: "#16A34A", num: "#16A34A" },
 ];
 
+// ─── Export helpers ──────────────────────────────────────────────────────────
+function ExportIconBtn({ wrapperRef, filename }) {
+  const [busy, setBusy] = useState(false);
+  const [hover, setHover] = useState(false);
+  async function handleExport() {
+    if (!wrapperRef?.current) return;
+    setBusy(true);
+    try {
+      await new Promise(r => setTimeout(r, 150));
+      const { default: html2canvas } = await import("html2canvas");
+      const canvas = await html2canvas(wrapperRef.current, { useCORS: true, scale: 2, backgroundColor: "#FFFFFF", logging: false });
+      const link = document.createElement("a");
+      link.download = `${filename}.png`;
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+    } finally { setBusy(false); }
+  }
+  return (
+    <button onClick={handleExport} disabled={busy} title="Export as image"
+      onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      style={{
+        width: 28, height: 28, borderRadius: 7,
+        border: `1px solid ${hover ? T.accent : T.border}`,
+        background: hover ? T.accent + "10" : "transparent",
+        color: hover ? T.accent : T.dim, cursor: busy ? "wait" : "pointer",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        transition: "all 0.12s", flexShrink: 0,
+      }}>
+      {busy
+        ? <svg width="14" height="14" viewBox="0 0 14 14" style={{ animation: "spin 1s linear infinite" }}><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="20 12" /></svg>
+        : <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M7 2v7M4 6l3 3 3-3M2 11h10" /></svg>
+      }
+    </button>
+  );
+}
+
 // ─── Audience Insights ────────────────────────────────────────────────────────
 
 function AudienceInsights({ activePlatform, dateFrom, dateTo }) {
@@ -32,6 +68,7 @@ function AudienceInsights({ activePlatform, dateFrom, dateTo }) {
   const [commentCount, setCommentCount] = useState(null);
   const [lastFilters,  setLastFilters]  = useState(null);   // filters used for last generation
   const [error,        setError]        = useState(null);
+  const wrapperRef = useRef(null);
 
   const currentFilters = JSON.stringify({ activePlatform, dateFrom, dateTo });
   const filtersChanged = lastFilters !== null && lastFilters !== currentFilters;
@@ -58,11 +95,13 @@ function AudienceInsights({ activePlatform, dateFrom, dateTo }) {
   }
 
   const dateLabel = fmtDateRange(dateFrom, dateTo);
-  const platLabel = activePlatform && activePlatform !== "all"
-    ? PLAT_LABEL[activePlatform] || activePlatform : null;
+  const platLabel = activePlatform?.length > 0
+    ? activePlatform.map(p => PLAT_LABEL[p] || p).join(", ") : null;
+
+  const slug = `audience-insights-${dateFrom || "all"}-to-${dateTo || "all"}${activePlatform?.length ? `-${activePlatform.join("-")}` : ""}`;
 
   return (
-    <div style={{
+    <div ref={wrapperRef} style={{
       background: T.card, border: `1px solid ${T.border}`,
       borderRadius: 16, padding: "24px 28px",
       boxShadow: T.shadowSm, marginBottom: 24,
@@ -123,6 +162,9 @@ function AudienceInsights({ activePlatform, dateFrom, dateTo }) {
               </>
             )}
           </button>
+          {insights && insights.length > 0 && (
+            <ExportIconBtn wrapperRef={wrapperRef} filename={slug} />
+          )}
         </div>
       </div>
 

@@ -107,8 +107,8 @@ function ActiveInNetwork({ activePlatform, dateFrom, dateTo }) {
         const filtered = (data || []).filter(row => {
           const h = row.handles || {};
           if (h.zone !== "ELITE" && h.zone !== "COLLABORATOR") return false;
-          if (activePlatform && activePlatform !== "all") {
-            return row.platform === activePlatform;
+          if (activePlatform.length > 0) {
+            return activePlatform.includes(row.platform);
           }
           return true;
         });

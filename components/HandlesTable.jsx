@@ -829,8 +829,9 @@ export default function HandlesTable({ platform, refreshKey }) {
     let list = handles;
 
     // Platform filter
-    if (platform && platform !== "all") {
-      list = list.filter(h => h[`handle_${platform}`]);
+    if (platform && (Array.isArray(platform) ? platform.length > 0 : platform !== "all")) {
+      const plats = Array.isArray(platform) ? platform : [platform];
+      list = list.filter(h => plats.some(p => h[`handle_${p}`]));
     }
 
     // Search

@@ -80,6 +80,60 @@ function normalizeInteractionType(type) {
   return raw || "unknown";
 }
 
+// ─── Export helpers ──────────────────────────────────────────────────────────
+function ExportIconBtn({ wrapperRef, filename, onBeforeCapture }) {
+  const [busy, setBusy] = useState(false);
+  const [hover, setHover] = useState(false);
+  async function handleExport() {
+    if (!wrapperRef?.current) return;
+    setBusy(true);
+    try {
+      if (onBeforeCapture) await onBeforeCapture();
+      await new Promise(r => setTimeout(r, 150));
+      const { default: html2canvas } = await import("html2canvas");
+      const canvas = await html2canvas(wrapperRef.current, { useCORS: true, scale: 2, backgroundColor: "#FFFFFF", logging: false });
+      const link = document.createElement("a");
+      link.download = `${filename}.png`;
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+    } finally { setBusy(false); }
+  }
+  return (
+    <button onClick={handleExport} disabled={busy} title="Export as image"
+      onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      style={{
+        width: 28, height: 28, borderRadius: 7,
+        border: `1px solid ${hover ? T.accent : T.border}`,
+        background: hover ? T.accent + "10" : "transparent",
+        color: hover ? T.accent : T.dim, cursor: busy ? "wait" : "pointer",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        transition: "all 0.12s", flexShrink: 0,
+      }}>
+      {busy
+        ? <svg width="14" height="14" viewBox="0 0 14 14" style={{ animation: "spin 1s linear infinite" }}><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="20 12" /></svg>
+        : <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M7 2v7M4 6l3 3 3-3M2 11h10" /></svg>
+      }
+    </button>
+  );
+}
+
+function ContextStamp({ dateFrom, dateTo, activePlatform }) {
+  const PLAT_LABEL = { instagram: "Instagram", x: "X", linkedin: "LinkedIn", youtube: "YouTube" };
+  const platLabel = activePlatform?.length > 0 ? activePlatform.map(p => PLAT_LABEL[p] || p).join(", ") : null;
+  const dateLabel = dateFrom && dateTo ? `${dateFrom} – ${dateTo}` : null;
+  if (!platLabel && !dateLabel) return null;
+  return (
+    <div style={{
+      marginTop: 14, paddingTop: 10, borderTop: `1px solid ${T.border}`,
+      display: "flex", alignItems: "center", justifyContent: "space-between",
+      fontFamily: sans, fontSize: 10, color: T.dim,
+    }}>
+      <span>{[platLabel, dateLabel].filter(Boolean).join(" · ")}</span>
+      <span style={{ fontWeight: 700, letterSpacing: "0.08em" }}>AUDIAN</span>
+    </div>
+  );
+}
+
 // ─── Notable Interactions ────────────────────────────────────────────────────
 function NotableInteractions({ activePlatform, dateFrom, dateTo }) {
   const [mentions, setMentions] = useState([]);
@@ -88,6 +142,7 @@ function NotableInteractions({ activePlatform, dateFrom, dateTo }) {
   const [chevronHover, setChevronHover] = useState(null); // "left" | "right" | null
   const [expanded, setExpanded] = useState(false);
   const scrollRef = useRef(null);
+  const wrapperRef = useRef(null);
 
   function scroll(dir) {
     if (!scrollRef.current) return;
@@ -147,8 +202,8 @@ function NotableInteractions({ activePlatform, dateFrom, dateTo }) {
 
         // Filter by platform
         let filtered = mapped;
-        if (activePlatform && activePlatform !== "all") {
-          filtered = filtered.filter(m => m.platform === activePlatform);
+        if (activePlatform.length > 0) {
+          filtered = filtered.filter(m => activePlatform.includes(m.platform));
         }
 
         // Score interactions for ranking — prefer meaningful types and content
@@ -212,8 +267,11 @@ function NotableInteractions({ activePlatform, dateFrom, dateTo }) {
     );
   }
 
+  const slug = `notable-interactions-${dateFrom || "all"}-to-${dateTo || "all"}${activePlatform?.length ? `-${activePlatform.join("-")}` : ""}`;
+
   return (
-    <div style={{ marginBottom: 28 }}>
+    <div ref={wrapperRef} style={{ marginBottom: 28, background: "#fff", borderRadius: 14, padding: "16px 20px",
+      boxShadow: "0 1px 4px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04)" }}>
       {/* Section header */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
         <div style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text }}>
@@ -230,7 +288,7 @@ function NotableInteractions({ activePlatform, dateFrom, dateTo }) {
           onClick={() => setExpanded(e => !e)}
           title={expanded ? "Collapse" : "Show all"}
           style={{
-            marginLeft: "auto", background: "none", border: `1px solid ${T.border}`,
+            background: "none", border: `1px solid ${T.border}`,
             borderRadius: 6, cursor: "pointer", padding: "3px 8px",
             color: T.dim, fontSize: F.xs, fontWeight: 600, fontFamily: sans,
             display: "flex", alignItems: "center", gap: 4, transition: "all 0.15s",
@@ -240,6 +298,8 @@ function NotableInteractions({ activePlatform, dateFrom, dateTo }) {
         >
           {expanded ? "▴ Collapse" : "▾ Show all"}
         </button>
+        <ExportIconBtn wrapperRef={wrapperRef} filename={slug}
+          onBeforeCapture={() => setExpanded(true)} />
       </div>
 
       {/* Horizontal scroll strip / expanded grid */}
@@ -439,6 +499,7 @@ function NotableInteractions({ activePlatform, dateFrom, dateTo }) {
           </button>
         )}
       </div>{/* end relative wrapper */}
+      <ContextStamp dateFrom={dateFrom} dateTo={dateTo} activePlatform={activePlatform} />
     </div>
   );
 }
@@ -481,6 +542,7 @@ export default function InteractionsPage() {
               />
             </>
           )}
+          <style>{`@keyframes spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }`}</style>
         </>
       )}
     </PageShell>

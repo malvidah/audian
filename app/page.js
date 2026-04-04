@@ -85,7 +85,7 @@ function parseDateStr(str) {
 function WeeklyOKR({ posts, activePlatform, selectedWeek, onWeekSelect, dateFrom, dateTo }) {
   const filtered = posts.filter(p =>
     p.post_type !== "daily_aggregate" &&
-    (activePlatform === "all" || p.platform === activePlatform)
+    (activePlatform.length === 0 || activePlatform.includes(p.platform))
   );
 
   const weekMap = {};
@@ -217,8 +217,8 @@ function FollowersChart({ snapshots, activePlatform }) {
     );
   }
 
-  const filtered = activePlatform && activePlatform !== "all"
-    ? snapshots.filter(s => s.platform === activePlatform)
+  const filtered = activePlatform.length > 0
+    ? snapshots.filter(s => activePlatform.includes(s.platform))
     : snapshots;
 
   const latestPerPlatformDay = {};
@@ -293,10 +293,12 @@ function FollowersChart({ snapshots, activePlatform }) {
     }
   };
 
-  const color = (activePlatform && activePlatform !== "all" && PLAT_COLORS[activePlatform]) || T.accent;
-  const label = activePlatform && activePlatform !== "all"
-    ? `${PLAT_LABEL[activePlatform] || activePlatform} Followers`
-    : "Followers";
+  const color = (activePlatform.length === 1 && PLAT_COLORS[activePlatform[0]]) || T.accent;
+  const label = activePlatform.length === 1
+    ? `${PLAT_LABEL[activePlatform[0]] || activePlatform[0]} Followers`
+    : activePlatform.length > 1
+      ? `${activePlatform.map(p => PLAT_LABEL[p] || p).join(" + ")} Followers`
+      : "Followers";
 
   return (
     <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14,
@@ -376,11 +378,66 @@ function FollowersChart({ snapshots, activePlatform }) {
   );
 }
 
+// ─── Shared export helpers ────────────────────────────────────────────────────
+function ExportIconBtn({ wrapperRef, filename, onBeforeCapture }) {
+  const [busy, setBusy] = useState(false);
+  const [hover, setHover] = useState(false);
+  async function handleExport() {
+    if (!wrapperRef?.current) return;
+    setBusy(true);
+    try {
+      if (onBeforeCapture) await onBeforeCapture();
+      await new Promise(r => setTimeout(r, 150));
+      const { default: html2canvas } = await import("html2canvas");
+      const canvas = await html2canvas(wrapperRef.current, { useCORS: true, scale: 2, backgroundColor: "#FFFFFF", logging: false });
+      const link = document.createElement("a");
+      link.download = `${filename}.png`;
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+    } finally { setBusy(false); }
+  }
+  return (
+    <button onClick={handleExport} disabled={busy} title="Export as image"
+      onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      style={{
+        marginLeft: "auto", width: 28, height: 28, borderRadius: 7,
+        border: `1px solid ${hover ? T.accent : T.border}`,
+        background: hover ? T.accent + "10" : "transparent",
+        color: hover ? T.accent : T.dim, cursor: busy ? "wait" : "pointer",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        transition: "all 0.12s", flexShrink: 0,
+      }}>
+      {busy
+        ? <svg width="14" height="14" viewBox="0 0 14 14" style={{ animation: "spin 1s linear infinite" }}><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="20 12" /></svg>
+        : <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M7 2v7M4 6l3 3 3-3M2 11h10" /></svg>
+      }
+    </button>
+  );
+}
+
+function ContextStamp({ dateFrom, dateTo, activePlatform }) {
+  const platLabel = activePlatform?.length > 0
+    ? activePlatform.map(p => ({ instagram: "Instagram", x: "X", linkedin: "LinkedIn", youtube: "YouTube" }[p] || p)).join(", ")
+    : null;
+  const dateLabel = dateFrom && dateTo ? `${dateFrom} – ${dateTo}` : null;
+  if (!platLabel && !dateLabel) return null;
+  return (
+    <div style={{
+      marginTop: 14, paddingTop: 10, borderTop: `1px solid ${T.border}`,
+      display: "flex", alignItems: "center", justifyContent: "space-between",
+      fontFamily: sans, fontSize: 10, color: T.dim,
+    }}>
+      <span>{[platLabel, dateLabel].filter(Boolean).join(" · ")}</span>
+      <span style={{ fontWeight: 700, letterSpacing: "0.08em", color: T.dim }}>AUDIAN</span>
+    </div>
+  );
+}
+
 // ─── Outliers ─────────────────────────────────────────────────────────────────
-function Outliers({ posts, activePlatform, selectedWeek }) {
+function Outliers({ posts, activePlatform, selectedWeek, dateFrom, dateTo }) {
   const filtered = posts.filter(p => {
     if (p.post_type === "daily_aggregate") return false;
-    if (activePlatform !== "all" && p.platform !== activePlatform) return false;
+    if (activePlatform.length > 0 && !activePlatform.includes(p.platform)) return false;
     if (selectedWeek && weekKey(p.published_at) !== selectedWeek) return false;
     return true;
   });
@@ -442,15 +499,20 @@ function Outliers({ posts, activePlatform, selectedWeek }) {
     </div>
   );
 
-  const platLabel = activePlatform === "all" ? "all platforms" : (PLAT_LABEL[activePlatform] || activePlatform);
+  const wrapperRef = useRef(null);
+  const platLabel = activePlatform.length === 0 ? "all platforms" : activePlatform.map(p => PLAT_LABEL[p] || p).join(", ");
   const weekSuffix = selectedWeek ? ` · week of ${weekLabel(selectedWeek)}` : "";
+  const slug = `outliers-${dateFrom || "all"}-to-${dateTo || "all"}${activePlatform.length ? `-${activePlatform.join("-")}` : ""}`;
 
   return (
-    <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14,
+    <div ref={wrapperRef} style={{ background: "#fff", borderRadius: 14,
       padding: "20px 24px", marginBottom: 24, boxShadow: T.shadowSm }}>
-      <div style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text, marginBottom: 12 }}>
-        Outliers · {platLabel}{weekSuffix}
-        <span style={{ fontWeight: 400, color: T.dim, marginLeft: 8 }}>avg {fmt(Math.round(avg))} likes</span>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+        <span style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text }}>
+          Outliers · {platLabel}{weekSuffix}
+        </span>
+        <span style={{ fontFamily: sans, fontWeight: 400, color: T.dim, fontSize: F.xs }}>avg {fmt(Math.round(avg))} likes</span>
+        <ExportIconBtn wrapperRef={wrapperRef} filename={slug} />
       </div>
       <div style={{ border: `1px solid ${T.border}`, borderRadius: 12,
         display: "grid", gridTemplateColumns: "1fr 1fr", overflow: "hidden" }}>
@@ -475,6 +537,7 @@ function Outliers({ posts, activePlatform, selectedWeek }) {
             : under.map((p, i) => <Row key={i} p={p} isOver={false} />)}
         </div>
       </div>
+      <ContextStamp dateFrom={dateFrom} dateTo={dateTo} activePlatform={activePlatform} />
     </div>
   );
 }
@@ -504,7 +567,7 @@ function ImportPostsPanel({ activePlatform, onImported, onClose }) {
     if (isURL) {
       // One URL per line
       const rows = lines.map(url => ({
-        platform:    detectPlatformFromUrl(url) || (activePlatform !== "all" ? activePlatform : ""),
+        platform:    detectPlatformFromUrl(url) || (activePlatform.length === 1 ? activePlatform[0] : ""),
         permalink:   url.trim(), content: null, likes: 0, comments: 0,
       })).filter(r => r.platform);
       return { rows, format: "urls" };
@@ -536,7 +599,7 @@ function ImportPostsPanel({ activePlatform, onImported, onClose }) {
         if (!lines[i].trim()) continue;
         const cols  = splitFn(lines[i]);
         const get   = n => { const j = ix(n); return j !== -1 ? (cols[j] || "").replace(/^["']|["']$/g, "").trim() : ""; };
-        const plat  = normPlatform(get("platform")) || (activePlatform !== "all" ? activePlatform : "");
+        const plat  = normPlatform(get("platform")) || (activePlatform.length === 1 ? activePlatform[0] : "");
         if (!plat) continue;
         rows.push({
           platform:    plat,
@@ -1142,6 +1205,7 @@ function AddPostDrawer({ open, onClose, onSaved }) {
       <style>{`
         @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
         @keyframes slideInRight { from { transform: translateX(100%) } to { transform: translateX(0) } }
+        @keyframes spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }
       `}</style>
     </>
   );
@@ -1164,7 +1228,7 @@ function PostsTable({ posts, activePlatform, selectedWeek, onImported }) {
   }, [posts, localPosts]);
 
   const visible = allPosts.filter(p => {
-    if (activePlatform !== "all" && p.platform !== activePlatform) return false;
+    if (activePlatform.length > 0 && !activePlatform.includes(p.platform)) return false;
     if (p.post_type === "daily_aggregate") return false;
     if (selectedWeek && weekKey(p.published_at) !== selectedWeek) return false;
     if (search) {
@@ -1442,6 +1506,8 @@ export default function EngagementPage() {
             posts={posts}
             activePlatform={activePlatform}
             selectedWeek={selectedWeek}
+            dateFrom={dateFrom}
+            dateTo={dateTo}
           />
 
           <PostsTable

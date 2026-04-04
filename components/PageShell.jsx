@@ -234,7 +234,6 @@ const TABS = [
   { key: "interactions", label: "Interactions", emoji: "\uD83E\uDD1D", href: "/interactions" },
   { key: "audience",     label: "Audience",     emoji: "\uD83D\uDC65", href: "/audience" },
   { key: "handles",      label: "People & Organizations", emoji: "\uD83D\uDC64", href: "/peopleandorganizations" },
-  { key: "analysis",     label: "Analysis",     emoji: "\uD83D\uDCCA", href: "/analysis" },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -536,10 +535,15 @@ function PlatformStats({ posts, activePlatform, onPlatformSelect, followerLatest
   return (
     <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 24 }}>
       {cards.map(([plat, s]) => {
-        const isActive = activePlatform === plat;
+        const isActive = plat === "all" ? activePlatform.length === 0 : activePlatform.includes(plat);
         const color    = PLAT_COLORS[plat] || T.accent;
         return (
-          <div key={plat} onClick={() => onPlatformSelect(isActive ? "all" : plat)}
+          <div key={plat} onClick={() => {
+            if (plat === "all") { onPlatformSelect([]); return; }
+            onPlatformSelect(isActive
+              ? activePlatform.filter(p => p !== plat)
+              : [...activePlatform, plat]);
+          }}
             style={{
               background: isActive ? color + "08" : T.card,
               border:     `1px solid ${isActive ? color + "44" : T.border}`,
@@ -1276,8 +1280,8 @@ function FollowersChart({ snapshots, activePlatform }) {
 
   if (empty) return null; // hide entirely when no data (don't show empty state in persistent position)
 
-  const filtered = activePlatform && activePlatform !== "all"
-    ? snapshots.filter(s => s.platform === activePlatform)
+  const filtered = activePlatform.length > 0
+    ? snapshots.filter(s => activePlatform.includes(s.platform))
     : snapshots;
 
   // Deduplicate to one snapshot per platform per day (keep latest)
@@ -1376,10 +1380,12 @@ function FollowersChart({ snapshots, activePlatform }) {
     }
   };
 
-  const color = (activePlatform && activePlatform !== "all" && PLAT_COLORS[activePlatform]) || T.accent;
-  const label = activePlatform && activePlatform !== "all"
-    ? `${PLAT_LABEL[activePlatform] || activePlatform} Followers`
-    : "Followers";
+  const color = (activePlatform.length === 1 && PLAT_COLORS[activePlatform[0]]) || T.accent;
+  const label = activePlatform.length === 1
+    ? `${PLAT_LABEL[activePlatform[0]] || activePlatform[0]} Followers`
+    : activePlatform.length > 1
+      ? `${activePlatform.map(p => PLAT_LABEL[p] || p).join(" + ")} Followers`
+      : "Followers";
 
   return (
     <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14,
@@ -1485,7 +1491,7 @@ export default function PageShell({ activeTab, children }) {
   const [posts,          setPosts]         = useState([]);
   const [loading,        setLoading]       = useState(true);
   const [error,          setError]         = useState(null);
-  const [activePlatform, setActivePlatform] = useState("all");
+  const [activePlatform, setActivePlatform] = useState([]);
   const [selectedWeek,   setSelectedWeek]  = useState(null);
   const [dateRange,      setDateRange]      = useState(() => (typeof window !== "undefined" && sessionStorage.getItem("audian_dateRange")) || "3m");
   const [dateFrom,       setDateFrom]      = useState(() => (typeof window !== "undefined" && sessionStorage.getItem("audian_dateFrom")) || daysAgo(90));
@@ -1569,7 +1575,7 @@ export default function PageShell({ activeTab, children }) {
 
   const importHref = (() => {
     const params = new URLSearchParams();
-    if (activePlatform && activePlatform !== "all") params.set("platform", activePlatform);
+    if (activePlatform.length === 1) params.set("platform", activePlatform[0]);
     if (activeTab === "interactions") params.set("mode", "interactions");
     if (activeTab === "handles") params.set("mode", "handles");
     const query = params.toString();
@@ -1590,9 +1596,9 @@ export default function PageShell({ activeTab, children }) {
         const needsEnrichment = (handle) => {
           const missingBio = !handle.bio?.trim();
 
-          const platformsToCheck = activePlatform === "all"
+          const platformsToCheck = activePlatform.length === 0
             ? ["instagram", "x", "youtube", "linkedin"]
-            : [activePlatform];
+            : activePlatform;
 
           const missingFollowers = platformsToCheck.some((platform) => {
             const hasHandle = !!handle[`handle_${platform}`];
@@ -1604,7 +1610,7 @@ export default function PageShell({ activeTab, children }) {
         };
 
         handleIds = (data.handles || [])
-          .filter((handle) => activePlatform === "all" || handle[`handle_${activePlatform}`])
+          .filter((handle) => activePlatform.length === 0 || activePlatform.some(p => handle[`handle_${p}`]))
           .filter(needsEnrichment)
           .map((handle) => handle.id)
           .filter(Boolean);
@@ -1615,7 +1621,7 @@ export default function PageShell({ activeTab, children }) {
 
         handleIds = [...new Set(
           (data.interactions || [])
-            .filter(i => activePlatform === "all" || i.platform === activePlatform)
+            .filter(i => activePlatform.length === 0 || activePlatform.includes(i.platform))
             .map(i => i.handle_id)
             .filter(Boolean)
         )];
@@ -1857,7 +1863,7 @@ export default function PageShell({ activeTab, children }) {
               <PlatformStats
                 posts={posts}
                 activePlatform={activePlatform}
-                onPlatformSelect={(p) => { setActivePlatform(p); setSelectedWeek(null); }}
+                onPlatformSelect={(platforms) => { setActivePlatform(platforms); setSelectedWeek(null); }}
                 followerLatest={followerLatest}
               />
             )}

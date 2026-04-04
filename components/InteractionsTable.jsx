@@ -586,7 +586,10 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
   const baseFiltered = useMemo(() => {
     let data = liveData;
     if (commentsOnly) data = data.filter(r => isCommentType(r.type));
-    if (platform && platform !== "all") data = data.filter(d => d.platform === platform);
+    if (platform && (Array.isArray(platform) ? platform.length > 0 : platform !== "all")) {
+      const plats = Array.isArray(platform) ? platform : [platform];
+      data = data.filter(d => plats.includes(d.platform));
+    }
     if (weekFilter) {
       const ws = new Date(weekFilter + "T00:00:00Z"), we = new Date(ws);
       we.setDate(we.getDate() + 7);
@@ -702,7 +705,7 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
         <div style={{ fontFamily: sans, fontSize: F.sm, color: T.sub }}>
           {sorted.length} {commentsOnly ? "comment" : "interaction"}{sorted.length !== 1 ? "s" : ""}
-          {platform && platform !== "all" ? <span> on {PLAT_LABEL[platform] || platform}</span> : null}
+          {Array.isArray(platform) && platform.length > 0 ? <span> on {platform.map(p => PLAT_LABEL[p] || p).join(", ")}</span> : (!Array.isArray(platform) && platform && platform !== "all") ? <span> on {PLAT_LABEL[platform] || platform}</span> : null}
         </div>
         {selected.size > 0 && (
           <button onClick={deleteSelected} disabled={deleting} style={{
@@ -770,7 +773,7 @@ export default function InteractionsTable({ platform, weekFilter, refreshKey, co
             <tbody>
               {sorted.length === 0 && (
                 <tr><td colSpan={9} style={{ ...tdStyle, textAlign: "center", color: T.dim, padding: "40px 12px" }}>
-                  No interactions found{platform && platform !== "all" ? ` on ${PLAT_LABEL[platform] || platform}` : ""}{weekFilter ? " for the selected week" : ""}.
+                  No interactions found{Array.isArray(platform) && platform.length > 0 ? ` on ${platform.map(p => PLAT_LABEL[p] || p).join(", ")}` : (!Array.isArray(platform) && platform && platform !== "all") ? ` on ${PLAT_LABEL[platform] || platform}` : ""}{weekFilter ? " for the selected week" : ""}.
                 </td></tr>
               )}
               {sorted.map((row, i) => {

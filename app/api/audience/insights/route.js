@@ -21,7 +21,9 @@ export async function POST(req) {
 
     if (dateFrom) query = query.gte('interacted_at', dateFrom);
     if (dateTo)   query = query.lte('interacted_at', dateTo + 'T23:59:59Z');
-    if (platform && platform !== 'all') query = query.eq('platform', platform);
+    const platforms = Array.isArray(platform) ? platform : (platform && platform !== 'all' ? [platform] : []);
+    if (platforms.length === 1) query = query.eq('platform', platforms[0]);
+    else if (platforms.length > 1) query = query.in('platform', platforms);
 
     const { data: interactions, error: dbError } = await query;
     if (dbError) return NextResponse.json({ error: dbError.message }, { status: 500 });
