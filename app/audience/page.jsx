@@ -120,7 +120,7 @@ function AudienceInsights({ activePlatform, dateFrom, dateTo }) {
           </div>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+        <div data-html2canvas-ignore="true" style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
           {filtersChanged && (
             <span style={{
               fontFamily: sans, fontSize: 11, fontWeight: 600, color: "#B45309",

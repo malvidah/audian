@@ -54,36 +54,35 @@ export async function POST(req) {
     const dateLabel = dateFrom && dateTo
       ? `${new Date(dateFrom + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })} – ${new Date(dateTo + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`
       : 'the selected period';
-    const platLabel = platform && platform !== 'all' ? ` on ${platform}` : '';
+    const PLAT_LABEL = { instagram: 'Instagram', x: 'X', linkedin: 'LinkedIn', youtube: 'YouTube' };
+    const platLabel = platforms.length > 0 ? ` on ${platforms.map(p => PLAT_LABEL[p] || p).join(', ')}` : '';
 
-    const prompt = `You are analyzing ${interactions.length} audience comments and mentions${platLabel} from ${dateLabel}.
+    const prompt = `Here are ${interactions.length} comments and mentions${platLabel} from ${dateLabel}. Read through them and tell me what's actually interesting.
 
 ${commentLines}
 
 ─────────────────────────────────────────
 
-Derive exactly 3 key audience insights from this data. Focus on non-obvious, specific, actionable findings — NOT generic observations like "your audience is engaged."
+Give me exactly 3 insights. Write like a smart colleague who just spent an hour reading these comments and wants to share what they noticed — not like a consultant report. Use plain language. No jargon.
 
-Good insight angles to consider:
-- Recurring themes, questions, or requests that appear across multiple comments
-- Emotional tone patterns (excitement, frustration, nostalgia, humor, etc.)
-- Specific content formats, topics, or names that appear repeatedly
-- Demographic or interest signals hidden in the comments
-- Surprising contrasts or unexpected reactions
+What makes a good insight here:
+- Something that repeats enough to be a real signal, not a one-off
+- A reaction that surprised you, or is stronger/weaker than you'd expect
+- A question or request that keeps coming up
+- Something that tells you what to do next — a content angle, a format to try, a topic to lean into or back off
 
-REQUIREMENTS:
-- Each insight must cite 2–4 specific verbatim quotes as evidence (exact words from the comments above)
-- Each quote must include the commenter's name and approximate follower count if available
-- Be concrete and specific — mention actual themes, topics, names, numbers
-- The title should be a punchy 4–7 word headline
-- The insight body should be 2–3 sentences
+For each insight, pick 2–4 quotes that made you notice it. Real quotes, exact words, not paraphrased.
+
+TITLE: Short and direct. 4–7 words. Could be a finding ("Audience Craves Practical How-To Content") or a tension ("Science Fans Skeptical of Self-Help Framing"). No corporate language.
+
+INSIGHT BODY: 2–3 sentences. Say what you actually see, why it matters, and what you'd do with it. First person is fine ("This suggests…", "Worth testing…").
 
 Return ONLY valid JSON, no markdown fences, no explanation:
 {
   "insights": [
     {
-      "title": "Short punchy headline",
-      "insight": "2–3 sentence specific observation about what the data shows.",
+      "title": "Short direct headline",
+      "insight": "2–3 sentences: what you see, why it matters, what to do with it.",
       "evidence": [
         { "quote": "exact quote from comment", "commenter": "Name", "followers": "12.4K", "type": "comment" },
         { "quote": "exact quote from comment", "commenter": "Name", "followers": "8.2K", "type": "mention" }
