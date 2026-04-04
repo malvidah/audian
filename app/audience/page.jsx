@@ -15,7 +15,8 @@ function fmtDateRange(from, to) {
   return `${f(from)} – ${f(to)}`;
 }
 
-const PLAT_LABEL = { youtube: "YouTube", x: "X / Twitter", instagram: "Instagram", linkedin: "LinkedIn" };
+const PLAT_LABEL = { youtube: "YouTube", x: "X", instagram: "Instagram", linkedin: "LinkedIn" };
+const PLAT_COLOR = { instagram: "#E1306C", x: "#000000", linkedin: "#0A66C2", youtube: "#FF0000" };
 
 // Accent colours for each insight card (1, 2, 3)
 const INSIGHT_COLORS = [
@@ -266,9 +267,55 @@ function AudienceInsights({ activePlatform, dateFrom, dateTo }) {
                   {ins.insight}
                 </div>
 
+                {/* Content pieces that triggered this insight */}
+                {ins.content_pieces && ins.content_pieces.length > 0 && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <div style={{ fontFamily: sans, fontSize: 10, fontWeight: 700, color: T.dim,
+                      letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 2 }}>
+                      Content
+                    </div>
+                    {ins.content_pieces.map((cp, ci) => (
+                      <a key={ci} href={cp.permalink || "#"} target="_blank" rel="noreferrer"
+                        style={{ textDecoration: "none" }}>
+                        <div style={{
+                          background: "#fff", border: `1px solid ${T.border}`,
+                          borderRadius: 8, padding: "8px 12px",
+                          display: "flex", alignItems: "flex-start", gap: 8,
+                          transition: "border-color 0.12s",
+                        }}
+                          onMouseEnter={e => e.currentTarget.style.borderColor = c.accent}
+                          onMouseLeave={e => e.currentTarget.style.borderColor = T.border}
+                        >
+                          <div style={{
+                            width: 6, height: 6, borderRadius: "50%", flexShrink: 0, marginTop: 5,
+                            background: PLAT_COLOR[cp.platform] || T.dim,
+                          }} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontFamily: sans, fontSize: F.xs, color: T.text,
+                              lineHeight: 1.4, overflow: "hidden", display: "-webkit-box",
+                              WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
+                              {cp.snippet}
+                            </div>
+                            <div style={{ fontFamily: sans, fontSize: 10, color: T.dim, marginTop: 3,
+                              display: "flex", gap: 8 }}>
+                              <span>{PLAT_LABEL[cp.platform] || cp.platform}</span>
+                              {cp.date && <span>{cp.date}</span>}
+                              {cp.likes && <span>♥ {cp.likes}</span>}
+                            </div>
+                          </div>
+                        </div>
+                      </a>
+                    ))}
+                  </div>
+                )}
+
                 {/* Evidence quotes */}
                 {ins.evidence && ins.evidence.length > 0 && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <div style={{ fontFamily: sans, fontSize: 10, fontWeight: 700, color: T.dim,
+                      letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 2 }}>
+                      Comments
+                    </div>
                     {ins.evidence.map((ev, ei) => (
                       <div key={ei} style={{
                         background: "#fff",
@@ -284,9 +331,7 @@ function AudienceInsights({ activePlatform, dateFrom, dateTo }) {
                           "{ev.quote}"
                         </div>
                         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                          <span style={{
-                            fontFamily: sans, fontSize: 11, fontWeight: 600, color: T.sub,
-                          }}>
+                          <span style={{ fontFamily: sans, fontSize: 11, fontWeight: 600, color: T.sub }}>
                             — {ev.commenter}
                           </span>
                           {ev.type && (
