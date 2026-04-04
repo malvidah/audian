@@ -289,15 +289,6 @@ function AudienceInsights({ activePlatform, dateFrom, dateTo }) {
                           }}>
                             — {ev.commenter}
                           </span>
-                          {ev.followers && ev.followers !== "0" && (
-                            <span style={{
-                              fontFamily: sans, fontSize: 10, color: T.dim,
-                              background: T.well, borderRadius: 4, padding: "1px 6px",
-                              border: `1px solid ${T.border}`,
-                            }}>
-                              {ev.followers} followers
-                            </span>
-                          )}
                           {ev.type && (
                             <span style={{
                               fontFamily: sans, fontSize: 10, color: c.accent,

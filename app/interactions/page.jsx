@@ -119,16 +119,15 @@ function ExportIconBtn({ wrapperRef, filename, onBeforeCapture }) {
 
 function ContextStamp({ dateFrom, dateTo, activePlatform }) {
   const PLAT_LABEL = { instagram: "Instagram", x: "X", linkedin: "LinkedIn", youtube: "YouTube" };
-  const platLabel = activePlatform?.length > 0 ? activePlatform.map(p => PLAT_LABEL[p] || p).join(", ") : null;
-  const dateLabel = dateFrom && dateTo ? `${dateFrom} – ${dateTo}` : null;
-  if (!platLabel && !dateLabel) return null;
+  const platLabel = activePlatform?.length > 0 ? activePlatform.map(p => PLAT_LABEL[p] || p).join(", ") : "All platforms";
+  const dateLabel = dateFrom && dateTo ? `${dateFrom} – ${dateTo}` : "All time";
   return (
     <div style={{
       marginTop: 14, paddingTop: 10, borderTop: `1px solid ${T.border}`,
       display: "flex", alignItems: "center", justifyContent: "space-between",
       fontFamily: sans, fontSize: 10, color: T.dim,
     }}>
-      <span>{[platLabel, dateLabel].filter(Boolean).join(" · ")}</span>
+      <span>{platLabel} · {dateLabel}</span>
       <span style={{ fontWeight: 700, letterSpacing: "0.08em" }}>AUDIAN</span>
     </div>
   );
