@@ -45,7 +45,7 @@ Return ONLY a valid JSON array with exactly 3 objects, no markdown, no explanati
         'content-type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'claude-3-5-haiku-20241022',
+        model: 'claude-haiku-4-5-20251001',
         max_tokens: 600,
         messages: [{ role: 'user', content: prompt }],
       }),
