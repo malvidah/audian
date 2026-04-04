@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import { PlatDot, PLAT_COLORS } from "./PlatIcon";
+import ReportModal from "./ReportModal";
 // Re-export design system so pages that import PageShell still work
 export { T, sans, F, fmt, fmtDate, timeAgo, truncate, PLAT_LABEL } from "../lib/design.js";
 import { T, sans, F, fmt, fmtDate, timeAgo, PLAT_LABEL } from "../lib/design.js";
@@ -1481,6 +1482,7 @@ export default function PageShell({ activeTab, children }) {
   const [actionMessage,  setActionMessage] = useState(null);
   const [enriching,      setEnriching]     = useState(false);
   const [refreshKey,     setRefreshKey]    = useState(0);
+  const [showReport,     setShowReport]    = useState(false);
 
   // Auth
   useEffect(() => {
@@ -1803,9 +1805,39 @@ export default function PageShell({ activeTab, children }) {
                 )}
               </div>
             </div>
+
+            {/* Export Report button */}
+            <button
+              onClick={() => setShowReport(true)}
+              style={{
+                fontFamily: sans, fontSize: F.xs, fontWeight: 600,
+                padding: "6px 14px", borderRadius: 8, border: "none",
+                cursor: "pointer", background: "#f97316", color: "#fff",
+                display: "flex", alignItems: "center", gap: 6,
+                boxShadow: "0 1px 3px rgba(249,115,22,0.3)",
+                transition: "opacity 0.15s",
+              }}
+              onMouseEnter={e => e.currentTarget.style.opacity = "0.85"}
+              onMouseLeave={e => e.currentTarget.style.opacity = "1"}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+              Export Report
+            </button>
           </div>
         </div>
       </div>
+
+      {/* Report Modal */}
+      {showReport && (
+        <ReportModal
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          accountName={accountName}
+          onClose={() => setShowReport(false)}
+        />
+      )}
 
       <div style={{ maxWidth: 1100, margin: "0 auto", padding: "24px 24px" }}>
 
