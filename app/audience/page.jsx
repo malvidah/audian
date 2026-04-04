@@ -42,7 +42,7 @@ function ExportIconBtn({ wrapperRef, filename }) {
     } finally { setBusy(false); }
   }
   return (
-    <button onClick={handleExport} disabled={busy} title="Export as image"
+    <button onClick={handleExport} disabled={busy} title="Export as image" data-html2canvas-ignore="true"
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
       style={{
         width: 28, height: 28, borderRadius: 7,
