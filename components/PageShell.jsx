@@ -1457,13 +1457,21 @@ export default function PageShell({ activeTab, children }) {
   const [error,          setError]         = useState(null);
   const [activePlatform, setActivePlatform] = useState("all");
   const [selectedWeek,   setSelectedWeek]  = useState(null);
-  const [dateRange,      setDateRange]      = useState("3m");
-  const [dateFrom,       setDateFrom]      = useState(daysAgo(90));
-  const [dateTo,         setDateTo]        = useState(TODAY);
-  const [showCustom,     setShowCustom]    = useState(false);
+  const [dateRange,      setDateRange]      = useState(() => sessionStorage.getItem("audian_dateRange") || "3m");
+  const [dateFrom,       setDateFrom]      = useState(() => sessionStorage.getItem("audian_dateFrom") || daysAgo(90));
+  const [dateTo,         setDateTo]        = useState(() => sessionStorage.getItem("audian_dateTo")   || TODAY);
+  const [showCustom,     setShowCustom]    = useState(() => sessionStorage.getItem("audian_dateRange") === "custom");
   const [calOpen,        setCalOpen]       = useState(null); // "from" | "to" | null
   const calFromRef = useRef(null);
   const calToRef   = useRef(null);
+
+  // Persist date range to sessionStorage so it survives tab navigation
+  useEffect(() => {
+    sessionStorage.setItem("audian_dateRange", dateRange);
+    sessionStorage.setItem("audian_dateFrom",  dateFrom);
+    sessionStorage.setItem("audian_dateTo",    dateTo);
+  }, [dateRange, dateFrom, dateTo]);
+
   const [followerSnaps,  setFollowerSnaps] = useState([]);
   const [followerLatest, setFollowerLatest] = useState({});
   const [weekFilter,     setWeekFilter]    = useState(null);
