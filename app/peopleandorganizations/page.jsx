@@ -238,7 +238,7 @@ function ActiveInNetwork({ activePlatform, dateFrom, dateTo }) {
 
         {/* Cards */}
         <div ref={expanded ? undefined : scrollRef} style={expanded ? {
-          display: "flex", flexWrap: "wrap", gap: 12,
+          display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 12,
         } : {
           display: "flex", gap: 12, overflowX: "auto", overflowY: "hidden",
           scrollbarWidth: "none", msOverflowStyle: "none", paddingBottom: 4,
@@ -253,7 +253,7 @@ function ActiveInNetwork({ activePlatform, dateFrom, dateTo }) {
                 onMouseEnter={() => setHoveredId(p.id)}
                 onMouseLeave={() => setHoveredId(null)}
                 style={{
-                  flexShrink: 0, width: 260,
+                  ...(expanded ? {} : { flexShrink: 0, width: 260 }),
                   background: T.card,
                   border: `1px solid ${isHovered ? (T.border2 || T.border) : T.border}`,
                   borderRadius: 12, padding: "14px 16px",

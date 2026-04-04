@@ -267,7 +267,7 @@ function NotableInteractions({ activePlatform, dateFrom, dateTo }) {
 
         {/* Card container */}
         <div ref={expanded ? undefined : scrollRef} style={expanded ? {
-          display: "flex", flexWrap: "wrap", gap: 14,
+          display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 14,
         } : {
           display: "flex", gap: 14, overflowX: "auto", overflowY: "hidden",
           scrollbarWidth: "none", msOverflowStyle: "none", paddingBottom: 4,
@@ -293,8 +293,7 @@ function NotableInteractions({ activePlatform, dateFrom, dateTo }) {
                 boxShadow: isHovered ? T.shadowMd : T.shadowSm,
                 transition: "all 0.15s ease",
                 transform: isHovered ? "translateY(-1px)" : "none",
-                flexShrink: 0,
-                width: 320,
+                ...(expanded ? {} : { flexShrink: 0, width: 320 }),
               }}
             >
               {/* Top row: avatar + name + platform */}
