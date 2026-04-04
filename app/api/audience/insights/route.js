@@ -121,14 +121,14 @@ For each insight include:
 
 TITLE: 4–7 words, direct. Could be a finding or a tension.
 
-INSIGHT BODY: 2–3 sentences. What you see, why it matters, what you'd do with it.
+INSIGHT BODY: 2–3 sentences. What you see, why it matters, what you'd do with it. IMPORTANT: Never use P-number labels (like P1, P4, P10) in the insight text. Refer to posts by their actual content, topic, or a short description (e.g. "the post about male communication", "the physics video").
 
 Return ONLY valid JSON, no markdown fences, no explanation:
 {
   "insights": [
     {
       "title": "Short direct headline",
-      "insight": "2–3 sentences: what you see, why it matters, what to do with it.",
+      "insight": "2–3 sentences: what you see, why it matters, what to do with it. Refer to posts by content, not by P-numbers.",
       "content_pieces": [
         { "snippet": "first ~10 words of the post", "platform": "instagram", "date": "Mar 27, 2026", "permalink": "https://...", "likes": "9.9K" }
       ],
@@ -166,7 +166,28 @@ Return ONLY valid JSON, no markdown fences, no explanation:
     if (!match) return NextResponse.json({ error: 'Could not parse insights', raw }, { status: 500 });
 
     const parsed = JSON.parse(match[0]);
-    return NextResponse.json({ insights: parsed.insights, commentCount: interactions.length });
+    const insightsArr = parsed.insights || [];
+
+    // ── Auto-save to DB ───────────────────────────────────────────────────────
+    const platformStr = platforms.sort().join(',');
+    const { data: saved } = await supabaseAdmin
+      .from('audience_insights_saved')
+      .insert({
+        date_from:     dateFrom || null,
+        date_to:       dateTo   || null,
+        platforms:     platformStr,
+        comment_count: interactions.length,
+        insights:      insightsArr,
+      })
+      .select('id, created_at')
+      .single();
+
+    return NextResponse.json({
+      insights:     insightsArr,
+      commentCount: interactions.length,
+      savedId:      saved?.id,
+      savedAt:      saved?.created_at,
+    });
 
   } catch (e) {
     return NextResponse.json({ error: e.message }, { status: 500 });
