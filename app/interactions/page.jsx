@@ -45,9 +45,10 @@ const PLAT_URL = {
 
 
 const ZONE_BADGE_CFG = {
-  ELITE:       { label: "ELITE",       color: T.accent, bg: "#FFF3EE", border: "#FFD4C2" },
-  INFLUENTIAL: { label: "INFLUENTIAL", color: "#16A34A", bg: "#F0FDF4", border: "#BBF7D0" },
-  SIGNAL:      { label: "SIGNAL",      color: "#2563EB", bg: "#EFF6FF", border: "#BFDBFE" },
+  ELITE:        { label: "ELITE",        color: T.accent,  bg: "#FFF3EE", border: "#FFD4C2" },
+  INFLUENTIAL:  { label: "INFLUENTIAL",  color: "#16A34A", bg: "#F0FDF4", border: "#BBF7D0" },
+  SIGNAL:       { label: "SIGNAL",       color: "#2563EB", bg: "#EFF6FF", border: "#BFDBFE" },
+  COLLABORATOR: { label: "COLLABORATOR", color: "#7C3AED", bg: "#F5F3FF", border: "#DDD6FE" },
 };
 
 const TYPE_BADGE_CFG = {
