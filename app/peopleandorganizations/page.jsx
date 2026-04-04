@@ -258,7 +258,7 @@ function ActiveInNetwork({ activePlatform, dateFrom, dateTo }) {
                   border: `1px solid ${isHovered ? (T.border2 || T.border) : T.border}`,
                   borderRadius: 12, padding: "14px 16px",
                   boxShadow: isHovered ? T.shadowMd : T.shadowSm,
-                  transition: "all 0.15s ease",
+                  transition: "box-shadow 0.15s ease, border-color 0.15s ease, transform 0.15s ease",
                   transform: isHovered ? "translateY(-1px)" : "none",
                 }}
               >

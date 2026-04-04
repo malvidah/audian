@@ -291,7 +291,7 @@ function NotableInteractions({ activePlatform, dateFrom, dateTo }) {
                 borderRadius: 12,
                 padding: "16px 18px",
                 boxShadow: isHovered ? T.shadowMd : T.shadowSm,
-                transition: "all 0.15s ease",
+                transition: "box-shadow 0.15s ease, border-color 0.15s ease, transform 0.15s ease",
                 transform: isHovered ? "translateY(-1px)" : "none",
                 ...(expanded ? {} : { flexShrink: 0, width: 320 }),
               }}
