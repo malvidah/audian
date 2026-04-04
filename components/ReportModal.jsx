@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useEffect, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
+import { ZONE_CFG } from "../lib/design";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -10,12 +11,7 @@ const supabase = createClient(
 const sans = "-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif";
 const ACCENT = "#FF6B35";
 
-const ZONE_CFG = {
-  ELITE:        { label: "ELITE",       color: "#FF6B35", bg: "#FFF3EE", border: "#FFD4C2" },
-  COLLABORATOR: { label: "COLLABORATOR",color: "#DB2777", bg: "#FFF1F2", border: "#FECDD3" },
-  INFLUENTIAL:  { label: "INFLUENTIAL", color: "#16A34A", bg: "#F0FDF4", border: "#BBF7D0" },
-  SIGNAL:       { label: "SIGNAL",      color: "#2563EB", bg: "#EFF6FF", border: "#BFDBFE" },
-};
+// Zone badge config — imported from lib/design (single source of truth)
 
 const TYPE_CFG = {
   like:          { label: "Like",          color: "#DC2626", bg: "#FEF2F2", border: "#FECACA" },

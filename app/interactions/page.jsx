@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
 import dynamic from "next/dynamic";
 import PageShell, { T, sans, F } from "../../components/PageShell";
+import { ZONE_CFG } from "../../lib/design";
 import { PlatChip, PLAT_COLORS } from "../../components/PlatIcon";
 
 const supabase = createClient(
@@ -44,12 +45,7 @@ const PLAT_URL = {
 };
 
 
-const ZONE_BADGE_CFG = {
-  ELITE:        { label: "ELITE",        color: T.accent,  bg: "#FFF3EE", border: "#FFD4C2" },
-  INFLUENTIAL:  { label: "INFLUENTIAL",  color: "#16A34A", bg: "#F0FDF4", border: "#BBF7D0" },
-  SIGNAL:       { label: "SIGNAL",       color: "#2563EB", bg: "#EFF6FF", border: "#BFDBFE" },
-  COLLABORATOR: { label: "COLLABORATOR", color: "#7C3AED", bg: "#F5F3FF", border: "#DDD6FE" },
-};
+// Zone badge config — imported from lib/design (single source of truth)
 
 const TYPE_BADGE_CFG = {
   like:    { label: "Like",    icon: "\u2665", bg: "#FEF2F2", color: "#DC2626", border: "#FECACA" },
@@ -334,7 +330,7 @@ function NotableInteractions({ activePlatform, dateFrom, dateTo }) {
         }}>
         {mentions.map((m) => {
           const isHovered = hoveredId === m.id;
-          const zoneCfg = ZONE_BADGE_CFG[m.zone] || ZONE_BADGE_CFG.SIGNAL;
+          const zoneCfg = ZONE_CFG[m.zone] || ZONE_CFG.SIGNAL;
           const typeCfg = TYPE_BADGE_CFG[m.type] || { label: m.type || "Unknown", bg: T.well, color: T.sub, border: T.border };
           const avatarLetter = (m.name && m.name !== "Unknown") ? m.name.charAt(0).toUpperCase() : null;
           const gradientIdx = Math.abs((m.name || "").split("").reduce((acc, c) => acc + c.charCodeAt(0), 0)) % AVATAR_GRADIENTS.length;

@@ -100,12 +100,7 @@ const TYPE_BADGE = {
   tag:     { label: "Tag",     bg: "#F5F3FF", color: "#7C3AED", border: "#DDD6FE" },
 };
 
-const ZONE_BADGE_CFG = {
-  ELITE:        { label: "ELITE",        color: T.accent,  bg: "#FFF3EE", border: "#FFD4C2" },
-  COLLABORATOR: { label: "COLLABORATOR", color: "#DB2777", bg: "#FFF1F2", border: "#FECDD3" },
-  INFLUENTIAL:  { label: "INFLUENTIAL",  color: "#16A34A", bg: "#F0FDF4", border: "#BBF7D0" },
-  SIGNAL:       { label: "SIGNAL",       color: "#2563EB", bg: "#EFF6FF", border: "#BFDBFE" },
-};
+// Zone badge config — use ZONE_CFG from lib/design (imported above)
 
 const ZONE_PRIORITY = { ELITE: 0, COLLABORATOR: 0, INFLUENTIAL: 1, SIGNAL: 2 };
 
@@ -575,7 +570,7 @@ function NotableInteractions({ activePlatform, dateFrom, dateTo, expanded, onExp
         }}>
           {mentions.map(m => {
             const isHovered = hoveredId === m.id;
-            const zoneCfg   = ZONE_BADGE_CFG[m.zone] || ZONE_BADGE_CFG.SIGNAL;
+            const zoneCfg   = ZONE_CFG[m.zone] || ZONE_CFG.SIGNAL;
             const typeCfg   = TYPE_BADGE[m.type] || { label: m.type || "Unknown", bg: T.well, color: T.sub, border: T.border };
             const letter    = (m.name && m.name !== "Unknown") ? m.name.charAt(0).toUpperCase() : null;
             const gradIdx   = Math.abs((m.name || "").split("").reduce((a, c) => a + c.charCodeAt(0), 0)) % AVATAR_GRADIENTS.length;
