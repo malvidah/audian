@@ -457,6 +457,7 @@ function Outliers({ posts, activePlatform, selectedWeek, dateFrom, dateTo }) {
       p.engagement < avg * 0.5 &&
       p.engagement >= 0 &&
       p.published_at &&
+      p.content?.trim() &&
       (Date.now() - new Date(p.published_at).getTime()) >= ONE_WEEK_MS
     ).sort((a, b) => a.engagement - b.engagement).slice(0, 5);
 
