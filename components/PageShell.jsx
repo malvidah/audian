@@ -234,6 +234,7 @@ const TABS = [
   { key: "engagement",   label: "Posts",        emoji: "\uD83D\uDCCA", href: "/" },
   { key: "interactions", label: "Interactions", emoji: "\uD83E\uDD1D", href: "/interactions" },
   { key: "handles",      label: "People & Organizations", emoji: "\uD83D\uDC64", href: "/peopleandorganizations" },
+  { key: "report",       label: "Report",       emoji: "\uD83D\uDCCB", href: "/report" },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
