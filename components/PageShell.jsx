@@ -1457,10 +1457,10 @@ export default function PageShell({ activeTab, children }) {
   const [error,          setError]         = useState(null);
   const [activePlatform, setActivePlatform] = useState("all");
   const [selectedWeek,   setSelectedWeek]  = useState(null);
-  const [dateRange,      setDateRange]      = useState(() => sessionStorage.getItem("audian_dateRange") || "3m");
-  const [dateFrom,       setDateFrom]      = useState(() => sessionStorage.getItem("audian_dateFrom") || daysAgo(90));
-  const [dateTo,         setDateTo]        = useState(() => sessionStorage.getItem("audian_dateTo")   || TODAY);
-  const [showCustom,     setShowCustom]    = useState(() => sessionStorage.getItem("audian_dateRange") === "custom");
+  const [dateRange,      setDateRange]      = useState(() => (typeof window !== "undefined" && sessionStorage.getItem("audian_dateRange")) || "3m");
+  const [dateFrom,       setDateFrom]      = useState(() => (typeof window !== "undefined" && sessionStorage.getItem("audian_dateFrom")) || daysAgo(90));
+  const [dateTo,         setDateTo]        = useState(() => (typeof window !== "undefined" && sessionStorage.getItem("audian_dateTo"))   || TODAY);
+  const [showCustom,     setShowCustom]    = useState(() => typeof window !== "undefined" && sessionStorage.getItem("audian_dateRange") === "custom");
   const [calOpen,        setCalOpen]       = useState(null); // "from" | "to" | null
   const calFromRef = useRef(null);
   const calToRef   = useRef(null);
