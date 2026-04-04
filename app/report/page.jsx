@@ -481,7 +481,7 @@ function NotableInteractions({ activePlatform, dateFrom, dateTo }) {
           deduped.push(m);
         }
 
-        const notable = deduped.filter(m => m.zone === "ELITE");
+        const notable = deduped.filter(m => m.zone === "ELITE" || m.zone === "COLLABORATOR");
         notable.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
         if (!cancelled) setMentions(notable);
       } catch (err) {

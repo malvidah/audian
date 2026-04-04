@@ -176,8 +176,8 @@ function NotableInteractions({ activePlatform, dateFrom, dateTo }) {
           deduped.push(m);
         }
 
-        // Only keep ELITE interactions, sorted most recent first
-        const notable = deduped.filter(m => m.zone === "ELITE");
+        // Only keep ELITE + COLLABORATOR interactions, sorted most recent first
+        const notable = deduped.filter(m => m.zone === "ELITE" || m.zone === "COLLABORATOR");
         notable.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
 
         if (!cancelled) setMentions(notable);
