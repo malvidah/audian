@@ -1267,7 +1267,8 @@ function ProfileMenu({ session, avatarUrl, onAvatarChange, connections = [], onD
 // ─── PageShell ───────────────────────────────────────────────────────────────
 // ─── Followers chart ─────────────────────────────────────────────────────────
 function FollowersChart({ snapshots, activePlatform }) {
-  const [hover, setHover] = useState(null);
+  const [hover, setHover]         = useState(null);
+  const [collapsed, setCollapsed] = useState(true);
 
   const empty = !snapshots || snapshots.length === 0 ||
     snapshots.every(s => !s.followers || s.followers === 0);
@@ -1381,13 +1382,39 @@ function FollowersChart({ snapshots, activePlatform }) {
 
   return (
     <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 14,
-      padding: "20px 24px 14px", marginBottom: 24, boxShadow: T.shadowSm }}>
+      padding: collapsed ? "14px 24px" : "20px 24px 14px", marginBottom: 24, boxShadow: T.shadowSm,
+      transition: "padding 0.2s ease" }}>
 
-      <div style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text, marginBottom: 16 }}>
-        {label}
+      {/* Header row — always visible */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ fontFamily: sans, fontSize: F.sm, fontWeight: 600, color: T.text }}>
+          {label}
+        </div>
+        <button
+          onClick={() => setCollapsed(c => !c)}
+          title={collapsed ? "Show chart" : "Hide chart"}
+          style={{
+            background: "none", border: "none", cursor: "pointer",
+            display: "flex", alignItems: "center", gap: 5,
+            fontFamily: sans, fontSize: F.xs, fontWeight: 600, color: T.dim,
+            padding: "4px 6px", borderRadius: 6, transition: "color 0.15s",
+          }}
+          onMouseEnter={e => e.currentTarget.style.color = T.text}
+          onMouseLeave={e => e.currentTarget.style.color = T.dim}
+        >
+          {collapsed ? "Show" : "Hide"}
+          <svg
+            width="12" height="12" viewBox="0 0 12 12" fill="none"
+            style={{ transition: "transform 0.2s ease", transform: collapsed ? "rotate(0deg)" : "rotate(180deg)" }}
+          >
+            <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
       </div>
 
-      <div style={{ position: "relative" }}>
+      {/* Collapsible chart body */}
+      {!collapsed && (
+      <div style={{ marginTop: 16, position: "relative" }}>
         <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", display: "block", overflow: "visible" }}
           onMouseMove={handleMouseMove} onMouseLeave={() => setHover(null)}>
           <defs>
@@ -1446,6 +1473,7 @@ function FollowersChart({ snapshots, activePlatform }) {
           );
         })()}
       </div>
+      )}
     </div>
   );
 }
