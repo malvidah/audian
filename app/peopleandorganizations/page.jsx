@@ -79,6 +79,7 @@ function ActiveInNetwork({ activePlatform, dateFrom, dateTo }) {
   const [loading, setLoading]         = useState(true);
   const [hoveredId, setHoveredId]     = useState(null);
   const [chevronHover, setChevronHover] = useState(null);
+  const [expanded, setExpanded]       = useState(false);
   const scrollRef = useRef(null);
 
   function scroll(dir) {
@@ -196,34 +197,51 @@ function ActiveInNetwork({ activePlatform, dateFrom, dateTo }) {
         }}>
           {people.length}
         </span>
+        <button
+          onClick={() => setExpanded(e => !e)}
+          title={expanded ? "Collapse" : "Show all"}
+          style={{
+            marginLeft: "auto", background: "none", border: `1px solid ${T.border}`,
+            borderRadius: 6, cursor: "pointer", padding: "3px 8px",
+            color: T.dim, fontSize: F.xs, fontWeight: 600, fontFamily: sans,
+            display: "flex", alignItems: "center", gap: 4, transition: "all 0.15s",
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background = T.well; e.currentTarget.style.color = T.text; }}
+          onMouseLeave={e => { e.currentTarget.style.background = "none"; e.currentTarget.style.color = T.dim; }}
+        >
+          {expanded ? "▴ Collapse" : "▾ Show all"}
+        </button>
       </div>
 
-      {/* Scroll strip */}
+      {/* Scroll strip / expanded grid */}
       <div style={{ position: "relative" }}>
-        {/* Left chevron */}
-        <button
-          onClick={() => scroll(-1)}
-          onMouseEnter={() => setChevronHover("left")}
-          onMouseLeave={() => setChevronHover(null)}
-          style={{
-            position: "absolute", left: -14, top: "50%", transform: "translateY(-50%)",
-            zIndex: 10, width: 28, height: 28, borderRadius: "50%",
-            border: `1px solid ${T.border}`,
-            background: chevronHover === "left" ? T.accent : T.card,
-            color: chevronHover === "left" ? "#fff" : T.sub,
-            display: "flex", alignItems: "center", justifyContent: "center",
-            cursor: "pointer", fontSize: 14, fontWeight: 700,
-            boxShadow: "0 1px 4px rgba(0,0,0,0.10)",
-            transition: "all 0.15s",
-          }}>
-          ‹
-        </button>
+        {/* Left scroll chevron — hidden when expanded */}
+        {!expanded && (
+          <button
+            onClick={() => scroll(-1)}
+            onMouseEnter={() => setChevronHover("left")}
+            onMouseLeave={() => setChevronHover(null)}
+            style={{
+              position: "absolute", left: -14, top: "50%", transform: "translateY(-50%)",
+              zIndex: 10, width: 28, height: 28, borderRadius: "50%",
+              border: `1px solid ${T.border}`,
+              background: chevronHover === "left" ? T.accent : T.card,
+              color: chevronHover === "left" ? "#fff" : T.sub,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              cursor: "pointer", fontSize: 14, fontWeight: 700,
+              boxShadow: "0 1px 4px rgba(0,0,0,0.10)",
+              transition: "all 0.15s",
+            }}>
+            ‹
+          </button>
+        )}
 
         {/* Cards */}
-        <div ref={scrollRef} style={{
+        <div ref={expanded ? undefined : scrollRef} style={expanded ? {
+          display: "flex", flexWrap: "wrap", gap: 12,
+        } : {
           display: "flex", gap: 12, overflowX: "auto", overflowY: "hidden",
-          scrollbarWidth: "none", msOverflowStyle: "none",
-          paddingBottom: 4,
+          scrollbarWidth: "none", msOverflowStyle: "none", paddingBottom: 4,
         }}>
           {people.map(p => {
             const isHovered = hoveredId === p.id;
@@ -359,24 +377,26 @@ function ActiveInNetwork({ activePlatform, dateFrom, dateTo }) {
           })}
         </div>
 
-        {/* Right chevron */}
-        <button
-          onClick={() => scroll(1)}
-          onMouseEnter={() => setChevronHover("right")}
-          onMouseLeave={() => setChevronHover(null)}
-          style={{
-            position: "absolute", right: -14, top: "50%", transform: "translateY(-50%)",
-            zIndex: 10, width: 28, height: 28, borderRadius: "50%",
-            border: `1px solid ${T.border}`,
-            background: chevronHover === "right" ? T.accent : T.card,
-            color: chevronHover === "right" ? "#fff" : T.sub,
-            display: "flex", alignItems: "center", justifyContent: "center",
-            cursor: "pointer", fontSize: 14, fontWeight: 700,
-            boxShadow: "0 1px 4px rgba(0,0,0,0.10)",
-            transition: "all 0.15s",
-          }}>
-          ›
-        </button>
+        {/* Right scroll chevron — hidden when expanded */}
+        {!expanded && (
+          <button
+            onClick={() => scroll(1)}
+            onMouseEnter={() => setChevronHover("right")}
+            onMouseLeave={() => setChevronHover(null)}
+            style={{
+              position: "absolute", right: -14, top: "50%", transform: "translateY(-50%)",
+              zIndex: 10, width: 28, height: 28, borderRadius: "50%",
+              border: `1px solid ${T.border}`,
+              background: chevronHover === "right" ? T.accent : T.card,
+              color: chevronHover === "right" ? "#fff" : T.sub,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              cursor: "pointer", fontSize: 14, fontWeight: 700,
+              boxShadow: "0 1px 4px rgba(0,0,0,0.10)",
+              transition: "all 0.15s",
+            }}>
+            ›
+          </button>
+        )}
       </div>
     </div>
   );
