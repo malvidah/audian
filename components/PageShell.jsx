@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useLayoutEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import { PlatDot, PLAT_COLORS } from "./PlatIcon";
@@ -26,7 +26,16 @@ function MiniCalendar({ value, onChange, onClose, anchorRef }) {
   const today     = new Date();
   const initDate  = value ? new Date(value + "T12:00:00") : today;
   const [view, setView] = useState({ year: initDate.getFullYear(), month: initDate.getMonth() });
+  const [alignRight, setAlignRight] = useState(false);
   const ref = useRef(null);
+
+  // Flip to right-aligned if calendar would overflow off screen
+  useLayoutEffect(() => {
+    if (ref.current) {
+      const rect = ref.current.getBoundingClientRect();
+      if (rect.right > window.innerWidth - 8) setAlignRight(true);
+    }
+  }, []);
 
   // Close on outside click
   useEffect(() => {
@@ -62,6 +71,7 @@ function MiniCalendar({ value, onChange, onClose, anchorRef }) {
   return (
     <div ref={ref} style={{
       position: "absolute", zIndex: 9999, marginTop: 6,
+      ...(alignRight ? { right: 0 } : { left: 0 }),
       background: "#fff", borderRadius: 14,
       boxShadow: "0 8px 32px rgba(0,0,0,0.13), 0 1px 4px rgba(0,0,0,0.06)",
       padding: "16px 16px 12px",
@@ -506,8 +516,30 @@ function ImportPanel({ posts, onImported }) {
   );
 }
 
+// ─── Sparkline ────────────────────────────────────────────────────────────────
+function Sparkline({ data, color, width = 72, height = 26 }) {
+  if (!data || data.length < 2) return null;
+  const min = Math.min(...data);
+  const max = Math.max(...data);
+  const range = max - min || 1;
+  const pts = data.map((v, i) => {
+    const x = (i / (data.length - 1)) * (width - 2) + 1;
+    const y = height - 2 - ((v - min) / range) * (height - 5);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+  const polyPts  = pts.join(" ");
+  const areaPts  = `1,${height - 1} ${polyPts} ${(width - 1).toFixed(1)},${height - 1}`;
+  return (
+    <svg width={width} height={height} style={{ display: "block", flexShrink: 0, overflow: "visible" }}>
+      <polyline points={areaPts} fill={color + "22"} stroke="none" />
+      <polyline points={polyPts} fill="none" stroke={color} strokeWidth={1.5}
+        strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 // ─── Platform stats row (cards double as filter buttons) ─────────────────────
-function PlatformStats({ posts, activePlatform, onPlatformSelect, followerLatest }) {
+function PlatformStats({ posts, activePlatform, onPlatformSelect, followerLatest, followerSnaps }) {
   const order = ["instagram", "x", "linkedin", "youtube"];
   const stats = {};
   for (const plat of order) {
@@ -530,13 +562,48 @@ function PlatformStats({ posts, activePlatform, onPlatformSelect, followerLatest
     maxLikes: allPosts.length ? Math.max(...allPosts.map(p => parseInt(p.likes || 0))) : 0,
   };
 
+  // Build sparkline data per platform (one value per day, deduplicated)
+  const sparklines = {};
+  for (const plat of order) {
+    const byDay = {};
+    for (const s of followerSnaps || []) {
+      if (s.platform !== plat || !s.followers) continue;
+      const day = s.snapshot_at.slice(0, 10);
+      if (!byDay[day] || s.snapshot_at > byDay[day].snapshot_at) byDay[day] = s;
+    }
+    sparklines[plat] = Object.values(byDay)
+      .sort((a, b) => a.snapshot_at.localeCompare(b.snapshot_at))
+      .map(s => s.followers);
+  }
+  // "all" sparkline: fill-forward sum per day across all platforms
+  const allDays = [...new Set((followerSnaps || []).map(s => s.snapshot_at.slice(0, 10)))].sort();
+  const pLast = {};
+  const allSparkPts = [];
+  for (const day of allDays) {
+    for (const plat of order) {
+      const best = (followerSnaps || [])
+        .filter(s => s.platform === plat && s.snapshot_at.slice(0, 10) === day && s.followers)
+        .sort((a, b) => b.snapshot_at.localeCompare(a.snapshot_at))[0];
+      if (best) pLast[plat] = best.followers;
+    }
+    const total = Object.values(pLast).reduce((a, b) => a + b, 0);
+    if (total > 0) allSparkPts.push(total);
+  }
+  sparklines["all"] = allSparkPts;
+
   const cards = [["all", allStats], ...order.map(p => [p, stats[p]])];
 
   return (
     <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 24 }}>
       {cards.map(([plat, s]) => {
-        const isActive = plat === "all" ? activePlatform.length === 0 : activePlatform.includes(plat);
-        const color    = PLAT_COLORS[plat] || T.accent;
+        const isActive  = plat === "all" ? activePlatform.length === 0 : activePlatform.includes(plat);
+        const color     = PLAT_COLORS[plat] || T.accent;
+        const sparkData = sparklines[plat] || [];
+        const followerVal = plat === "all"
+          ? (followerLatest && Object.keys(followerLatest).length
+              ? fmt(Object.values(followerLatest).reduce((a, b) => a + b, 0))
+              : "—")
+          : (followerLatest?.[plat] ? fmt(followerLatest[plat]) : "—");
         return (
           <div key={plat} onClick={() => {
             if (plat === "all") { onPlatformSelect([]); return; }
@@ -548,7 +615,6 @@ function PlatformStats({ posts, activePlatform, onPlatformSelect, followerLatest
               background: isActive ? color + "08" : T.card,
               border:     `1px solid ${isActive ? color + "44" : T.border}`,
               borderRadius: 12, padding: "12px 16px", flex: "1 1 140px",
-              boxShadow: isActive ? "none" : "none",
               cursor: "pointer", transition: "all 0.12s",
             }}>
             <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8 }}>
@@ -562,15 +628,10 @@ function PlatformStats({ posts, activePlatform, onPlatformSelect, followerLatest
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px 14px" }}>
               {[
-                ["Posts",      s.count],
+                ["Posts",       s.count],
                 ["Total likes", fmt(s.likes)],
-                ["Top post",   fmt(s.maxLikes) + " likes"],
+                ["Top post",    fmt(s.maxLikes) + " likes"],
                 ["Impressions", fmt(s.impr)],
-                ["Followers", plat === "all"
-                  ? (followerLatest && Object.keys(followerLatest).length
-                      ? fmt(Object.values(followerLatest).reduce((a, b) => a + b, 0))
-                      : "—")
-                  : (followerLatest?.[plat] ? fmt(followerLatest[plat]) : "—")],
               ].map(([lbl, val]) => (
                 <div key={lbl}>
                   <div style={{ fontFamily: sans, fontSize: 10, color: T.dim, marginBottom: 1 }}>{lbl}</div>
@@ -578,6 +639,20 @@ function PlatformStats({ posts, activePlatform, onPlatformSelect, followerLatest
                     color: isActive && plat !== "all" ? color : T.text }}>{val}</div>
                 </div>
               ))}
+            </div>
+            {/* Followers row + sparkline */}
+            <div style={{
+              display: "flex", alignItems: "flex-end", justifyContent: "space-between",
+              marginTop: 10, paddingTop: 8, borderTop: `1px solid ${T.border}`,
+            }}>
+              <div>
+                <div style={{ fontFamily: sans, fontSize: 10, color: T.dim, marginBottom: 1 }}>Followers</div>
+                <div style={{ fontFamily: sans, fontSize: F.xs, fontWeight: 600,
+                  color: isActive && plat !== "all" ? color : T.text }}>{followerVal}</div>
+              </div>
+              {sparkData.length >= 2 && (
+                <Sparkline data={sparkData} color={color} width={72} height={26} />
+              )}
             </div>
           </div>
         );
@@ -1865,10 +1940,11 @@ export default function PageShell({ activeTab, children }) {
                 activePlatform={activePlatform}
                 onPlatformSelect={(platforms) => { setActivePlatform(platforms); setSelectedWeek(null); }}
                 followerLatest={followerLatest}
+                followerSnaps={followerSnaps}
               />
             )}
 
-            <FollowersChart snapshots={followerSnaps} activePlatform={activePlatform} />
+            {/* FollowersChart hidden — followers trend shown as sparklines in platform cards */}
 
             {/* Section tabs + actions */}
             <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 16, borderBottom: `1px solid ${T.border}`, marginBottom: 16, flexWrap: "wrap" }}>
