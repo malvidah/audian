@@ -368,6 +368,43 @@ function ImportPanel({ posts, onImported }) {
             source: "linkedin_xlsx_import",
           });
         }
+      } else if (platform === "youtube") {
+        // YouTube Studio "Community posts" analytics CSV.
+        // Headers: Post,Post text,Post publish time,Post impressions,Post likes,Post responses,...
+        // First data row is a "Total" summary that must be skipped.
+        const XLSX = (await import("xlsx")).default || (await import("xlsx"));
+        const text = await file.text();
+        const wb = XLSX.read(text, { type: "string", cellDates: true });
+        const sheet = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(sheet, { defval: "", raw: false });
+        const parseDate = v => {
+          if (!v) return null;
+          if (v instanceof Date) return v.toISOString();
+          const d = new Date(v);
+          return isNaN(d) ? null : d.toISOString();
+        };
+        for (const r of rows) {
+          const postId = String(r["Post"] || "").trim();
+          if (!postId || postId.toLowerCase() === "total") continue;
+          const publishedAt = parseDate(r["Post publish time"]);
+          const content = String(r["Post text"] || "");
+          const permalink = `https://www.youtube.com/post/${postId}`;
+          if (isDupe("youtube", publishedAt, content, permalink)) continue;
+          posts.push({
+            platform: "youtube",
+            post_id: postId,
+            published_at: publishedAt,
+            content,
+            permalink,
+            likes:       parseInt(r["Post likes"]       || 0),
+            comments:    parseInt(r["Post responses"]   || 0),
+            impressions: parseInt(r["Post impressions"] || 0),
+            shares:      0,
+            saves:       0,
+            post_type:   "community",
+            source: "youtube_csv_import",
+          });
+        }
       } else if (platform === "x") {
         const text  = await file.text();
         const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
@@ -427,9 +464,17 @@ function ImportPanel({ posts, onImported }) {
           const platKey = NETWORK_MAP[rawNet] || rawNet.split(" ")[0] || "unknown";
           const content   = v[iText]  || "";
           const permalink = v[iLink]  || null;
+          // Extract canonical post_id so (platform, post_id) dedups properly on re-import.
+          // Instagram: /p/{shortcode}/, /reel/{shortcode}/, /tv/{shortcode}/ — falls back
+          // to the full URL only if the pattern doesn't match.
+          let post_id = permalink || null;
+          if (permalink && platKey === "instagram") {
+            const m = permalink.match(/instagram\.com\/(?:p|reel|reels|tv)\/([A-Za-z0-9_-]+)/);
+            if (m) post_id = m[1];
+          }
           if (isDupe(platKey, publishedAt, content, permalink)) continue;
           posts.push({
-            platform: platKey, post_id: permalink || null, published_at: publishedAt,
+            platform: platKey, post_id, published_at: publishedAt,
             content, permalink,
             likes:       parseInt(v[iLikes]  || 0),
             comments:    parseInt(v[iComm]   || 0),
@@ -493,12 +538,25 @@ function ImportPanel({ posts, onImported }) {
             },
             {
               id: "youtube", label: "YouTube", color: "#FF0000",
-              action: <button disabled={loading === "youtube"} onClick={syncYouTube} style={{
-                background: "#FF000018", color: "#FF0000", border: "1px solid #FF000044",
-                borderRadius: 7, padding: "6px 14px", fontSize: F.xs, fontWeight: 600,
-                fontFamily: sans, cursor: "pointer",
-              }}>{loading === "youtube" ? "Syncing…" : "Sync from API"}</button>,
-              hint: "Pulls videos + comments from your YouTube channel",
+              action: (
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  <button disabled={loading === "youtube"} onClick={syncYouTube} style={{
+                    background: "#FF000018", color: "#FF0000", border: "1px solid #FF000044",
+                    borderRadius: 7, padding: "6px 14px", fontSize: F.xs, fontWeight: 600,
+                    fontFamily: sans, cursor: "pointer",
+                  }}>{loading === "youtube" ? "Syncing…" : "Sync from API"}</button>
+                  <label style={{
+                    display: "inline-block", background: "#FF000010", color: "#FF0000",
+                    border: "1px solid #FF000044", borderRadius: 7, padding: "6px 14px",
+                    fontSize: F.xs, fontWeight: 600, fontFamily: sans, cursor: "pointer",
+                  }}>
+                    Upload CSV
+                    <input type="file" accept=".csv,text/csv" style={{ display: "none" }}
+                      onChange={e => importFile("youtube", e.target.files[0])} />
+                  </label>
+                </div>
+              ),
+              hint: "API: videos + comments. CSV: community posts analytics export.",
             },
             {
               id: "x", label: "X / Twitter", color: "#000",
