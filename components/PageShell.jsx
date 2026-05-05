@@ -315,11 +315,62 @@ function ImportPanel({ posts, onImported }) {
     setLoading(platform);
     setMessage(null);
     try {
-      const text  = await file.text();
-      const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
-      let posts   = [];
+      const ext = (file.name.split(".").pop() || "").toLowerCase();
+      const isSpreadsheet = ext === "xls" || ext === "xlsx";
+      let posts = [];
 
-      if (platform === "x") {
+      if (platform === "linkedin" && isSpreadsheet) {
+        const XLSX = (await import("xlsx")).default || (await import("xlsx"));
+        const buf = await file.arrayBuffer();
+        const wb = XLSX.read(buf, { type: "array", cellDates: true });
+        const sheetName = wb.SheetNames.find(n => /all\s*posts/i.test(n)) || wb.SheetNames[1] || wb.SheetNames[0];
+        const sheet = wb.Sheets[sheetName];
+        // Header row is row 2 (1-indexed) — row 1 is a description blurb.
+        const rows = XLSX.utils.sheet_to_json(sheet, { range: 1, defval: "", raw: true });
+
+        const num = v => {
+          if (v === "" || v == null) return 0;
+          const n = typeof v === "number" ? v : parseFloat(String(v).replace(/[, ]/g, ""));
+          return Number.isFinite(n) ? Math.round(n) : 0;
+        };
+        const parseDate = v => {
+          if (!v) return null;
+          if (v instanceof Date) return v.toISOString();
+          // LinkedIn export uses MM/DD/YYYY
+          const m = String(v).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+          if (m) return new Date(`${m[3]}-${m[1].padStart(2,"0")}-${m[2].padStart(2,"0")}T12:00:00Z`).toISOString();
+          const d = new Date(v);
+          return isNaN(d) ? null : d.toISOString();
+        };
+
+        for (const r of rows) {
+          const permalink = r["Post link"] || null;
+          const publishedAt = parseDate(r["Created date"]);
+          const content = String(r["Post title"] || "").trim();
+          if (!publishedAt && !permalink && !content) continue;
+          const idMatch = permalink && String(permalink).match(/urn:li:(?:activity|share|ugcPost):(\d+)/);
+          const post_id = idMatch ? idMatch[1] : (permalink || null);
+          if (isDupe("linkedin", publishedAt, content, permalink)) continue;
+          const contentType = String(r["Content Type"] || "").toLowerCase();
+          posts.push({
+            platform: "linkedin",
+            post_id,
+            published_at: publishedAt,
+            content,
+            permalink,
+            likes:       num(r["Likes"]),
+            comments:    num(r["Comments"]),
+            impressions: num(r["Impressions"]),
+            shares:      num(r["Reposts"]),
+            views:       num(r["Views"]),
+            saves:       0,
+            post_type:   contentType.includes("video") ? "video" : "post",
+            source: "linkedin_xlsx_import",
+          });
+        }
+      } else if (platform === "x") {
+        const text  = await file.text();
+        const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
         const headers = parseCSVLine(lines[0]).map(h => h.toLowerCase());
         const idx = (name) => headers.findIndex(h => h.includes(name));
         const iDate = idx("date"), iTweet = idx("post text") !== -1 ? idx("post text") : idx("tweet text");
@@ -348,12 +399,11 @@ function ImportPanel({ posts, onImported }) {
           });
         }
       } else if (platform === "linkedin") {
-        // LinkedIn CSV daily-aggregate import disabled — correct data comes from
-        // Buffer export seed files (supabase/seed_linkedin_posts.sql).
-        // Old li_daily_* rows cleaned up via supabase/fix_delete_li_daily_final.sql.
-        setMessage("LinkedIn CSV import is disabled. Use Buffer export instead.");
+        setMessage("LinkedIn import requires the .xls/.xlsx file from LinkedIn analytics → Content.");
         return;
       } else if (platform === "buffer") {
+        const text  = await file.text();
+        const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
         const headers  = parseCSVLine(lines[0]).map(h => h.toLowerCase());
         const idx      = (name) => headers.findIndex(h => h.includes(name));
         const iDate    = idx("date") !== -1 ? idx("date") : idx("sent at");
@@ -470,11 +520,11 @@ function ImportPanel({ posts, onImported }) {
                 border: "1px solid #0077B544", borderRadius: 7, padding: "6px 14px",
                 fontSize: F.xs, fontWeight: 600, fontFamily: sans, cursor: "pointer",
               }}>
-                {loading === "linkedin" ? "Importing…" : "Upload CSV"}
-                <input type="file" accept=".csv,.xls,.xlsx" style={{ display: "none" }}
+                {loading === "linkedin" ? "Importing…" : "Upload XLSX"}
+                <input type="file" accept=".xls,.xlsx" style={{ display: "none" }}
                   onChange={e => importFile("linkedin", e.target.files[0])} />
               </label>,
-              hint: "Disabled — use Buffer export instead",
+              hint: "Export from LinkedIn analytics → Content",
             },
             {
               id: "buffer", label: "Buffer", color: "#168EEA",
